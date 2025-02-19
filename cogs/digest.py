@@ -38,39 +38,22 @@ class DigestCog(commands.Cog):
         await self._send_digest(ctx)
 
     async def _send_digest(self, destination):
-        """Send the daily digest of tokens.
-        
-        Args:
-            destination: The Discord channel or context to send the digest to
-        """
+        """Send the daily digest of tokens."""
         try:
             if not self.token_tracker.tokens:
                 await destination.send("<:dwbb:1321571679109124126>")
                 return
 
-            embed = discord.Embed(title="**New Coins:**", color=discord.Color.blue())
-            digest_message = ""
-            current_length = 0
-            MAX_FIELD_LENGTH = 1024  # Discord's limit
-
+            digest_message = "**New Coins:**\n"
+            
             for token in self.token_tracker.tokens.values():
-                line = f"- [{token['name']}]({token['chart_url']}) [{token['market_cap']}]"
+                line = f"• [{token['name']}]({token['chart_url']}) [{token['market_cap']}]"
                 if token.get('buy_count', 0) > 1:
                     line += " 👀"
-                line += "\n"
+                digest_message += line + "\n"
 
-                if current_length + len(line) > MAX_FIELD_LENGTH:
-                    break
-
-                digest_message += line
-                current_length += len(line)
-
-            if digest_message:
-                embed.add_field(name="", value=digest_message, inline=False)
-                await destination.send(embed=embed)
-            else:
-                await destination.send("No tokens to report.")
+            await destination.send(digest_message)
             
         except Exception as e:
             logging.error(f"Error sending digest: {e}")
-            await destination.send("❌ An error occurred while generating the digest.")
+            await destination.send("❌ **Error:** Unable to generate the digest.")

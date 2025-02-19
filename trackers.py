@@ -2,6 +2,7 @@ from datetime import datetime
 import logging
 from typing import Dict, Set, Any
 from collections import OrderedDict  # For ordered token storage
+import asyncio
 
 class BotMonitor:
     def __init__(self):
@@ -31,6 +32,9 @@ class TokenTracker:
         self.max_tokens = max_tokens
         self.cache_timeout = cache_timeout
         self.last_cleared = datetime.now()
+        self.last_cleanup = datetime.now()
+        self.update_lock = asyncio.Lock()
+        self.last_update_time = {}  # Track last update time per token
 
     def clear_daily(self) -> None:
         """Clear daily tracking data and log the statistics."""
@@ -61,3 +65,59 @@ class TokenTracker:
 
         logging.info(f"Token: {token_name}, Previous buyers: {previous_count}, New buyers: {new_count}, Buyer ID: {buyer_id}")
         return new_count
+
+    def cleanup_old_tokens(self) -> None:
+        """Remove tokens older than cache_timeout"""
+        now = datetime.now()
+        if (now - self.last_cleanup).seconds < 300:  # Run every 5 minutes
+            return
+            
+        self.tokens = OrderedDict(
+            (k, v) for k, v in self.tokens.items() 
+            if (now - v['timestamp']).seconds < self.cache_timeout
+        )
+        self.last_cleanup = now
+
+    async def update_market_caps(self, session, max_tokens: int = 20, rate_limit: float = 0.5):
+        """
+        Update market caps for tracked tokens with rate limiting.
+        
+        Args:
+            session: aiohttp ClientSession to use for requests
+            max_tokens: Maximum number of tokens to update
+            rate_limit: Seconds to wait between API calls
+        """
+        async with self.update_lock:  # Prevent concurrent updates
+            now = datetime.now()
+            update_count = 0
+            
+            for contract, token_data in list(self.tokens.items()):
+                # Skip if we've hit our max token update limit
+                if update_count >= max_tokens:
+                    break
+                    
+                # Skip if token was updated recently (within last 5 minutes)
+                last_update = self.last_update_time.get(contract)
+                if last_update and (now - last_update).seconds < 300:
+                    continue
+                    
+                # Add rate limiting delay
+                if update_count > 0:  # Don't delay first request
+                    await asyncio.sleep(rate_limit)
+                
+                try:
+                    dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract}"
+                    async with safe_api_call(session, dex_api_url) as dex_data:
+                        if dex_data and dex_data.get('pairs'):
+                            pair = dex_data['pairs'][0]
+                            if 'fdv' in pair:
+                                token_data['market_cap'] = format_large_number(float(pair['fdv']))
+                                self.last_update_time[contract] = now
+                                update_count += 1
+                                logging.info(f"Updated market cap for {token_data['name']}")
+                                
+                except Exception as e:
+                    logging.error(f"Error updating market cap for {contract}: {e}")
+                    continue
+            
+            return update_count

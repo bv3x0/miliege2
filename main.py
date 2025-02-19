@@ -9,6 +9,7 @@ from cogs.grabber import TokenGrabber
 from cogs.digest import DigestCog
 from trackers import BotMonitor, TokenTracker
 from cogs.health import HealthMonitor
+from functools import wraps
 
 # Enhanced logging setup
 logger = logging.getLogger('discord_bot')
@@ -32,6 +33,17 @@ if not token:
 if not daily_digest_channel_id:
     raise ValueError("DAILY_DIGEST_CHANNEL_ID not found in environment variables")
 daily_digest_channel_id = int(daily_digest_channel_id)
+
+def rate_limit(seconds: int = 60):
+    def decorator(func):
+        cooldown = commands.Cooldown(1, seconds)
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            if cooldown.update_rate_limit():
+                raise commands.CommandOnCooldown(cooldown, seconds)
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 class DiscordBot(commands.Bot):
     def __init__(self):
