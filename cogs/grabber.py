@@ -1,4 +1,4 @@
-import discord
+import discord # type: ignore
 from discord.ext import commands
 import re
 import requests
@@ -32,20 +32,42 @@ class TokenGrabber(commands.Cog):
         try:
             self.monitor.record_message()
             
-            # Add specific Cielo debugging
-            logging.info(f"Message from: {message.author.name} (ID: {message.author.id})")
+            # Log all messages for debugging
+            logging.info(f"Message received from {message.author.name}")
+            logging.info(f"Content: {message.content[:100]}")
+            logging.info(f"Has embeds: {bool(message.embeds)}")
+            
             if message.author.bot:
-                logging.info(f"Bot properties - Name: {message.author.name}, Display Name: {message.author.display_name}")
-                
                 if message.author.name == "Cielo":
                     logging.info("Cielo message detected")
-                    logging.info(f"Has embeds: {bool(message.embeds)}")
-                    if message.embeds:
-                        logging.info(f"Number of embeds: {len(message.embeds)}")
-                        await self._process_embeds(message)
-                else:
-                    logging.info(f"Not Cielo - got {message.author.name} instead")
                     
+                    # Check for embedded message
+                    if message.embeds:
+                        embed = message.embeds[0]  # Cielo uses a single embed
+                        
+                        # Log embed fields for debugging
+                        logging.info("Embed fields:")
+                        for field in embed.fields:
+                            logging.info(f"Field {field.name}: {field.value}")
+                        
+                        # Look for the Token field specifically
+                        token_field = next(
+                            (field for field in embed.fields 
+                             if field.name == "Token"),
+                            None
+                        )
+                        
+                        if token_field:
+                            token_address = token_field.value.strip()
+                            logging.info(f"Found token address: {token_address}")
+                            await self._process_token(token_address, message)
+                        else:
+                            logging.warning("No token field found in Cielo embed")
+                    else:
+                        logging.warning("Cielo message had no embeds")
+                else:
+                    logging.debug(f"Ignoring message from bot: {message.author.name}")
+                        
         except Exception as e:
             logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
@@ -59,13 +81,47 @@ class TokenGrabber(commands.Cog):
                         await self._process_token(match.group(1), message)
 
     async def _process_token(self, contract_address, message):
-        dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
-        
-        async with safe_api_call(self.session, dex_api_url) as dex_data:
-            if dex_data:
-                await self._handle_dex_data(dex_data, contract_address, message)
-            else:
-                await message.channel.send("❌ **Error:** Unable to fetch token data from API.")
+        try:
+            # Extract chain from the embed
+            chain_field = next(
+                (field for field in message.embeds[0].fields 
+                 if field.name == "Chain"),
+                None
+            )
+            
+            if not chain_field:
+                logging.error("No Chain field found in embed")
+                return
+                
+            # Format chain name for URL (lowercase, no spaces)
+            dex_chain = chain_field.value.lower().strip()
+            
+            # Create the chart URL with the chain
+            chart_url = f"https://dexscreener.com/{dex_chain}/{contract_address}"
+            
+            # Extract maker address if present
+            if "maker=" in message.content:
+                maker_match = re.search(r'maker=([a-zA-Z0-9]+)', message.content, re.IGNORECASE)
+                if maker_match:
+                    maker_address = maker_match.group(1)
+                    chart_url += f"?maker={maker_address}"
+            
+            logging.info(f"Processing token on {dex_chain} chain: {contract_address}")
+            logging.info(f"Chart URL: {chart_url}")
+            
+            dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
+            
+            async with safe_api_call(self.session, dex_api_url) as dex_data:
+                if dex_data:
+                    dex_data['chain'] = chain_field.value
+                    dex_data['chart_url'] = chart_url
+                    await self._handle_dex_data(dex_data, contract_address, message)
+                else:
+                    await message.channel.send("❌ **Error:** Unable to fetch token data from API.")
+                    
+        except Exception as e:
+            logging.error(f"Error processing token: {e}", exc_info=True)
+            await message.channel.send("❌ **Error:** Failed to process token information.")
 
     async def _handle_dex_data(self, dex_data, contract_address, message):
         # Implementation of token data processing and message sending
