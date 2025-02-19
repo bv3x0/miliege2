@@ -30,39 +30,31 @@ class TokenGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
-            logging.info(f"""
-=== Message Received ===
-Author: {message.author.name} (ID: {message.author.id})
-Bot: {message.author.bot}
-Content: {message.content[:100]}
-Has Embeds: {bool(message.embeds)}
-Embed Count: {len(message.embeds) if message.embeds else 0}
-""")
-
+            # Only do detailed logging for Cielo messages
             if message.author.bot and message.author.name == "Cielo":
-                logging.info("=== Cielo Message Detected ===")
+                logging.info("""
+=== Cielo Message Detected ===
+Has Embeds: %s
+Embed Count: %d
+""", bool(message.embeds), len(message.embeds) if message.embeds else 0)
                 
                 if message.embeds:
                     for embed in message.embeds:
-                        logging.info("Checking embed fields:")
                         for field in embed.fields:
-                            logging.info(f"Field value: {field.value}")
-                            
                             # Look for "Token:" within the field value
                             if "Token:" in field.value:
                                 logging.info(f"Found Token field: {field.value}")
-                                
-                                # Extract token using regex
                                 match = re.search(r'Token:\s*`([a-zA-Z0-9]+)`', field.value)
                                 if match:
                                     contract_address = match.group(1)
-                                    logging.info(f"Extracted token address: {contract_address}")
+                                    logging.info(f"Processing token: {contract_address}")
                                     await self._process_token(contract_address, message)
-                                    return  # Exit after processing the token
-                                else:
-                                    logging.warning(f"Token format not recognized in: {field.value}")
+                                    return
                 else:
                     logging.warning("Cielo message had no embeds")
+            else:
+                # Basic debug level logging for non-Cielo messages
+                logging.debug(f"Message from {message.author.name}")
                     
         except Exception as e:
             logging.error(f"Error in message processing: {e}", exc_info=True)
