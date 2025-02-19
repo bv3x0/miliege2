@@ -3,6 +3,7 @@ from discord.ext import commands
 import re
 import requests
 import logging
+import asyncio  # Add this import
 from utils import format_large_number, get_age_string, safe_api_call
 from aiohttp import ClientSession
 
