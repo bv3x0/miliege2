@@ -93,7 +93,7 @@ class DiscordBot(commands.Bot):
         
         channel = self.get_channel(daily_digest_channel_id)
         if channel:
-            await channel.send("we're back <:hi:1135799638818037761>")
+            await channel.send("<:awesome:1321865532307275877>")
         else:
             logger.error(f"Could not find channel with ID {daily_digest_channel_id}")
 
