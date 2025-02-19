@@ -90,10 +90,21 @@ class DiscordBot(commands.Bot):
         self.token_tracker = TokenTracker()
 
     async def on_message(self, message):
-        # Log all messages before processing
-        logger.info(f"[{message.author.name}] {message.content[:100]}")
+        # Enhanced logging for message debugging
+        log_data = {
+            'author': message.author.name,
+            'content': message.content,
+            'has_embeds': bool(message.embeds),
+            'embed_count': len(message.embeds) if message.embeds else 0
+        }
         
-        # Process commands after logging
+        logging.info(f"Message Details: {log_data}")
+        
+        # If there are embeds, log their details
+        if message.embeds:
+            for idx, embed in enumerate(message.embeds):
+                logging.info(f"Embed {idx} fields: {[field.name for field in embed.fields]}")
+        
         await self.process_commands(message)
 
     async def setup_hook(self):

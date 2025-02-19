@@ -32,42 +32,43 @@ class TokenGrabber(commands.Cog):
         try:
             self.monitor.record_message()
             
-            # Log all messages for debugging
-            logging.info(f"Message received from {message.author.name}")
-            logging.info(f"Content: {message.content[:100]}")
-            logging.info(f"Has embeds: {bool(message.embeds)}")
+            # Detailed message logging
+            logging.info(f"""
+Message Debug Info:
+- Author: {message.author.name} (ID: {message.author.id})
+- Bot: {message.author.bot}
+- Content Length: {len(message.content)}
+- Has Embeds: {bool(message.embeds)}
+- Embed Count: {len(message.embeds) if message.embeds else 0}
+""")
             
-            if message.author.bot:
-                if message.author.name == "Cielo":
-                    logging.info("Cielo message detected")
+            if message.author.bot and message.author.name == "Cielo":
+                logging.info("Cielo message detected")
+                
+                if message.embeds:
+                    embed = message.embeds[0]
+                    logging.info(f"Embed Type: {embed.type}")
+                    logging.info(f"Field Count: {len(embed.fields)}")
                     
-                    # Check for embedded message
-                    if message.embeds:
-                        embed = message.embeds[0]  # Cielo uses a single embed
-                        
-                        # Log embed fields for debugging
-                        logging.info("Embed fields:")
-                        for field in embed.fields:
-                            logging.info(f"Field {field.name}: {field.value}")
-                        
-                        # Look for the Token field specifically
-                        token_field = next(
-                            (field for field in embed.fields 
-                             if field.name == "Token"),
-                            None
-                        )
-                        
-                        if token_field:
-                            token_address = token_field.value.strip()
-                            logging.info(f"Found token address: {token_address}")
-                            await self._process_token(token_address, message)
-                        else:
-                            logging.warning("No token field found in Cielo embed")
+                    for field in embed.fields:
+                        logging.info(f"Field: {field.name} = {field.value}")
+                    
+                    # Look for Token field
+                    token_field = next(
+                        (field for field in embed.fields 
+                         if field.name == "Token"),
+                        None
+                    )
+                    
+                    if token_field:
+                        token_address = token_field.value.strip()
+                        logging.info(f"Found token address: {token_address}")
+                        await self._process_token(token_address, message)
                     else:
-                        logging.warning("Cielo message had no embeds")
+                        logging.warning("No Token field found in embed")
                 else:
-                    logging.debug(f"Ignoring message from bot: {message.author.name}")
-                        
+                    logging.warning("Cielo message had no embeds")
+                    
         except Exception as e:
             logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
