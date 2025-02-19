@@ -135,8 +135,8 @@ Embed Count: %d
                     else:
                         formatted_mcap = "N/A"
                     
-                    # Create multi-line format
-                    title_line = f"[{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
+                    # Create multi-line format - using header formatting for first line
+                    title_line = f"# [{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
                     stats_line = f"{chain.lower()} / {formatted_mcap} mc / {price_change_24h} 24h"
                     
                     embed.description = f"{title_line}\n{stats_line}"

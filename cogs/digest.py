@@ -26,21 +26,20 @@ class DigestCog(commands.Cog):
             # Get the 10 most recent tokens (they're already ordered by insertion)
             recent_tokens = list(self.token_tracker.tokens.values())[-10:]
             
+            # Build description string
+            description_lines = []
             for token in recent_tokens:
                 name = token['name']
-                chain = token.get('chain', '')
                 mcap = token['market_cap']
                 change = token.get('price_change', '')
                 
-                # Format stats line with mc and 24h labels
-                stats_line = f"{chain} / {mcap} mc / {change} 24h"
+                # Create bold hyperlinked name and regular stats on separate lines
+                token_line = f"**[{name}]({token['chart_url']})**"
+                stats_line = f"/ {mcap} mc / {change} 24h"
                 
-                embed.add_field(
-                    name=f"[{name}]({token['chart_url']})\n{stats_line}",
-                    value="",
-                    inline=False
-                )
-
+                description_lines.extend([token_line, stats_line, ""])  # Empty string adds spacing between entries
+            
+            embed.description = "\n".join(description_lines)
             await ctx.send(embed=embed)
             
         except Exception as e:
