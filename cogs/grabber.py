@@ -25,13 +25,22 @@ class TokenGrabber(commands.Cog):
         try:
             self.monitor.record_message()
             
-            if message.author.bot and message.author.name == "Cielo":
-                logging.info("Cielo message detected")
-                if message.embeds:
-                    await self._process_embeds(message)
+            # Add specific Cielo debugging
+            logging.info(f"Message from: {message.author.name} (ID: {message.author.id})")
+            if message.author.bot:
+                logging.info(f"Bot properties - Name: {message.author.name}, Display Name: {message.author.display_name}")
+                
+                if message.author.name == "Cielo":
+                    logging.info("Cielo message detected")
+                    logging.info(f"Has embeds: {bool(message.embeds)}")
+                    if message.embeds:
+                        logging.info(f"Number of embeds: {len(message.embeds)}")
+                        await self._process_embeds(message)
+                else:
+                    logging.info(f"Not Cielo - got {message.author.name} instead")
                     
         except Exception as e:
-            logging.error(f"Error in message processing: {e}")
+            logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
 
     async def _process_embeds(self, message):
