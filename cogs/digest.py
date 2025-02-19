@@ -30,15 +30,20 @@ class DigestCog(commands.Cog):
                 name = token['name']
                 mcap = token['market_cap']
                 change = token.get('price_change', '')
-                chain = token.get('chain', 'Unknown')  # Get chain from token data
+                chain = token.get('chain', 'Unknown')
                 
-                # Format price change with explicit +/- and "24h: " prefix
+                # Fix: Handle price change string parsing
                 if change and change != 'N/A':
-                    # Remove any existing % symbol to clean the value
-                    clean_change = change.replace('%', '').strip()
-                    # Add + sign for positive changes, - is automatically included for negative
-                    sign = '+' if float(clean_change) >= 0 else ''
-                    change_formatted = f"24h: {sign}{clean_change}%"
+                    # Remove any existing formatting (24h:, %, etc.)
+                    clean_change = change.replace('24h:', '').replace('%', '').strip()
+                    try:
+                        # Only try to convert to float if it's not already formatted
+                        if not clean_change.startswith('+') and not clean_change.startswith('-'):
+                            change_formatted = f"24h: +{clean_change}%"
+                        else:
+                            change_formatted = f"24h: {clean_change}%"
+                    except ValueError:
+                        change_formatted = "24h: N/A"
                 else:
                     change_formatted = "24h: N/A"
 
