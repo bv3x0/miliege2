@@ -13,15 +13,9 @@ from functools import wraps
 
 # Enhanced logging setup
 def setup_logging():
-    # Clear any existing handlers
-    logging.getLogger().handlers = []
-    
     # Create logger and set to DEBUG level to capture everything
-    logger = logging.getLogger('discord_bot')
+    logger = logging.getLogger()  # Root logger
     logger.setLevel(logging.DEBUG)
-    
-    # Remove any existing handlers
-    logger.handlers = []
     
     # Create file handler
     handler = RotatingFileHandler(
@@ -38,17 +32,21 @@ def setup_logging():
     handler.setFormatter(formatter)
     handler.setLevel(logging.DEBUG)
     
-    # Add handler
-    logger.addHandler(handler)
+    # Create console handler with a higher log level
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
     
-    # Configure discord.py's logger to use our handler
+    # Clear any existing handlers
+    logger.handlers = []
+    
+    # Add handlers
+    logger.addHandler(handler)
+    logger.addHandler(console_handler)
+    
+    # Configure discord.py's logger
     discord_logger = logging.getLogger('discord')
     discord_logger.setLevel(logging.INFO)
-    discord_logger.addHandler(handler)
-    
-    # Prevent logs from propagating to the root logger
-    logger.propagate = False
-    discord_logger.propagate = False
     
     return logger
 
