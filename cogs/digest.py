@@ -18,24 +18,31 @@ class DigestCog(commands.Cog):
                 return
 
             # Create embed
-            embed = discord.Embed(
-                title="10 Latest Cielo Alerts",
-                color=discord.Color.blue()
-            )
-
+            embed = discord.Embed(color=discord.Color.blue())
+            
             # Get the 10 most recent tokens (they're already ordered by insertion)
             recent_tokens = list(self.token_tracker.tokens.values())[-10:]
             
-            # Build description string
-            description_lines = []
+            # Build description string starting with the header
+            description_lines = ["## Latest Cielo Buys", ""]  # Empty line after header
+            
             for token in recent_tokens:
                 name = token['name']
                 mcap = token['market_cap']
                 change = token.get('price_change', '')
                 
-                # Create bold hyperlinked name and regular stats on separate lines
+                # Format price change with explicit +/- and "24h: " prefix
+                if change and change != 'N/A':
+                    # Remove any existing % symbol to clean the value
+                    clean_change = change.replace('%', '').strip()
+                    # Add + sign for positive changes, - is automatically included for negative
+                    sign = '+' if float(clean_change) >= 0 else ''
+                    change_formatted = f"24h: {sign}{clean_change}%"
+                else:
+                    change_formatted = "24h: N/A"
+
                 token_line = f"**[{name}]({token['chart_url']})**"
-                stats_line = f"{mcap} mc • {change} 24h • base"
+                stats_line = f"{mcap} mc • {change_formatted} • base"
                 
                 description_lines.extend([token_line, stats_line, ""])  # Empty string adds spacing between entries
             

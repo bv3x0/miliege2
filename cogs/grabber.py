@@ -91,9 +91,13 @@ Embed Count: %d
                     else:
                         formatted_mcap = "N/A"
                     
-                    # Format price change
+                    # Format price change with explicit +/- and "24h: " prefix
                     if isinstance(price_change_24h, (int, float)):
-                        price_change_24h = format_large_number(price_change_24h) + "%"
+                        # Add + sign for positive changes, - is automatically included for negative
+                        sign = '+' if float(price_change_24h) >= 0 else ''
+                        price_change_formatted = f"24h: {sign}{price_change_24h}%"
+                    else:
+                        price_change_formatted = "24h: N/A"
                     
                     # Create chart URL
                     chart_url = f"https://dexscreener.com/{chain.lower()}/{contract_address}"
@@ -135,9 +139,9 @@ Embed Count: %d
                     else:
                         formatted_mcap = "N/A"
                     
-                    # Create multi-line format - using header formatting for first line
-                    title_line = f"# [{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
-                    stats_line = f"{formatted_mcap} mc • {price_change_24h} 24h • {chain.lower()}"
+                    # Create multi-line format - using h2 header formatting for first line
+                    title_line = f"## [{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
+                    stats_line = f"{formatted_mcap} mc • {price_change_formatted} • {chain.lower()}"
                     
                     embed.description = f"{title_line}\n{stats_line}"
                     
@@ -160,7 +164,7 @@ Embed Count: %d
                         'name': token_name,
                         'chart_url': chart_url,
                         'market_cap': formatted_mcap,
-                        'price_change': price_change_24h
+                        'price_change': price_change_formatted
                     }
                     self.token_tracker.log_token(contract_address, token_data)
                     
