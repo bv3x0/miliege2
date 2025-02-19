@@ -3,7 +3,7 @@ from discord.ext import commands
 import re
 import requests
 import logging
-import asyncio  # Add this import
+import asyncio
 from utils import format_large_number, get_age_string, safe_api_call
 from aiohttp import ClientSession
 
@@ -12,14 +12,20 @@ class TokenGrabber(commands.Cog):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
-        self.session: ClientSession = None
+        self.session = None  # Initialize as None
+        # Create the session when the cog is added to the bot
+        self.bot.loop.create_task(self.initialize_session())
 
-    async def setup_hook(self):
+    async def initialize_session(self):
+        """Initialize the aiohttp session"""
         self.session = ClientSession()
+        logging.info("TokenGrabber session initialized")
 
     async def cog_unload(self):
+        """Cleanup when the cog is unloaded"""
         if self.session:
             await self.session.close()
+            logging.info("TokenGrabber session closed")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -64,4 +70,5 @@ class TokenGrabber(commands.Cog):
     async def _handle_dex_data(self, dex_data, contract_address, message):
         # Implementation of token data processing and message sending
         # This would be the same logic as in your current implementation
+        pass
         pass
