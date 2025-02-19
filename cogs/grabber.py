@@ -135,11 +135,11 @@ Embed Count: %d
                     else:
                         formatted_mcap = "N/A"
                     
-                    # Create single line with all information
+                    # Create multi-line format
                     title_line = f"[{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
-                    stats = f"[{formatted_mcap} / {price_change_24h}] {chain.lower()}"
+                    stats_line = f"{chain.lower()} / {formatted_mcap} mc / {price_change_24h} 24h"
                     
-                    embed.description = f"{title_line} {stats}"
+                    embed.description = f"{title_line}\n{stats_line}"
                     
                     # Add social links and age
                     links_text = []
