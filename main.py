@@ -83,9 +83,9 @@ def rate_limit(seconds: int = 60):
 
 class DiscordBot(commands.Bot):
     def __init__(self):
-        intents = discord.Intents.default()
-        intents.messages = True
-        intents.message_content = True
+        # Enable all intents for debugging
+        intents = discord.Intents.all()
+        logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
         self.monitor = BotMonitor()
@@ -168,3 +168,4 @@ if __name__ == "__main__":
         logger.critical(f"Unexpected error: {e}")
     finally:
         logger.info("Bot shutdown")
+        # Remove duplicate error logging and finally block
