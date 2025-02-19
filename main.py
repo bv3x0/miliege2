@@ -12,15 +12,41 @@ from cogs.health import HealthMonitor
 from functools import wraps
 
 # Enhanced logging setup
-logger = logging.getLogger('discord_bot')
-logger.setLevel(logging.INFO)
-handler = RotatingFileHandler(
-    'bot.log',
-    maxBytes=1024*1024,  # 1MB
-    backupCount=5
-)
-handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-logger.addHandler(handler)
+def setup_logging():
+    # Clear any existing handlers
+    logging.getLogger().handlers = []
+    
+    # Create logger
+    logger = logging.getLogger('discord_bot')
+    logger.setLevel(logging.INFO)
+    
+    # Remove any existing handlers
+    logger.handlers = []
+    
+    # Create file handler
+    handler = RotatingFileHandler(
+        'bot.log',
+        maxBytes=1024*1024,  # 1MB
+        backupCount=5,
+        mode='a'  # Append mode
+    )
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    
+    # Add handlers
+    logger.addHandler(handler)
+    
+    # Add console handler to see logs in terminal
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# Initialize logger
+logger = setup_logging()
 
 # Load environment variables
 load_dotenv()
