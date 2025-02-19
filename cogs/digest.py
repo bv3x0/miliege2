@@ -32,16 +32,11 @@ class DigestCog(commands.Cog):
                 mcap = token['market_cap']
                 change = token.get('price_change', '')
                 
-                # Format stats in square brackets: [Chain / Market Cap / 24h Change]
-                stats = f"[{chain}"
-                if mcap:
-                    stats += f" / {mcap}"
-                if change:
-                    stats += f" / {change}"
-                stats += "]"
+                # Format stats line with mc and 24h labels
+                stats_line = f"{chain} / {mcap} mc / {change} 24h"
                 
                 embed.add_field(
-                    name=f"[{name}]({token['chart_url']}) {stats}",
+                    name=f"[{name}]({token['chart_url']})\n{stats_line}",
                     value="",
                     inline=False
                 )
