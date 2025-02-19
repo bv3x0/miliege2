@@ -30,28 +30,17 @@ class BotMonitor:
         self.errors_since_restart = 0
 
 class TokenTracker:
-    def __init__(self, max_tokens: int = 1000, cache_timeout: int = 3600):
-        self.tokens: OrderedDict = OrderedDict()
-        self.buy_counts: Dict[str, Set[int]] = {}
+    def __init__(self, max_tokens: int = 50):
+        self.tokens = OrderedDict()
         self.max_tokens = max_tokens
-        self.cache_timeout = cache_timeout
-        self.last_cleared = datetime.now()
-        self.last_cleanup = datetime.now()
         self.update_lock = asyncio.Lock()
-        self.last_update_time = {}  # Track last update time per token
-
-    def clear_daily(self) -> None:
-        """Clear daily tracking data and log the statistics."""
-        logging.info(f"Daily clear - Tracked {len(self.tokens)} tokens with {len(self.buy_counts)} buy events")
-        self.buy_counts.clear()
-        self.tokens.clear()
-        self.last_cleared = datetime.now()
+        self.last_update_time = {}
 
     def log_token(self, contract: str, data: Dict[str, Any]) -> None:
-        """Log a token with automatic cleanup of old entries."""
-        # Clear old tokens if max size reached
+        """Log a token, maintaining only the most recent tokens."""
+        # Remove oldest tokens if max size reached
         while len(self.tokens) >= self.max_tokens:
-            self.tokens.popitem(last=False)  # Remove oldest item
+            self.tokens.popitem(last=False)
             
         self.tokens[contract] = {
             **data,
@@ -69,18 +58,6 @@ class TokenTracker:
 
         logging.info(f"Token: {token_name}, Previous buyers: {previous_count}, New buyers: {new_count}, Buyer ID: {buyer_id}")
         return new_count
-
-    def cleanup_old_tokens(self) -> None:
-        """Remove tokens older than cache_timeout"""
-        now = datetime.now()
-        if (now - self.last_cleanup).seconds < 300:  # Run every 5 minutes
-            return
-            
-        self.tokens = OrderedDict(
-            (k, v) for k, v in self.tokens.items() 
-            if (now - v['timestamp']).seconds < self.cache_timeout
-        )
-        self.last_cleanup = now
 
     async def update_market_caps(self, session, max_tokens: int = 20, rate_limit: float = 0.5):
         """

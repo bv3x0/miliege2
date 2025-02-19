@@ -1,59 +1,50 @@
 import discord
-from discord.ext import commands, tasks
-from datetime import time
-from pytz import timezone
+from discord.ext import commands
 import logging
+from collections import deque
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
         self.bot = bot
         self.token_tracker = token_tracker
         self.channel_id = channel_id
-        self.est_tz = timezone('America/New_York')
-        
-        # Start the daily digest task
-        self.daily_digest.start()
-
-    def cog_unload(self):
-        self.daily_digest.cancel()
-
-    @tasks.loop(time=time(hour=7, tzinfo=timezone('America/New_York')))
-    async def daily_digest(self):
-        """Run the daily digest at 7 AM EST"""
-        try:
-            channel = self.bot.get_channel(self.channel_id)
-            if not channel:
-                logging.error("Could not find digest channel")
-                return
-
-            await self._send_digest(channel)
-        except Exception as e:
-            logging.error(f"Error in daily digest: {e}")
-        finally:
-            self.token_tracker.clear_daily()
 
     @commands.command()
     async def digest(self, ctx):
-        """Manually trigger the daily digest."""
-        await self._send_digest(ctx)
-
-    async def _send_digest(self, destination):
-        """Send the daily digest of tokens."""
+        """Show the 10 most recent tokens."""
         try:
             if not self.token_tracker.tokens:
-                await destination.send("<:dwbb:1321571679109124126>")
+                await ctx.send("<:dwbb:1321571679109124126>")
                 return
 
-            digest_message = "**New Coins:**\n"
-            
-            for token in self.token_tracker.tokens.values():
-                line = f"• [{token['name']}]({token['chart_url']}) [{token['market_cap']}]"
-                if token.get('buy_count', 0) > 1:
-                    line += " 👀"
-                digest_message += line + "\n"
+            # Create embed
+            embed = discord.Embed(
+                title="10 Latest Cielo Alerts",
+                color=discord.Color.blue()
+            )
 
-            await destination.send(digest_message)
+            # Get the 10 most recent tokens (they're already ordered by insertion)
+            recent_tokens = list(self.token_tracker.tokens.values())[-10:]
+            
+            for token in recent_tokens:
+                name = token['name']
+                mcap = token['market_cap']
+                change = token.get('price_change', '')
+                
+                # Format market cap and change in square brackets
+                stats = f"[{mcap}"
+                if change:
+                    stats += f"/{change}"
+                stats += "]"
+                
+                embed.add_field(
+                    name=name,
+                    value=f"[Chart]({token['chart_url']}) {stats}",
+                    inline=False
+                )
+
+            await ctx.send(embed=embed)
             
         except Exception as e:
             logging.error(f"Error sending digest: {e}")
-            await destination.send("❌ **Error:** Unable to generate the digest.")
+            await ctx.send("❌ **Error:** Unable to generate the digest.")
