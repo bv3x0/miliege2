@@ -10,13 +10,17 @@ class BotMonitor:
         self.errors_since_restart = 0
         self.max_errors = 50
         self.start_time = datetime.now()
+        self.messages_processed = 0
 
-    def log_message_processed(self):
+    def record_message(self):
+        """Record when a message is processed"""
         self.last_message_time = datetime.now()
+        self.messages_processed += 1
 
-    def log_error(self, error):
+    def record_error(self):
+        """Record an error occurrence"""
         self.errors_since_restart += 1
-        logging.error(f"Bot error: {error}")
+        logging.error("Bot error occurred")
         return self.errors_since_restart >= self.max_errors
 
     def get_uptime(self):
