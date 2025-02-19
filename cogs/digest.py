@@ -28,11 +28,14 @@ class DigestCog(commands.Cog):
             
             for token in recent_tokens:
                 name = token['name']
+                chain = token.get('chain', '')
                 mcap = token['market_cap']
                 change = token.get('price_change', '')
                 
-                # Format market cap and change in square brackets
-                stats = f"[{mcap}"
+                # Format stats in square brackets: [Chain/Market Cap/24h Change]
+                stats = f"[{chain}"
+                if mcap:
+                    stats += f"/{mcap}"
                 if change:
                     stats += f"/{change}"
                 stats += "]"
