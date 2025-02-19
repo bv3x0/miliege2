@@ -23,7 +23,7 @@ class TokenGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
-            self.monitor.log_message_processed()
+            self.monitor.record_message()
             
             if message.author.bot and message.author.name == "Cielo":
                 logging.info("Cielo message detected")
@@ -32,7 +32,7 @@ class TokenGrabber(commands.Cog):
                     
         except Exception as e:
             logging.error(f"Error in message processing: {e}")
-            self.monitor.log_error(e)
+            self.monitor.record_error()
 
     async def _process_embeds(self, message):
         for embed in message.embeds:
