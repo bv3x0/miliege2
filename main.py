@@ -16,9 +16,9 @@ def setup_logging():
     # Clear any existing handlers
     logging.getLogger().handlers = []
     
-    # Create logger
+    # Create logger and set to DEBUG level to capture everything
     logger = logging.getLogger('discord_bot')
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)  # Changed from INFO to DEBUG
     
     # Remove any existing handlers
     logger.handlers = []
@@ -31,9 +31,12 @@ def setup_logging():
         mode='a'  # Append mode
     )
     
-    # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    # Create formatter with more detail
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+    )
     handler.setFormatter(formatter)
+    handler.setLevel(logging.DEBUG)  # Ensure handler captures debug logs
     
     # Add handlers
     logger.addHandler(handler)
@@ -41,7 +44,14 @@ def setup_logging():
     # Add console handler to see logs in terminal
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.DEBUG)  # Set console to debug level too
     logger.addHandler(console_handler)
+    
+    # Also capture discord.py's own debug logs
+    discord_logger = logging.getLogger('discord')
+    discord_logger.setLevel(logging.DEBUG)
+    discord_logger.addHandler(handler)
+    discord_logger.addHandler(console_handler)
     
     return logger
 
