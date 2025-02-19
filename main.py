@@ -81,22 +81,22 @@ class DiscordBot(commands.Bot):
     async def on_command_error(self, ctx, error):
         """Handle command-specific errors with appropriate responses"""
         if isinstance(error, commands.CommandNotFound):
-            await ctx.send("❌ Command not found. Use `!help` to see available commands.")
+            await ctx.send("❌ **Unknown Command:** Use `!help` to see available commands.")
         
         elif isinstance(error, commands.MissingPermissions):
-            await ctx.send("❌ You don't have permission to use this command.")
+            await ctx.send("❌ **Permission Denied:** You don't have permission to use this command.")
         
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"❌ Missing required argument: {error.param.name}")
+            await ctx.send(f"❌ **Missing Argument:** {error.param.name} is required.")
         
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(f"⏳ Please wait {error.retry_after:.1f}s before using this command again.")
+            await ctx.send(f"⏳ **Rate Limited:** Please wait {error.retry_after:.1f}s before trying again.")
         
         else:
             # Log unexpected errors and notify user
             logger.error(f"Command error: {error}", exc_info=error)
             self.monitor.record_error()
-            await ctx.send("❌ An unexpected error occurred. The error has been logged.")
+            await ctx.send("❌ **System Error:** An unexpected error occurred and has been logged.")
 
 @bot.command()
 async def status(ctx):
@@ -120,7 +120,7 @@ async def status(ctx):
         await ctx.send(embed=embed)
     except Exception as e:
         logger.error(f"Error in status command: {e}")
-        await ctx.send("An error occurred while fetching status")
+        await ctx.send("❌ **Error:** Unable to fetch bot status.")
 
 if __name__ == "__main__":
     bot = DiscordBot()

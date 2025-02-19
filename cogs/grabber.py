@@ -3,7 +3,7 @@ from discord.ext import commands
 import re
 import requests
 import logging
-from ..utils import format_large_number, get_age_string, safe_api_call
+from utils import format_large_number, get_age_string, safe_api_call
 from aiohttp import ClientSession
 
 class TokenGrabber(commands.Cog):
@@ -49,7 +49,7 @@ class TokenGrabber(commands.Cog):
             if dex_data:
                 await self._handle_dex_data(dex_data, contract_address, message)
             else:
-                await message.channel.send("❌ Failed to fetch token data")
+                await message.channel.send("❌ **Error:** Unable to fetch token data from API.")
 
     async def _handle_dex_data(self, dex_data, contract_address, message):
         # Implementation of token data processing and message sending
