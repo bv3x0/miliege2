@@ -46,26 +46,21 @@ Message Debug Info:
                 logging.info("Cielo message detected")
                 
                 if message.embeds:
-                    embed = message.embeds[0]
-                    logging.info(f"Embed Type: {embed.type}")
-                    logging.info(f"Field Count: {len(embed.fields)}")
-                    
-                    for field in embed.fields:
-                        logging.info(f"Field: {field.name} = {field.value}")
-                    
-                    # Look for Token field
-                    token_field = next(
-                        (field for field in embed.fields 
-                         if field.name == "Token"),
-                        None
-                    )
-                    
-                    if token_field:
-                        token_address = token_field.value.strip()
-                        logging.info(f"Found token address: {token_address}")
-                        await self._process_token(token_address, message)
-                    else:
-                        logging.warning("No Token field found in embed")
+                    for embed in message.embeds:
+                        for field in embed.fields:
+                            # Look for "Token:" within the field value
+                            if "Token:" in field.value:
+                                logging.info(f"Found field with Token info: {field.value}")
+                                
+                                # Extract token using regex
+                                match = re.search(r'Token:\s*`([a-zA-Z0-9]+)`', field.value)
+                                if match:
+                                    contract_address = match.group(1)
+                                    logging.info(f"Extracted token address: {contract_address}")
+                                    await self._process_token(contract_address, message)
+                                    return  # Exit after processing the token
+                                else:
+                                    logging.warning(f"Token format not recognized in: {field.value}")
                 else:
                     logging.warning("Cielo message had no embeds")
                     
@@ -73,59 +68,43 @@ Message Debug Info:
             logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
 
-    async def _process_embeds(self, message):
-        for embed in message.embeds:
-            for field in embed.fields:
-                if "Token:" in field.value:
-                    match = re.search(r'Token:\s*`([a-zA-Z0-9]+)`', field.value)
-                    if match:
-                        await self._process_token(match.group(1), message)
-
     async def _process_token(self, contract_address, message):
         try:
-            # Extract chain from the embed
-            chain_field = next(
-                (field for field in message.embeds[0].fields 
-                 if field.name == "Chain"),
-                None
-            )
-            
-            if not chain_field:
-                logging.error("No Chain field found in embed")
-                return
-                
-            # Format chain name for URL (lowercase, no spaces)
-            dex_chain = chain_field.value.lower().strip()
-            
-            # Create the chart URL with the chain
-            chart_url = f"https://dexscreener.com/{dex_chain}/{contract_address}"
-            
-            # Extract maker address if present
-            if "maker=" in message.content:
-                maker_match = re.search(r'maker=([a-zA-Z0-9]+)', message.content, re.IGNORECASE)
-                if maker_match:
-                    maker_address = maker_match.group(1)
-                    chart_url += f"?maker={maker_address}"
-            
-            logging.info(f"Processing token on {dex_chain} chain: {contract_address}")
-            logging.info(f"Chart URL: {chart_url}")
-            
             dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
+            logging.info(f"Querying Dexscreener API: {dex_api_url}")
             
             async with safe_api_call(self.session, dex_api_url) as dex_data:
-                if dex_data:
-                    dex_data['chain'] = chain_field.value
-                    dex_data['chart_url'] = chart_url
-                    await self._handle_dex_data(dex_data, contract_address, message)
+                if dex_data and 'pairs' in dex_data and dex_data['pairs']:
+                    pair = dex_data['pairs'][0]
+                    
+                    # Extract data
+                    chain = pair.get('chainId', 'Unknown Chain')
+                    price_change_24h = pair.get('priceChange', {}).get('h24', 'N/A')
+                    market_cap = pair.get('fdv', 'N/A')
+                    
+                    # Format market cap
+                    if isinstance(market_cap, (int, float)):
+                        market_cap = format_large_number(market_cap)
+                    
+                    # Format price change
+                    if isinstance(price_change_24h, (int, float)):
+                        price_change_24h = format_large_number(price_change_24h) + "%"
+                    
+                    token_data = {
+                        'name': pair.get('baseToken', {}).get('name', 'Unknown'),
+                        'symbol': pair.get('baseToken', {}).get('symbol', 'Unknown'),
+                        'chain': chain,
+                        'market_cap': market_cap,
+                        'price_change_24h': price_change_24h,
+                        'chart_url': f"https://dexscreener.com/{chain.lower()}/{contract_address}"
+                    }
+                    
+                    # Log the token
+                    self.token_tracker.log_token(contract_address, token_data)
+                    logging.info(f"Successfully processed token: {token_data['name']} on {chain}")
                 else:
-                    await message.channel.send("❌ **Error:** Unable to fetch token data from API.")
+                    await message.channel.send("❌ **Error:** No trading pairs found for this token.")
                     
         except Exception as e:
-            logging.error(f"Error processing token: {e}", exc_info=True)
+            logging.error(f"Error processing token {contract_address}: {e}", exc_info=True)
             await message.channel.send("❌ **Error:** Failed to process token information.")
-
-    async def _handle_dex_data(self, dex_data, contract_address, message):
-        # Implementation of token data processing and message sending
-        # This would be the same logic as in your current implementation
-        pass
-        pass
