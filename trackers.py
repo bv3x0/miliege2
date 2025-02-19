@@ -4,6 +4,8 @@ from typing import Dict, Set, Any
 from collections import OrderedDict  # For ordered token storage
 import asyncio
 
+from utils import format_large_number, safe_api_call
+
 class BotMonitor:
     def __init__(self):
         self.last_message_time = datetime.now()
