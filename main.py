@@ -83,8 +83,10 @@ def rate_limit(seconds: int = 60):
 
 class DiscordBot(commands.Bot):
     def __init__(self):
-        # Enable all intents for debugging
-        intents = discord.Intents.all()
+        # Only enable necessary intents instead of all
+        intents = discord.Intents.default()
+        intents.message_content = True  # This is a privileged intent
+        intents.members = True         # This is a privileged intent
         logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
