@@ -42,7 +42,7 @@ class DigestCog(commands.Cog):
                     change_formatted = "24h: N/A"
 
                 token_line = f"**[{name}]({token['chart_url']})**"
-                stats_line = f"{mcap} mc • {change_formatted} • base"
+                stats_line = f"{mcap} mc ⋅ {change_formatted} ⋅ base"
                 
                 description_lines.extend([token_line, stats_line, ""])  # Empty string adds spacing between entries
             

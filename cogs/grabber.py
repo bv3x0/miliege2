@@ -141,7 +141,7 @@ Embed Count: %d
                     
                     # Create multi-line format - using h2 header formatting for first line
                     title_line = f"## [{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
-                    stats_line = f"{formatted_mcap} mc • {price_change_formatted} • {chain.lower()}"
+                    stats_line = f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}"
                     
                     embed.description = f"{title_line}\n{stats_line}"
                     
@@ -153,7 +153,7 @@ Embed Count: %d
                         links_text.append("No socials")
                     if age_string:
                         links_text.append(age_string)
-                    embed.add_field(name="", value=" • ".join(links_text), inline=False)
+                    embed.add_field(name="", value=" ⋅ ".join(links_text), inline=False)
                     
                     # Add note for market caps under $2M (without "Note:" prefix)
                     if market_cap_value and market_cap_value < 2_000_000:
