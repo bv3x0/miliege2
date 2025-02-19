@@ -98,29 +98,29 @@ class DiscordBot(commands.Bot):
             self.monitor.record_error()
             await ctx.send("❌ **System Error:** An unexpected error occurred and has been logged.")
 
-@bot.command()
-async def status(ctx):
-    """Check bot status and uptime"""
-    try:
-        uptime = bot.monitor.get_uptime()
-        embed = discord.Embed(title="Bot Status", color=discord.Color.green())
-        embed.add_field(
-            name="Uptime",
-            value=f"{uptime.days}d {uptime.seconds // 3600}h {(uptime.seconds // 60) % 60}m"
-        )
-        embed.add_field(name="Errors", value=str(bot.monitor.errors_since_restart))
-        
-        if bot.monitor.last_message_time:
-            time_diff = (datetime.now() - bot.monitor.last_message_time).seconds // 60
-            last_message = f"{time_diff}m ago"
-        else:
-            last_message = "No messages yet"
+    @commands.command()
+    async def status(self, ctx):
+        """Check bot status and uptime"""
+        try:
+            uptime = self.monitor.get_uptime()
+            embed = discord.Embed(title="Bot Status", color=discord.Color.green())
+            embed.add_field(
+                name="Uptime",
+                value=f"{uptime.days}d {uptime.seconds // 3600}h {(uptime.seconds // 60) % 60}m"
+            )
+            embed.add_field(name="Errors", value=str(self.monitor.errors_since_restart))
             
-        embed.add_field(name="Last Message", value=last_message)
-        await ctx.send(embed=embed)
-    except Exception as e:
-        logger.error(f"Error in status command: {e}")
-        await ctx.send("❌ **Error:** Unable to fetch bot status.")
+            if self.monitor.last_message_time:
+                time_diff = (datetime.now() - self.monitor.last_message_time).seconds // 60
+                last_message = f"{time_diff}m ago"
+            else:
+                last_message = "No messages yet"
+                
+            embed.add_field(name="Last Message", value=last_message)
+            await ctx.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Error in status command: {e}")
+            await ctx.send("❌ **Error:** Unable to fetch bot status.")
 
 if __name__ == "__main__":
     bot = DiscordBot()
