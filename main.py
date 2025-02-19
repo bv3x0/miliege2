@@ -81,7 +81,7 @@ class DiscordBot(commands.Bot):
     async def on_command_error(self, ctx, error):
         """Handle command-specific errors with appropriate responses"""
         if isinstance(error, commands.CommandNotFound):
-            await ctx.send("❌ **Unknown Command:** Use `!help` to see available commands.")
+            await ctx.send("<:ermh:1151138802404954143>")
         
         elif isinstance(error, commands.MissingPermissions):
             await ctx.send("❌ **Permission Denied:** You don't have permission to use this command.")
