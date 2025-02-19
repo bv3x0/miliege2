@@ -73,27 +73,73 @@ Embed Count: %d
                     chain = pair.get('chainId', 'Unknown Chain')
                     price_change_24h = pair.get('priceChange', {}).get('h24', 'N/A')
                     market_cap = pair.get('fdv', 'N/A')
+                    token_name = pair.get('baseToken', {}).get('name', 'Unknown Token')
+                    banner_image = pair.get('info', {}).get('header', None)
+                    
+                    # Get socials from pair info
+                    socials = pair.get('info', {})
+                    website = socials.get('website', '')
+                    twitter = socials.get('twitter', '')
+                    telegram = socials.get('telegram', '')
+                    
+                    # Store raw market cap value for comparison
+                    market_cap_value = market_cap if isinstance(market_cap, (int, float)) else None
                     
                     # Format market cap
-                    if isinstance(market_cap, (int, float)):
-                        market_cap = format_large_number(market_cap)
+                    if market_cap_value is not None:
+                        formatted_mcap = format_large_number(market_cap_value)
+                    else:
+                        formatted_mcap = "N/A"
                     
                     # Format price change
                     if isinstance(price_change_24h, (int, float)):
                         price_change_24h = format_large_number(price_change_24h) + "%"
                     
-                    token_data = {
-                        'name': pair.get('baseToken', {}).get('name', 'Unknown'),
-                        'symbol': pair.get('baseToken', {}).get('symbol', 'Unknown'),
-                        'chain': chain,
-                        'market_cap': market_cap,
-                        'price_change_24h': price_change_24h,
-                        'chart_url': f"https://dexscreener.com/{chain.lower()}/{contract_address}"
-                    }
+                    # Create chart URL
+                    chart_url = f"https://dexscreener.com/{chain.lower()}/{contract_address}"
                     
-                    # Log the token
+                    # Create embed response
+                    embed = discord.Embed(
+                        title=f"{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})",
+                        url=chart_url,
+                        color=discord.Color.blue()
+                    )
+                    
+                    # Add banner if available
+                    if banner_image:
+                        embed.set_image(url=banner_image)
+                    
+                    # Add main fields
+                    embed.add_field(name="Chain", value=chain, inline=True)
+                    embed.add_field(name="Market Cap", value=formatted_mcap, inline=True)
+                    embed.add_field(name="24h Change", value=price_change_24h, inline=True)
+                    
+                    # Add socials if available
+                    socials_text = []
+                    if website:
+                        socials_text.append(f"[Website]({website})")
+                    if twitter:
+                        socials_text.append(f"[Twitter]({twitter})")
+                    if telegram:
+                        socials_text.append(f"[Telegram]({telegram})")
+                    
+                    if socials_text:
+                        embed.add_field(name="Socials", value=" | ".join(socials_text), inline=False)
+                    
+                    # Add note for market caps under $2M with exact formatting
+                    if market_cap_value and market_cap_value < 2_000_000:
+                        embed.add_field(name="Note", value="_Under 2m !_ <:wow:1149703956746997871>", inline=False)
+                    
+                    # Log token data
+                    token_data = {
+                        'name': token_name,
+                        'chart_url': chart_url,
+                        'market_cap': formatted_mcap,
+                        'price_change': price_change_24h
+                    }
                     self.token_tracker.log_token(contract_address, token_data)
-                    logging.info(f"Successfully processed token: {token_data['name']} on {chain}")
+                    
+                    await message.channel.send(embed=embed)
                 else:
                     await message.channel.send("❌ **Error:** No trading pairs found for this token.")
                     
