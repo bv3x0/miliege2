@@ -83,15 +83,21 @@ def rate_limit(seconds: int = 60):
 
 class DiscordBot(commands.Bot):
     def __init__(self):
-        # Only enable necessary intents instead of all
         intents = discord.Intents.default()
-        intents.message_content = True  # This is a privileged intent
-        intents.members = True         # This is a privileged intent
+        intents.message_content = True
+        intents.members = True
         logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
         self.monitor = BotMonitor()
         self.token_tracker = TokenTracker()
+
+    async def on_message(self, message):
+        # Log all messages before processing
+        logger.info(f"[{message.author.name}] {message.content[:100]}")
+        
+        # Process commands after logging
+        await self.process_commands(message)
 
     async def setup_hook(self):
         # Add cogs
