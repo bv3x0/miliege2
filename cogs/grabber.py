@@ -164,7 +164,8 @@ Embed Count: %d
                         'name': token_name,
                         'chart_url': chart_url,
                         'market_cap': formatted_mcap,
-                        'price_change': price_change_formatted
+                        'price_change': price_change_formatted,
+                        'chain': chain
                     }
                     self.token_tracker.log_token(contract_address, token_data)
                     

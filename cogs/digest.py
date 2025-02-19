@@ -30,6 +30,7 @@ class DigestCog(commands.Cog):
                 name = token['name']
                 mcap = token['market_cap']
                 change = token.get('price_change', '')
+                chain = token.get('chain', 'Unknown')  # Get chain from token data
                 
                 # Format price change with explicit +/- and "24h: " prefix
                 if change and change != 'N/A':
@@ -42,7 +43,7 @@ class DigestCog(commands.Cog):
                     change_formatted = "24h: N/A"
 
                 token_line = f"**[{name}]({token['chart_url']})**"
-                stats_line = f"{mcap} mc ⋅ {change_formatted} ⋅ base"
+                stats_line = f"{mcap} mc ⋅ {change_formatted} ⋅ {chain.lower()}"  # Use the chain from token data
                 
                 description_lines.extend([token_line, stats_line, ""])  # Empty string adds spacing between entries
             
