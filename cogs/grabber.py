@@ -30,27 +30,27 @@ class TokenGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
-            self.monitor.record_message()
-            
-            # Detailed message logging
             logging.info(f"""
-Message Debug Info:
-- Author: {message.author.name} (ID: {message.author.id})
-- Bot: {message.author.bot}
-- Content Length: {len(message.content)}
-- Has Embeds: {bool(message.embeds)}
-- Embed Count: {len(message.embeds) if message.embeds else 0}
+=== Message Received ===
+Author: {message.author.name} (ID: {message.author.id})
+Bot: {message.author.bot}
+Content: {message.content[:100]}
+Has Embeds: {bool(message.embeds)}
+Embed Count: {len(message.embeds) if message.embeds else 0}
 """)
-            
+
             if message.author.bot and message.author.name == "Cielo":
-                logging.info("Cielo message detected")
+                logging.info("=== Cielo Message Detected ===")
                 
                 if message.embeds:
                     for embed in message.embeds:
+                        logging.info("Checking embed fields:")
                         for field in embed.fields:
+                            logging.info(f"Field value: {field.value}")
+                            
                             # Look for "Token:" within the field value
                             if "Token:" in field.value:
-                                logging.info(f"Found field with Token info: {field.value}")
+                                logging.info(f"Found Token field: {field.value}")
                                 
                                 # Extract token using regex
                                 match = re.search(r'Token:\s*`([a-zA-Z0-9]+)`', field.value)
