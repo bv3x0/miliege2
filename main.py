@@ -14,28 +14,27 @@ from functools import wraps
 # Enhanced logging setup
 def setup_logging():
     # Create logger and set to DEBUG level to capture everything
-    logger = logging.getLogger()  # Root logger
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     
-    # Create file handler
+    # Create file handler - captures everything (DEBUG and up)
     handler = RotatingFileHandler(
         'bot.log',
-        maxBytes=1024*1024,  # 1MB
+        maxBytes=1024*1024,
         backupCount=5,
-        mode='a'  # Append mode
+        mode='a'
     )
-    
-    # Create formatter with more detail
-    formatter = logging.Formatter(
+    handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
-    )
-    handler.setFormatter(formatter)
-    handler.setLevel(logging.DEBUG)
+    ))
+    handler.setLevel(logging.DEBUG)  # Capture all logs in file
     
-    # Create console handler with a higher log level
+    # Create console handler - only show WARNING and above
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'  # Simpler format for console
+    ))
+    console_handler.setLevel(logging.WARNING)  # Only show warnings and errors in console
     
     # Clear any existing handlers
     logger.handlers = []
@@ -88,20 +87,22 @@ class DiscordBot(commands.Bot):
         self.token_tracker = TokenTracker()
 
     async def on_message(self, message):
-        # Enhanced logging for message debugging
-        log_data = {
-            'author': message.author.name,
-            'content': message.content,
-            'has_embeds': bool(message.embeds),
-            'embed_count': len(message.embeds) if message.embeds else 0
-        }
-        
-        logging.info(f"Message Details: {log_data}")
-        
-        # If there are embeds, log their details
-        if message.embeds:
-            for idx, embed in enumerate(message.embeds):
-                logging.info(f"Embed {idx} fields: {[field.name for field in embed.fields]}")
+        if message.author.name == "Cielo":
+            # Detailed logging for Cielo
+            log_data = {
+                'author': message.author.name,
+                'content': message.content,
+                'has_embeds': bool(message.embeds),
+                'embed_count': len(message.embeds) if message.embeds else 0
+            }
+            logging.info(f"Message Details: {log_data}")
+            
+            if message.embeds:
+                for idx, embed in enumerate(message.embeds):
+                    logging.info(f"Embed {idx} fields: {[field.name for field in embed.fields]}")
+        else:
+            # Truncated logging for other messages
+            logging.debug(f"Message: {message.author.name}: {message.content[:10]}...")
         
         await self.process_commands(message)
 
