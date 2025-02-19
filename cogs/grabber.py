@@ -122,8 +122,6 @@ Embed Count: %d
                     
                     # Create embed response
                     embed = discord.Embed(
-                        title=f"{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})",
-                        url=chart_url,
                         color=discord.Color.blue()
                     )
                     
@@ -131,15 +129,19 @@ Embed Count: %d
                     if banner_image:
                         embed.set_image(url=banner_image)
                     
-                    # Add main fields with spacers for consistent horizontal spacing
-                    embed.add_field(name="Chain", value=chain, inline=True)
-                    embed.add_field(name="\u200b", value="\u200b", inline=True)  # Invisible spacer
-                    embed.add_field(name="Market Cap", value=formatted_mcap, inline=True)
-                    embed.add_field(name="\u200b", value="\u200b", inline=True)  # Invisible spacer
-                    embed.add_field(name="24h Change", value=price_change_24h, inline=True)
-                    embed.add_field(name="\u200b", value="\u200b", inline=True)  # Invisible spacer
+                    # Format market cap with dollar sign
+                    if market_cap_value is not None:
+                        formatted_mcap = f"${format_large_number(market_cap_value)}"
+                    else:
+                        formatted_mcap = "N/A"
                     
-                    # Add social links and age as a new field
+                    # Create single line with all information
+                    title_line = f"[{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
+                    stats = f"[{formatted_mcap} / {price_change_24h}] {chain.lower()}"
+                    
+                    embed.description = f"{title_line} {stats}"
+                    
+                    # Add social links and age
                     links_text = []
                     if social_parts:
                         links_text.append(" ⋅ ".join(social_parts))
@@ -149,9 +151,9 @@ Embed Count: %d
                         links_text.append(age_string)
                     embed.add_field(name="", value=" • ".join(links_text), inline=False)
                     
-                    # Add note for market caps under $2M
+                    # Add note for market caps under $2M (without "Note:" prefix)
                     if market_cap_value and market_cap_value < 2_000_000:
-                        embed.add_field(name="Note", value="_Under 2m !_ <:wow:1149703956746997871>", inline=False)
+                        embed.add_field(name="", value="_Under $2m !_ <:wow:1149703956746997871>", inline=False)
                     
                     # Log token data
                     token_data = {

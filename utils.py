@@ -6,15 +6,15 @@ import aiohttp
 import asyncio
 
 def format_large_number(number):
-    """Format a large number as a human-readable string (e.g., 32.3M, 32.5K)."""
+    """Format a large number as a human-readable string (e.g., 32.3M, 32K)."""
     if number >= 1_000_000_000:
         return f"{number / 1_000_000_000:.1f}B"
     elif number >= 1_000_000:
         return f"{number / 1_000_000:.1f}M"
     elif number >= 1_000:
-        return f"{number / 1_000:.1f}K"
+        return f"{int(round(number / 1_000))}K"  # Round to nearest thousand, no decimal
     else:
-        return str(number)
+        return str(int(number))
 
 def format_percentage(value):
     return f"{value}%" if isinstance(value, (int, float)) else value
