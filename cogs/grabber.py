@@ -98,6 +98,28 @@ Embed Count: %d
                     # Create chart URL
                     chart_url = f"https://dexscreener.com/{chain.lower()}/{contract_address}"
                     
+                    # Extract pair creation time
+                    pair_created_at = pair.get('pairCreatedAt')
+                    age_string = get_age_string(pair_created_at)
+
+                    # Extract social links (using the old format)
+                    socials = pair.get('info', {}).get('socials', [])
+                    tg_link = next((s['url'] for s in socials if s['type'] == 'telegram'), None)
+                    twitter_link = next((s['url'] for s in socials if s['type'] == 'twitter'), None)
+
+                    # Extract website link
+                    websites = pair.get('info', {}).get('websites', [])
+                    website_link = websites[0]['url'] if websites else None
+
+                    # Format social links
+                    social_parts = []
+                    if website_link:
+                        social_parts.append(f"[Web]({website_link})")
+                    if twitter_link:
+                        social_parts.append(f"[𝕏]({twitter_link})")
+                    if tg_link:
+                        social_parts.append(f"[TG]({tg_link})")
+                    
                     # Create embed response
                     embed = discord.Embed(
                         title=f"{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})",
@@ -110,23 +132,21 @@ Embed Count: %d
                         embed.set_image(url=banner_image)
                     
                     # Add main fields
-                    embed.add_field(name="Chain", value=chain, inline=True)
                     embed.add_field(name="Market Cap", value=formatted_mcap, inline=True)
                     embed.add_field(name="24h Change", value=price_change_24h, inline=True)
+                    embed.add_field(name="Chain", value=chain, inline=True)
                     
-                    # Add socials if available
-                    socials_text = []
-                    if website:
-                        socials_text.append(f"[Website]({website})")
-                    if twitter:
-                        socials_text.append(f"[Twitter]({twitter})")
-                    if telegram:
-                        socials_text.append(f"[Telegram]({telegram})")
+                    # Add social links and age as a new field
+                    links_text = []
+                    if social_parts:
+                        links_text.append(" ⋅ ".join(social_parts))
+                    else:
+                        links_text.append("No socials")
+                    if age_string:
+                        links_text.append(age_string)
+                    embed.add_field(name="", value=" • ".join(links_text), inline=False)
                     
-                    if socials_text:
-                        embed.add_field(name="Socials", value=" | ".join(socials_text), inline=False)
-                    
-                    # Add note for market caps under $2M with exact formatting
+                    # Add note for market caps under $2M
                     if market_cap_value and market_cap_value < 2_000_000:
                         embed.add_field(name="Note", value="_Under 2m !_ <:wow:1149703956746997871>", inline=False)
                     
