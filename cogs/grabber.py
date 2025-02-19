@@ -130,11 +130,15 @@ Embed Count: %d
                     # Add banner if available
                     if banner_image:
                         embed.set_image(url=banner_image)
-                    
-                    # Add main fields
-                    embed.add_field(name="Chain", value=chain, inline=True)                    
-                    embed.add_field(name="Market Cap", value=formatted_mcap, inline=True)
-                    embed.add_field(name="24h Change", value=price_change_24h, inline=True)
+                        # Use inline=True for compact layout with banner
+                        embed.add_field(name="Chain", value=chain, inline=True)                    
+                        embed.add_field(name="Market Cap", value=formatted_mcap, inline=True)
+                        embed.add_field(name="24h Change", value=price_change_24h, inline=True)
+                    else:
+                        # Use inline=False for full width layout without banner
+                        embed.add_field(name="Chain", value=chain, inline=False)                    
+                        embed.add_field(name="Market Cap", value=formatted_mcap, inline=False)
+                        embed.add_field(name="24h Change", value=price_change_24h, inline=False)
                     
                     # Add social links and age as a new field
                     links_text = []
