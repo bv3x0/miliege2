@@ -35,7 +35,7 @@ class DigestCog(commands.Cog):
                 
                 # Create bold hyperlinked name and regular stats on separate lines
                 token_line = f"**[{name}]({token['chart_url']})**"
-                stats_line = f"/ {mcap} mc / {change} 24h"
+                stats_line = f"{mcap} mc • {change} 24h • base"
                 
                 description_lines.extend([token_line, stats_line, ""])  # Empty string adds spacing between entries
             
