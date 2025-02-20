@@ -22,7 +22,7 @@ class HealthMonitor(commands.Cog):
             uptime = self.monitor.get_uptime()
             embed = discord.Embed(
                 title="Health Status",
-                color=discord.Color.green()
+                color=0x5b594f
             )
             
             embed.add_field(

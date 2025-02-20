@@ -18,7 +18,7 @@ class DigestCog(commands.Cog):
                 return
 
             # Create embed
-            embed = discord.Embed(color=discord.Color.blue())
+            embed = discord.Embed(color=0x5b594f)
             
             # Get the 10 most recent tokens (they're already ordered by insertion)
             recent_tokens = list(self.token_tracker.tokens.values())[-10:]

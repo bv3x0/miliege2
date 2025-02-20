@@ -152,7 +152,7 @@ class DiscordBot(commands.Bot):
         """Check bot status and uptime"""
         try:
             uptime = self.monitor.get_uptime()
-            embed = discord.Embed(title="Bot Status", color=discord.Color.green())
+            embed = discord.Embed(title="Bot Status", color=0x5b594f)
             embed.add_field(
                 name="Uptime",
                 value=f"{uptime.days}d {uptime.seconds // 3600}h {(uptime.seconds // 60) % 60}m"

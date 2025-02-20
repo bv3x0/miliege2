@@ -126,7 +126,7 @@ Embed Count: %d
                     
                     # Create embed response
                     embed = discord.Embed(
-                        color=discord.Color.blue()
+                        color=0x5b594f
                     )
                     
                     # Add banner if available
