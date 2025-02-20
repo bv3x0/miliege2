@@ -3,8 +3,8 @@ from discord.ext import commands
 import logging
 from collections import deque
 import aiohttp
-from utils.api_utils import safe_api_call
-from utils.format_utils import format_large_number
+from utils import safe_api_call
+from utils import format_large_number
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
