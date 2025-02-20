@@ -159,12 +159,12 @@ Embed Count: %d
                     if market_cap_value and market_cap_value < 2_000_000:
                         embed.add_field(name="", value="_Under $2m !_ <:wow:1149703956746997871>", inline=False)
                     
-                    # Log token data
+                    # Store token data with raw market cap value
                     token_data = {
                         'name': token_name,
                         'chart_url': chart_url,
-                        'market_cap': formatted_mcap,
-                        'price_change': price_change_formatted,
+                        'initial_market_cap': market_cap_value,  # Store raw value
+                        'initial_market_cap_formatted': formatted_mcap,  # Store formatted value
                         'chain': chain
                     }
                     self.token_tracker.log_token(contract_address, token_data)
