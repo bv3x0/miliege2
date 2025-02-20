@@ -10,6 +10,7 @@ from cogs.digest import DigestCog
 from trackers import BotMonitor, TokenTracker
 from cogs.health import HealthMonitor
 from functools import wraps
+from cogs.fun import FunCommands
 
 # Enhanced logging setup
 def setup_logging():
@@ -111,6 +112,7 @@ class DiscordBot(commands.Bot):
         await self.add_cog(TokenGrabber(self, self.token_tracker, self.monitor))
         await self.add_cog(DigestCog(self, self.token_tracker, daily_digest_channel_id))
         await self.add_cog(HealthMonitor(self, self.monitor))
+        await self.add_cog(FunCommands(self))
         logger.info("Cogs loaded successfully")
 
     async def on_ready(self):
