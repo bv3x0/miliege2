@@ -2,10 +2,27 @@ import discord
 from discord.ext import commands
 import logging
 import random
+import os
 
 class FunCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # Create a data directory if it doesn't exist
+        self.data_dir = 'data'
+        os.makedirs(self.data_dir, exist_ok=True)
+        self.goon_file = os.path.join(self.data_dir, 'goon_database.json')
+        
+        # Test write permissions
+        try:
+            # Try to write to the file
+            if not os.path.exists(self.goon_file):
+                with open(self.goon_file, 'w') as f:
+                    f.write('[]')
+            logging.info(f"Successfully verified write permissions for {self.goon_file}")
+        except Exception as e:
+            logging.error(f"Permission error: Cannot write to {self.goon_file}: {e}")
+            raise
+        
         self.goon_options = [
             "https://cdn.discordapp.com/attachments/1180965924459778151/1342230338172096573/Gi9JK-rXEAAaaqv.png?ex=67b8e0ea&is=67b78f6a&hm=429e57cc369fa4cc5212971aa26ce7b63826e5b4e91511f37e050b63dae6129e&",
             "https://media.discordapp.net/attachments/1183105518194151464/1342183366711054387/78851_SFA_156500152520copia.png?ex=67b8b52b&is=67b763ab&hm=47518292a5c8fce06778fdfbb71e6e2ee90bd63bcdca11b016a798e1b29a9502&=&format=webp&quality=lossless&width=607&height=920",
