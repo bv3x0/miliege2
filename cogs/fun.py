@@ -32,9 +32,7 @@ class FunCommands(commands.Cog):
             "https://pbs.twimg.com/media/GjmzxzfbwAA5bsK?format=jpg&name=large",
             "https://fxtwitter.com/levi_pendragon/status/1816825726840250620",
             "https://fxtwitter.com/watchingspirals/status/1703036454841000234",
-            "https://pbs.twimg.com/media/Gdx0pZxaEAA7b4L?format=jpg&name=large",
-            "https://fxtwitter.com/mask_bastard/status/1837465550341263448"
-            
+            "https://pbs.twimg.com/media/Gdx0pZxaEAA7b4L?format=jpg&name=large"
         ]
 
     @commands.command()
