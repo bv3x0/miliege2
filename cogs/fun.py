@@ -10,7 +10,14 @@ class FunCommands(commands.Cog):
             "https://cdn.discordapp.com/attachments/1180965924459778151/1342230338172096573/Gi9JK-rXEAAaaqv.png?ex=67b8e0ea&is=67b78f6a&hm=429e57cc369fa4cc5212971aa26ce7b63826e5b4e91511f37e050b63dae6129e&",
             "https://media.discordapp.net/attachments/1183105518194151464/1342183366711054387/78851_SFA_156500152520copia.png?ex=67b8b52b&is=67b763ab&hm=47518292a5c8fce06778fdfbb71e6e2ee90bd63bcdca11b016a798e1b29a9502&=&format=webp&quality=lossless&width=607&height=920",
             "https://cdn.discordapp.com/attachments/1149697700418306158/1336409558070857780/IMG_8675.png?ex=67b8cbe3&is=67b77a63&hm=6158b7417112d03f9e05f9204b2140726b1acb48c903bb388b711e837a8f5a2b&",
-            "https://cdn.discordapp.com/attachments/1180965924459778151/1342230712648204451/fu.mp4?ex=67b8e143&is=67b78fc3&hm=2117aa4a6b9f46f3c70d29142d8275c74825b74ecba5b816c366e368574dd047&"
+            "https://cdn.discordapp.com/attachments/1180965924459778151/1342230712648204451/fu.mp4?ex=67b8e143&is=67b78fc3&hm=2117aa4a6b9f46f3c70d29142d8275c74825b74ecba5b816c366e368574dd047&",
+            "https://cdn.discordapp.com/attachments/1180965924459778151/1342517319007731803/GkUhUj3WYAEKY7k.png?ex=67b9ec2f&is=67b89aaf&hm=1285c26753cd4952899467c2c15b4589d8826a2a6d55012f4831ee1c03ec7797&",
+            "https://pbs.twimg.com/media/GjmzxzfbwAA5bsK?format=jpg&name=large",
+            "https://fxtwitter.com/levi_pendragon/status/1816825726840250620",
+            "https://fxtwitter.com/watchingspirals/status/1703036454841000234",
+            "https://pbs.twimg.com/media/Gdx0pZxaEAA7b4L?format=jpg&name=large",
+            "https://fxtwitter.com/mask_bastard/status/1837465550341263448"
+            
         ]
 
     @commands.command()
