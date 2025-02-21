@@ -32,6 +32,7 @@ class FunCommands(commands.Cog):
             "https://pbs.twimg.com/media/GjmzxzfbwAA5bsK?format=jpg&name=large",
             "https://fxtwitter.com/levi_pendragon/status/1816825726840250620",
             "https://fxtwitter.com/watchingspirals/status/1703036454841000234",
+            "https://i.poastcdn.org/bc/58/6f/bc586ffb8d29efd0ed8d4dbf0cf450fddd67f9e9e9090f3d0bc88fe3c3f70420.png",
             "https://media.discordapp.net/attachments/1149697700418306158/1339987703214637056/Gjwk9HbW8AAGiYt.png?ex=67b9f2cc&is=67b8a14c&hm=7af9b747846292f387806c510fe1fb39d083ce2a0ad42bbf5912b77cdc46856b&=&format=webp&quality=lossless",
             "https://pbs.twimg.com/media/Gdx0pZxaEAA7b4L?format=jpg&name=large",
             "https://media.discordapp.net/attachments/1149691338086940784/1334296604856942622/image0.jpg?ex=67b9adcc&is=67b85c4c&hm=03418853b53908be9bf7136fc133fa405911338f1f381147e86949e93299fe38&=&format=webp",
