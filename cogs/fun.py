@@ -38,11 +38,14 @@ class FunCommands(commands.Cog):
             "https://pbs.twimg.com/media/GkRudWxWQAAeCL4?format=jpg&name=small",
             "https://pbs.twimg.com/media/GZzA4QiWsAAX25d?format=jpg&name=small",
             "https://pbs.twimg.com/media/GTLzZt3WcAE45qw?format=jpg&name=small",
+            "https://cdn.discordapp.com/attachments/1149879412100190248/1325873532948709518/hope_2.mp4?ex=67ba0473&is=67b8b2f3&hm=4a47ea3d374521192b4bec48a0afbeaef21ca8ba4fb227980248d285e10a3f4a&",
+            "https://cdn.discordapp.com/attachments/1149697700418306158/1325899391000641536/hope_2.5.mp4?ex=67b973c8&is=67b82248&hm=dcfb2a92318664fc0021fe0ed37971a4eb511db67521ac764ed585e48b8cf8c9&",
             "https://media.discordapp.net/attachments/1149697700418306158/1342223139156791297/image0.jpg?ex=67b982f5&is=67b83175&hm=4aa4e4bf7736adbbf25456bf948bab7f284b8f7e390e40761837c3bb8d19d9c8&=&format=webp&width=662&height=919",
 
 
-        ]
 
+        ]
+i ha
     @commands.command()
     async def goon(self, ctx):
         """Post a random goon image/video"""
