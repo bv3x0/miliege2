@@ -41,9 +41,13 @@ Embed Count: %d
                 content_match = re.search(r'💊\s+(\w+)\s+\[([0-9.]+[KMB]?)/', message.content)
                 if not content_match:  # Try alternative format
                     content_match = re.search(r'\*\*([^[]+)\s*\[([0-9.]+[KMB]?)', message.content)
+                if not content_match:  # Try format with markdown link
+                    content_match = re.search(r'\*\*\[([^\]]+)\](?:\([^)]+\))?\s*\[([0-9.]+[KMB]?)', message.content)
                 
                 if content_match:
                     token_name = content_match.group(1).strip()
+                    # Clean up token name - remove markdown links if present
+                    token_name = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', token_name)
                     initial_mcap = content_match.group(2).strip()
                     
                     logging.info(f"Extracted token info - Name: {token_name}, Initial MCap: {initial_mcap}")
@@ -55,10 +59,27 @@ Embed Count: %d
                                 # Log the full embed description for debugging
                                 logging.info(f"Embed description: {embed.description}")
                                 
-                                # Find contract address (as a standalone line in backticks)
+                                # Find contract address using multiple patterns
+                                contract_address = None
+                                
+                                # Pattern 1: Standalone line in backticks
                                 contract_match = re.search(r'`([A-Za-z0-9]{32,})`\n(?:(?:\[|\|)[A-Z]+(?:\]|\|))', embed.description)
                                 if contract_match:
                                     contract_address = contract_match.group(1)
+                                
+                                # Pattern 2: Plain text contract address
+                                if not contract_address:
+                                    contract_match = re.search(r'\n([A-Za-z0-9]{32,})\n', embed.description)
+                                    if contract_match:
+                                        contract_address = contract_match.group(1)
+                                
+                                # Pattern 3: Extract from pump.fun URL in message content
+                                if not contract_address:
+                                    pump_match = re.search(r'pump\.fun/([A-Za-z0-9]{32,})', message.content)
+                                    if pump_match:
+                                        contract_address = pump_match.group(1)
+                                
+                                if contract_address:
                                     logging.info(f"Found contract address: {contract_address}")
                                     
                                     # Get the user who triggered the Rick alert
