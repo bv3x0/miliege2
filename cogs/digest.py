@@ -84,14 +84,14 @@ class DigestCog(commands.Cog):
         # Get current NY time for the footer
         ny_time = datetime.now(self.ny_tz)
         if is_hourly:
-            # Format for "3-4pm" style with fedora
-            current_hour = ny_time.strftime('%-I%p').lower()
-            previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
-            # Convert NY time to Unix timestamp
-            unix_time = int(ny_time.timestamp())
-            time_text = f"{previous_hour}-{current_hour} (<t:{unix_time}:t>) <:fedora:1151138750768894003> "
+            # Get timestamps for current and previous hour
+            current_hour_ts = int(ny_time.timestamp())
+            previous_hour_ts = int((ny_time - timedelta(hours=1)).timestamp())
+            
+            # Use Discord timestamps for both times
+            time_text = f"<t:{previous_hour_ts}:t>-<t:{current_hour_ts}:t> <:fedora:1151138750768894003> "
         else:
-            # Format for "since 3pm" style with fedora
+            # For manual digests, just show "since X time"
             last_hour = ny_time.replace(minute=0, second=0, microsecond=0)
             unix_time = int(last_hour.timestamp())
             time_text = f"since <t:{unix_time}:t> <:fedora:1151138750768894003> "

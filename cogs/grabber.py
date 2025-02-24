@@ -56,18 +56,18 @@ Embed Count: %d
                             logging.info(f"  Value: '{field.value}'")
                             logging.info(f"  Inline: {field.inline}")
                 
-                # Extract credit from embed fields
+                # Extract credit from embed title
                 credit_user = None
                 if message.embeds:
                     for embed in message.embeds:
-                        # The first field usually contains the tag/credit
-                        if embed.fields and embed.fields[0].value:
-                            credit_user = embed.fields[0].value.strip()
-                            logging.info(f"Found credit user in embed: {credit_user}")
+                        if embed.title and '🏷' in embed.title:
+                            # Remove the tag emoji and strip whitespace
+                            credit_user = embed.title.replace('🏷', '').strip()
+                            logging.info(f"Found credit user in embed title: {credit_user}")
                             break
                 
                 if not credit_user:
-                    logging.warning("Could not find credit user in embed fields")
+                    logging.warning("Could not find credit user in embed title")
 
                 if message.embeds:
                     for embed in message.embeds:
