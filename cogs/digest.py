@@ -72,7 +72,7 @@ class DigestCog(commands.Cog):
             last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
             time_text = f"<:fedora:1151138750768894003> since {last_hour}"
         
-        description_lines.append(time_text)  # Add time range at the bottom
+        description_lines.extend(["", time_text])  # Add empty string for line break before time
         
         embed.description = "\n".join(description_lines)
         return embed
