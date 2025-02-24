@@ -24,9 +24,7 @@ class DigestCog(commands.Cog):
         if not self.token_tracker.tokens:
             return None
 
-        embed = discord.Embed(
-            title="Latest Alerts"  # Remove color parameter to use default white
-        )
+        embed = discord.Embed()  # No title, just an empty embed
         recent_tokens = list(self.token_tracker.tokens.items())[-10:]  # Last 10 tokens
         
         description_lines = []
@@ -54,7 +52,7 @@ class DigestCog(commands.Cog):
                             current_mcap = f"${format_large_number(float(pair['fdv']))}"
 
                 # Format token information
-                token_line = f"## [{name}]({token['chart_url']})"
+                token_line = f"## [{name}]({token['chart_url']})"  # Keep h2 for token names
                 stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
                 
@@ -63,14 +61,14 @@ class DigestCog(commands.Cog):
         # Get current NY time for the footer
         ny_time = datetime.now(self.ny_tz)
         if is_hourly:
-            # Format for "3-4PM" style
+            # Format for "token alerts, 3-4pm" style
             current_hour = ny_time.strftime('%-I%p').lower()
             previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
-            time_text = f"`from {previous_hour}-{current_hour}`"
+            time_text = f"`token alerts, {previous_hour}-{current_hour}`"
         else:
-            # Format for "Since 3PM" style
+            # Format for "token alerts since 3pm" style
             last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
-            time_text = f"`since {last_hour}`"
+            time_text = f"`token alerts since {last_hour}`"
         
         description_lines.append(time_text)  # Add time range at the bottom
         
