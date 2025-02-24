@@ -34,19 +34,31 @@ class TokenGrabber(commands.Cog):
             if message.author.bot and message.author.name == "Cielo":
                 logging.info("""
 === Cielo Message Detected ===
+Content: %s
 Has Embeds: %s
 Embed Count: %d
-""", bool(message.embeds), len(message.embeds) if message.embeds else 0)
+""", message.content, bool(message.embeds), len(message.embeds) if message.embeds else 0)
                 
                 # Extract credit from first line after any emoji
                 credit_user = None
                 if message.content:
                     first_line = message.content.split('\n')[0]
-                    # Match any emoji followed by non-whitespace characters
-                    label_match = re.search(r'[\U0001F300-\U0001F9FF]\s*(\S+.*?)(?:\s|$)', first_line)
-                    if label_match:
-                        credit_user = label_match.group(1)
-                        logging.info(f"Found credit user: {credit_user}")
+                    # Try multiple patterns for credit extraction
+                    patterns = [
+                        r'[\U0001F300-\U0001F9FF]\s*(\S+.*?)(?:\s|$)',  # Original emoji pattern
+                        r'🏷️\s*(\S+.*?)(?:\s|$)',  # Specific tag emoji
+                        r'(?:^|\s)(\S+.*?)(?:\s|$)'  # Fallback: any non-whitespace after space
+                    ]
+                    
+                    for pattern in patterns:
+                        label_match = re.search(pattern, first_line)
+                        if label_match:
+                            credit_user = label_match.group(1)
+                            logging.info(f"Found credit user using pattern {pattern}: {credit_user}")
+                            break
+                    
+                    if not credit_user:
+                        logging.warning(f"Could not extract credit from line: {first_line}")
                 
                 if message.embeds:
                     for embed in message.embeds:
