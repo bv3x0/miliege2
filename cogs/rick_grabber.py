@@ -39,18 +39,27 @@ Embed Count: %d
 
                 # Extract token info from message content
                 content_match = re.search(r'💊\s+(\w+)\s+\[([0-9.]+[KMB]?)/', message.content)
+                if not content_match:  # Try alternative format
+                    content_match = re.search(r'\*\*([^[]+)\s*\[([0-9.]+[KMB]?)', message.content)
+                
                 if content_match:
-                    token_name = content_match.group(1)
-                    initial_mcap = content_match.group(2)
+                    token_name = content_match.group(1).strip()
+                    initial_mcap = content_match.group(2).strip()
+                    
+                    logging.info(f"Extracted token info - Name: {token_name}, Initial MCap: {initial_mcap}")
                     
                     # Get contract address from embed
                     if message.embeds:
                         for embed in message.embeds:
                             if embed.description:
+                                # Log the full embed description for debugging
+                                logging.info(f"Embed description: {embed.description}")
+                                
                                 # Find contract address (plain text in description)
                                 contract_match = re.search(r'([A-Za-z0-9]{32,})', embed.description)
                                 if contract_match:
                                     contract_address = contract_match.group(1)
+                                    logging.info(f"Found contract address: {contract_address}")
                                     
                                     # Get the user who triggered the Rick alert
                                     trigger_user = None
@@ -64,6 +73,7 @@ Embed Count: %d
                                             chart_links = re.findall(r'\[DEX\]\((.*?)\)', field.value)
                                             if chart_links:
                                                 chart_url = chart_links[0]
+                                                logging.info(f"Found chart URL: {chart_url}")
                                                 break
                                     
                                     logging.info(f"Processing Rick token: {token_name} ({contract_address})")
@@ -76,6 +86,10 @@ Embed Count: %d
                                         chart_url
                                     )
                                     return
+                                else:
+                                    logging.warning("No contract address found in embed description")
+                            else:
+                                logging.warning("Embed has no description")
 
         except Exception as e:
             logging.error(f"Error in Rick message processing: {e}", exc_info=True)
