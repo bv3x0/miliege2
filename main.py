@@ -12,6 +12,7 @@ from cogs.health import HealthMonitor
 from functools import wraps
 from cogs.fun import FunCommands
 from cogs.rick_grabber import RickGrabber
+import aiohttp
 
 # Enhanced logging setup
 def setup_logging():
@@ -87,6 +88,7 @@ class DiscordBot(commands.Bot):
         
         self.monitor = BotMonitor()
         self.token_tracker = TokenTracker()
+        self.session = None  # Will be initialized in setup_hook
 
     async def on_message(self, message):
         if message.author.name == "Cielo":
@@ -109,9 +111,13 @@ class DiscordBot(commands.Bot):
         await self.process_commands(message)
 
     async def setup_hook(self):
-        # Add cogs
-        await self.add_cog(TokenGrabber(self, self.token_tracker, self.monitor))
-        await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor))
+        # Create a shared aiohttp session
+        self.session = aiohttp.ClientSession()
+        logger.info("Created shared aiohttp session")
+        
+        # Add cogs with shared session
+        await self.add_cog(TokenGrabber(self, self.token_tracker, self.monitor, self.session))
+        await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session))
         await self.add_cog(DigestCog(self, self.token_tracker, daily_digest_channel_id))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
@@ -174,6 +180,13 @@ class DiscordBot(commands.Bot):
         except Exception as e:
             logger.error(f"Error in status command: {e}")
             await ctx.send("❌ **Error:** Unable to fetch bot status.")
+
+    async def close(self):
+        # Close the shared session when the bot shuts down
+        if self.session:
+            await self.session.close()
+            logger.info("Closed shared aiohttp session")
+        await super().close()
 
 if __name__ == "__main__":
     bot = DiscordBot()

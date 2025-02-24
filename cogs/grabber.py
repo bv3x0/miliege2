@@ -1,31 +1,16 @@
 import discord # type: ignore
 from discord.ext import commands
 import re
-import requests
 import logging
 import asyncio
 from utils import format_large_number, get_age_string, safe_api_call
-from aiohttp import ClientSession
 
 class TokenGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor):
+    def __init__(self, bot, token_tracker, monitor, session):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
-        self.session = None  # Initialize as None
-        # Create the session when the cog is added to the bot
-        self.bot.loop.create_task(self.initialize_session())
-
-    async def initialize_session(self):
-        """Initialize the aiohttp session"""
-        self.session = ClientSession()
-        logging.info("TokenGrabber session initialized")
-
-    async def cog_unload(self):
-        """Cleanup when the cog is unloaded"""
-        if self.session:
-            await self.session.close()
-            logging.info("TokenGrabber session closed")
+        self.session = session
 
     @commands.Cog.listener()
     async def on_message(self, message):

@@ -3,27 +3,16 @@ from discord.ext import commands
 import logging
 import re
 from utils import format_large_number, get_age_string, safe_api_call
-from aiohttp import ClientSession
 import asyncio
 
 class RickGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor):
+    def __init__(self, bot, token_tracker, monitor, session):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
-        self.session = None
+        self.session = session
         self.last_api_call = None
         self.rate_limit = 1.0  # seconds between API calls
-        self.bot.loop.create_task(self.initialize_session())
-
-    async def initialize_session(self):
-        self.session = ClientSession()
-        logging.info("RickGrabber session initialized")
-
-    async def cog_unload(self):
-        if self.session:
-            await self.session.close()
-            logging.info("RickGrabber session closed")
 
     @commands.Cog.listener()
     async def on_message(self, message):
