@@ -24,7 +24,9 @@ class DigestCog(commands.Cog):
         if not self.token_tracker.tokens:
             return None
 
-        embed = discord.Embed()  # No title, just an empty embed
+        embed = discord.Embed(
+            title="Latest Alerts"
+        )
         recent_tokens = list(self.token_tracker.tokens.items())[-10:]  # Last 10 tokens
         
         description_lines = []
@@ -61,14 +63,14 @@ class DigestCog(commands.Cog):
         # Get current NY time for the footer
         ny_time = datetime.now(self.ny_tz)
         if is_hourly:
-            # Format for "token alerts, 3-4pm" style
+            # Format for "3-4pm" style with fedora
             current_hour = ny_time.strftime('%-I%p').lower()
             previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
-            time_text = f"`token alerts, {previous_hour}-{current_hour}`"
+            time_text = f"<:fedora:1151138750768894003> {previous_hour}-{current_hour}"
         else:
-            # Format for "token alerts since 3pm" style
+            # Format for "since 3pm" style with fedora
             last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
-            time_text = f"`token alerts since {last_hour}`"
+            time_text = f"<:fedora:1151138750768894003> since {last_hour}"
         
         description_lines.append(time_text)  # Add time range at the bottom
         
