@@ -56,7 +56,7 @@ class DigestCog(commands.Cog):
                 stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
                 
-                description_lines.extend([token_line, stats_line, source_line, ""])
+                description_lines.extend([token_line, stats_line, source_line])
         
         # Get current NY time for the footer
         ny_time = datetime.now(self.ny_tz)
