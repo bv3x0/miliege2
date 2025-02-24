@@ -38,12 +38,15 @@ Has Embeds: %s
 Embed Count: %d
 """, bool(message.embeds), len(message.embeds) if message.embeds else 0)
                 
-                # Extract credit (username after label emoji)
+                # Extract credit from first line after any emoji
                 credit_user = None
-                label_match = re.search(r'🏷️\s+(\S+)', message.content)
-                if label_match:
-                    credit_user = label_match.group(1)
-                    logging.info(f"Found credit user: {credit_user}")
+                if message.content:
+                    first_line = message.content.split('\n')[0]
+                    # Match any emoji followed by non-whitespace characters
+                    label_match = re.search(r'[\U0001F300-\U0001F9FF]\s*(\S+.*?)(?:\s|$)', first_line)
+                    if label_match:
+                        credit_user = label_match.group(1)
+                        logging.info(f"Found credit user: {credit_user}")
                 
                 if message.embeds:
                     for embed in message.embeds:
