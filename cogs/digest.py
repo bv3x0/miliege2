@@ -19,12 +19,15 @@ class DigestCog(commands.Cog):
     def cog_unload(self):
         self.hourly_digest.cancel()  # Clean up task when cog is unloaded
 
-    async def create_digest_embed(self):
+    async def create_digest_embed(self, is_hourly=True):
         """Create the digest embed - shared between auto and manual digests"""
         if not self.token_tracker.tokens:
             return None
 
-        embed = discord.Embed(color=0x5b594f)
+        embed = discord.Embed(
+            title="Latest Alerts",  # Simplified title
+            color=0x5b594f
+        )
         recent_tokens = list(self.token_tracker.tokens.items())[-10:]  # Last 10 tokens
         
         description_lines = []
@@ -52,11 +55,25 @@ class DigestCog(commands.Cog):
                             current_mcap = f"${format_large_number(float(pair['fdv']))}"
 
                 # Format token information
-                token_line = f"**[{name}]({token['chart_url']})**"
+                token_line = f"### [{name}]({token['chart_url']})"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
                 
                 description_lines.extend([token_line, stats_line, source_line, ""])
+        
+        # Get current NY time for the footer
+        ny_time = datetime.now(self.ny_tz)
+        if is_hourly:
+            # Format for "3-4PM" style
+            current_hour = ny_time.strftime('%-I%p').lower()
+            previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
+            time_text = f"from {previous_hour}-{current_hour}"
+        else:
+            # Format for "Since 3PM" style
+            last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
+            time_text = f"since {last_hour}"
+        
+        description_lines.append(time_text)  # Add time range at the bottom
         
         embed.description = "\n".join(description_lines)
         return embed
@@ -73,14 +90,8 @@ class DigestCog(commands.Cog):
 
             if self.token_tracker.tokens:
                 logging.info(f"Found {len(self.token_tracker.tokens)} tokens for digest")
-                embed = await self.create_digest_embed()
+                embed = await self.create_digest_embed(is_hourly=True)
                 if embed:
-                    # Get current NY time
-                    ny_time = datetime.now(self.ny_tz)
-                    # Format for "3-4PM" style (without markdown headers)
-                    current_hour = ny_time.strftime('%-I%p').lower()
-                    previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
-                    embed.title = f"Hourly Digest: {previous_hour}-{current_hour}"  # Remove ##
                     await channel.send(embed=embed)
                     logging.info("Hourly digest posted successfully")
                 
@@ -112,13 +123,8 @@ class DigestCog(commands.Cog):
                 await ctx.send("<:dwbb:1321571679109124126>")
                 return
 
-            embed = await self.create_digest_embed()
+            embed = await self.create_digest_embed(is_hourly=False)
             if embed:
-                # Get current NY time
-                ny_time = datetime.now(self.ny_tz)
-                # Format for "Since 3PM" style
-                last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
-                embed.title = f"Hourly Digest: Since {last_hour}"  # Remove ## here too
                 await ctx.send(embed=embed)
                 
         except Exception as e:
