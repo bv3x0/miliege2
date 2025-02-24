@@ -84,9 +84,11 @@ class DigestCog(commands.Cog):
         # Get current NY time for the footer
         ny_time = datetime.now(self.ny_tz)
         if is_hourly:
-            # Get timestamps for current and previous hour
-            current_hour_ts = int(ny_time.timestamp())
-            previous_hour_ts = int((ny_time - timedelta(hours=1)).timestamp())
+            # Get timestamps for current and previous hour, ensuring minutes/seconds are 0
+            current_hour = ny_time.replace(minute=0, second=0, microsecond=0)
+            previous_hour = current_hour - timedelta(hours=1)
+            current_hour_ts = int(current_hour.timestamp())
+            previous_hour_ts = int(previous_hour.timestamp())
             
             # Use Discord timestamps for both times
             time_text = f"<t:{previous_hour_ts}:t>-<t:{current_hour_ts}:t> <:fedora:1151138750768894003> "
