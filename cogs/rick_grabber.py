@@ -55,8 +55,8 @@ Embed Count: %d
                                 # Log the full embed description for debugging
                                 logging.info(f"Embed description: {embed.description}")
                                 
-                                # Find contract address (plain text in description)
-                                contract_match = re.search(r'([A-Za-z0-9]{32,})', embed.description)
+                                # Find contract address (as a standalone line in backticks)
+                                contract_match = re.search(r'`([A-Za-z0-9]{32,})`\n(?:(?:\[|\|)[A-Z]+(?:\]|\|))', embed.description)
                                 if contract_match:
                                     contract_address = contract_match.group(1)
                                     logging.info(f"Found contract address: {contract_address}")
@@ -64,7 +64,6 @@ Embed Count: %d
                                     # Get the user who triggered the Rick alert
                                     trigger_user = None
                                     if message.reference and message.reference.resolved:
-                                        # Use display_name instead of name
                                         trigger_user = message.reference.resolved.author.display_name
                                         logging.info(f"Found trigger user display name: {trigger_user}")
                                     
