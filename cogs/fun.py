@@ -54,7 +54,7 @@ class FunCommands(commands.Cog):
         """Post a random goon image/video"""
         try:
             random_goon = random.choice(self.goon_options)
-            await ctx.send(random_goon)
+            await ctx.send(f"||{random_goon}||")
         except Exception as e:
             logging.error(f"Error in goon command: {e}")
             await ctx.send("❌ Failed to post goon image")
