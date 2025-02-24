@@ -38,16 +38,38 @@ class TokenTracker:
         self.update_lock = asyncio.Lock()
         self.last_update_time = {}
 
-    def log_token(self, contract: str, data: Dict[str, Any]) -> None:
-        """Log a token, maintaining only the most recent tokens."""
+    def log_token(self, contract: str, data: Dict[str, Any], source: str, user: str = None) -> None:
+        """Log a token, maintaining only the most recent tokens but preserving first alert data.
+        
+        Args:
+            contract: Token contract address
+            data: Token data dictionary
+            source: Source of the alert (e.g., 'cielo', 'rick')
+            user: Username who triggered the alert
+        """
         # Remove oldest tokens if max size reached
         while len(self.tokens) >= self.max_tokens:
             self.tokens.popitem(last=False)
-            
-        self.tokens[contract] = {
-            **data,
-            'timestamp': datetime.now()
-        }
+        
+        if contract in self.tokens:
+            # Update timestamp but preserve original source, user, and initial market cap
+            self.tokens[contract].update({
+                **data,
+                'timestamp': datetime.now(),
+                # Preserve these fields from the first alert
+                'source': self.tokens[contract]['source'],
+                'user': self.tokens[contract]['user'],
+                'initial_market_cap': self.tokens[contract]['initial_market_cap'],
+                'initial_market_cap_formatted': self.tokens[contract]['initial_market_cap_formatted'],
+            })
+        else:
+            # This is the first alert for this token
+            self.tokens[contract] = {
+                **data,
+                'timestamp': datetime.now(),
+                'source': source,
+                'user': user
+            }
 
     def log_buy(self, token_name, buyer_id):
         if token_name not in self.buy_counts:

@@ -11,6 +11,7 @@ from trackers import BotMonitor, TokenTracker
 from cogs.health import HealthMonitor
 from functools import wraps
 from cogs.fun import FunCommands
+from cogs.rick_grabber import RickGrabber
 
 # Enhanced logging setup
 def setup_logging():
@@ -110,6 +111,7 @@ class DiscordBot(commands.Bot):
     async def setup_hook(self):
         # Add cogs
         await self.add_cog(TokenGrabber(self, self.token_tracker, self.monitor))
+        await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor))
         await self.add_cog(DigestCog(self, self.token_tracker, daily_digest_channel_id))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))

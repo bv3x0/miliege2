@@ -38,6 +38,13 @@ Has Embeds: %s
 Embed Count: %d
 """, bool(message.embeds), len(message.embeds) if message.embeds else 0)
                 
+                # Extract credit (username after label emoji)
+                credit_user = None
+                label_match = re.search(r'🏷️\s+(\S+)', message.content)
+                if label_match:
+                    credit_user = label_match.group(1)
+                    logging.info(f"Found credit user: {credit_user}")
+                
                 if message.embeds:
                     for embed in message.embeds:
                         for field in embed.fields:
@@ -48,7 +55,7 @@ Embed Count: %d
                                 if match:
                                     contract_address = match.group(1)
                                     logging.info(f"Processing token: {contract_address}")
-                                    await self._process_token(contract_address, message)
+                                    await self._process_token(contract_address, message, credit_user)
                                     return
                 else:
                     logging.warning("Cielo message had no embeds")
@@ -60,7 +67,7 @@ Embed Count: %d
             logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
 
-    async def _process_token(self, contract_address, message):
+    async def _process_token(self, contract_address, message, credit_user=None):
         try:
             dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
             logging.info(f"Querying Dexscreener API: {dex_api_url}")
@@ -167,7 +174,7 @@ Embed Count: %d
                         'initial_market_cap_formatted': formatted_mcap,  # Store formatted value
                         'chain': chain
                     }
-                    self.token_tracker.log_token(contract_address, token_data)
+                    self.token_tracker.log_token(contract_address, token_data, 'cielo', credit_user)
                     
                     await message.channel.send(embed=embed)
                 else:
