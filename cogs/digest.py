@@ -56,8 +56,23 @@ class DigestCog(commands.Cog):
                 # Format token information
                 # Compare market caps and add emoji based on 33% threshold
                 try:
-                    current_mcap_value = float(current_mcap.replace('$', '').replace('M', '000000').replace('K', '000').replace('B', '000000000'))
-                    initial_mcap_value = float(initial_mcap.replace('$', '').replace('M', '000000').replace('K', '000').replace('B', '000000000'))
+                    # Fix the string to number conversion
+                    def parse_market_cap(mcap_str):
+                        # Remove $ symbol
+                        clean_str = mcap_str.replace('$', '')
+                        
+                        # Handle suffixes properly
+                        if 'M' in clean_str:
+                            return float(clean_str.replace('M', '')) * 1000000
+                        elif 'K' in clean_str:
+                            return float(clean_str.replace('K', '')) * 1000
+                        elif 'B' in clean_str:
+                            return float(clean_str.replace('B', '')) * 1000000000
+                        else:
+                            return float(clean_str)
+                    
+                    current_mcap_value = parse_market_cap(current_mcap)
+                    initial_mcap_value = parse_market_cap(initial_mcap)
                     
                     # Calculate percentage change
                     percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
