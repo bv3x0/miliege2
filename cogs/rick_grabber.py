@@ -89,6 +89,9 @@ Embed Count: %d
                     logging.warning(f"No valid data returned for token {token_name} ({contract_address})")
                     return
                 
+                pair = dex_data['pairs'][0]
+                chain = pair.get('chainId', 'Unknown Chain')
+                
                 # Format initial market cap
                 initial_mcap_formatted = initial_mcap
                 if not initial_mcap.startswith('$'):
@@ -97,14 +100,16 @@ Embed Count: %d
                 token_data = {
                     'name': token_name,
                     'chart_url': chart_url,
+                    'chain': chain,
                     'initial_market_cap_formatted': initial_mcap_formatted,
                 }
                 
                 # Log token with 'rick' source and trigger user
                 self.token_tracker.log_token(contract_address, token_data, 'rick', trigger_user)
+                logging.info(f"Successfully logged Rick token: {token_name} ({contract_address})")
                 
         except Exception as e:
-            logging.error(f"Error processing Rick token {contract_address}: {e}", exc_info=True) 
+            logging.error(f"Error processing Rick token {contract_address}: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_ready(self):

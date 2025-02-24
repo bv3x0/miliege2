@@ -6,6 +6,7 @@ import aiohttp
 from utils import safe_api_call, format_large_number
 from datetime import datetime, timedelta
 import pytz
+import asyncio
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
@@ -59,12 +60,14 @@ class DigestCog(commands.Cog):
     async def hourly_digest(self):
         """Automatically post digest every hour"""
         try:
+            logging.info("Starting hourly digest task")
             channel = self.bot.get_channel(self.channel_id)
             if not channel:
                 logging.error(f"Could not find channel {self.channel_id}")
                 return
 
             if self.token_tracker.tokens:
+                logging.info(f"Found {len(self.token_tracker.tokens)} tokens for digest")
                 embed = await self.create_digest_embed()
                 if embed:
                     # Get current NY time
@@ -74,24 +77,27 @@ class DigestCog(commands.Cog):
                     previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
                     embed.title = f"## Hourly Digest: {previous_hour}-{current_hour}"
                     await channel.send(embed=embed)
+                    logging.info("Hourly digest posted successfully")
                 
                 self.token_tracker.tokens.clear()
-                logging.info("Hourly digest posted and tokens cleared")
+                logging.info("Tokens cleared after digest")
             else:
+                logging.info("No tokens to report in hourly digest")
                 await channel.send("<:fedora:1151138750768894003> nothing to report")
-                logging.info("Empty hourly digest reported")
 
         except Exception as e:
-            logging.error(f"Error in hourly digest: {e}")
+            logging.error(f"Error in hourly digest: {e}", exc_info=True)
 
     @hourly_digest.before_loop
     async def before_hourly_digest(self):
         """Wait until the start of the next hour before starting the digest loop"""
         await self.bot.wait_until_ready()
+        logging.info("Waiting for bot to be ready before starting hourly digest")
         now = datetime.utcnow()
         next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-        await discord.utils.sleep_until(next_hour)
-        logging.info(f"Hourly digest scheduled to start at {next_hour}")
+        wait_seconds = (next_hour - now).total_seconds()
+        logging.info(f"Hourly digest scheduled to start in {wait_seconds} seconds (at {next_hour})")
+        await asyncio.sleep(wait_seconds)
 
     @commands.command()
     async def digest(self, ctx):
