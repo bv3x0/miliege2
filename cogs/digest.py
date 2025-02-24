@@ -83,11 +83,11 @@ class DigestCog(commands.Cog):
             # Format for "3-4pm" style with fedora
             current_hour = ny_time.strftime('%-I%p').lower()
             previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
-            time_text = f"<:fedora:1151138750768894003> {previous_hour}-{current_hour}"
+            time_text = f"{previous_hour}-{current_hour} <:fedora:1151138750768894003> "
         else:
             # Format for "since 3pm" style with fedora
             last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
-            time_text = f"<:fedora:1151138750768894003> since {last_hour}"
+            time_text = f"since {last_hour} <:fedora:1151138750768894003> "
         
         description_lines.extend(["", "", time_text])  # Add two empty strings for double spacing
         
