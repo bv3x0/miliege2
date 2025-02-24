@@ -27,7 +27,7 @@ class DigestCog(commands.Cog):
         embed = discord.Embed(color=0x5b594f)
         recent_tokens = list(self.token_tracker.tokens.items())[-10:]  # Last 10 tokens
         
-        description_lines = ["## Latest Token Alerts", ""]
+        description_lines = []  # Remove the "Latest Token Alerts" header
         
         async with aiohttp.ClientSession() as session:
             for contract, token in recent_tokens:
@@ -46,10 +46,10 @@ class DigestCog(commands.Cog):
                         if 'fdv' in pair:
                             current_mcap = f"${format_large_number(float(pair['fdv']))}"
 
-                # Format token information
+                # Format token information (without markdown headers)
                 token_line = f"**[{name}]({token['chart_url']})**"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
-                source_line = f"{source} alert by {user}" if user else f"{source} alert"
+                source_line = f"{source} via {user}" if user else source  # Simplified format with "via"
                 
                 description_lines.extend([token_line, stats_line, source_line, ""])
         
@@ -72,10 +72,10 @@ class DigestCog(commands.Cog):
                 if embed:
                     # Get current NY time
                     ny_time = datetime.now(self.ny_tz)
-                    # Format for "3-4PM" style
+                    # Format for "3-4PM" style (without markdown headers)
                     current_hour = ny_time.strftime('%-I%p').lower()
                     previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
-                    embed.title = f"## Hourly Digest: {previous_hour}-{current_hour}"
+                    embed.title = f"Hourly Digest: {previous_hour}-{current_hour}"  # Remove ##
                     await channel.send(embed=embed)
                     logging.info("Hourly digest posted successfully")
                 

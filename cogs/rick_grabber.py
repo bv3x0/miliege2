@@ -64,17 +64,30 @@ Embed Count: %d
                                     # Get the user who triggered the Rick alert
                                     trigger_user = None
                                     if message.reference and message.reference.resolved:
-                                        trigger_user = message.reference.resolved.author.name
+                                        # Use display_name instead of name
+                                        trigger_user = message.reference.resolved.author.display_name
+                                        logging.info(f"Found trigger user display name: {trigger_user}")
                                     
                                     # Extract chart URL from DEX link
                                     chart_url = None
                                     for field in embed.fields:
                                         if field.name == "Chart":
+                                            # Try both DEX link formats
                                             chart_links = re.findall(r'\[DEX\]\((.*?)\)', field.value)
+                                            if not chart_links:
+                                                # Try alternative format with dexscreener.com
+                                                chart_links = re.findall(r'dexscreener\.com/[^)\s]+', field.value)
                                             if chart_links:
                                                 chart_url = chart_links[0]
+                                                if not chart_url.startswith('http'):
+                                                    chart_url = f"https://{chart_url}"
                                                 logging.info(f"Found chart URL: {chart_url}")
                                                 break
+                                    
+                                    if not chart_url:
+                                        # Fallback: Create dexscreener URL from contract
+                                        chart_url = f"https://dexscreener.com/search/{contract_address}"
+                                        logging.info(f"Using fallback chart URL: {chart_url}")
                                     
                                     logging.info(f"Processing Rick token: {token_name} ({contract_address})")
                                     await self._process_token(
