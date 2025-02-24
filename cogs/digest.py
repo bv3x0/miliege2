@@ -25,7 +25,7 @@ class DigestCog(commands.Cog):
             return None
 
         embed = discord.Embed(
-            title="Latest Alerts"
+            title="Hourly Digest" if is_hourly else "Latest Alerts"
         )
         recent_tokens = list(self.token_tracker.tokens.items())[-10:]  # Last 10 tokens
         
@@ -54,7 +54,24 @@ class DigestCog(commands.Cog):
                             current_mcap = f"${format_large_number(float(pair['fdv']))}"
 
                 # Format token information
-                token_line = f"## [{name}]({token['chart_url']})"  # Keep h2 for token names
+                # Compare market caps and add emoji based on 33% threshold
+                try:
+                    current_mcap_value = float(current_mcap.replace('$', '').replace('M', '000000').replace('K', '000').replace('B', '000000000'))
+                    initial_mcap_value = float(initial_mcap.replace('$', '').replace('M', '000000').replace('K', '000').replace('B', '000000000'))
+                    
+                    # Calculate percentage change
+                    percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
+                    
+                    if percent_change >= 33:
+                        status_emoji = " 😯"  # hushed emoji for 33%+ up
+                    elif percent_change <= -33:
+                        status_emoji = " <:ggggg:1149703938153664633>"  # custom emoji for 33%+ down
+                    else:
+                        status_emoji = ""
+                except:
+                    status_emoji = ""  # If there's any error in conversion, don't show any emoji
+                
+                token_line = f"## [{name}]({token['chart_url']}){status_emoji}"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
                 
