@@ -62,13 +62,17 @@ class DigestCog(commands.Cog):
                     # Calculate percentage change
                     percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
                     
+                    # Debug log the calculation
+                    logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
+                    
                     if percent_change >= 33:
                         status_emoji = " 😯"  # hushed emoji for 33%+ up
                     elif percent_change <= -33:
                         status_emoji = " <:ggggg:1149703938153664633>"  # custom emoji for 33%+ down
                     else:
                         status_emoji = ""
-                except:
+                except Exception as e:
+                    logging.error(f"Error calculating percent change for {name}: {e}")
                     status_emoji = ""  # If there's any error in conversion, don't show any emoji
                 
                 token_line = f"## [{name}]({token['chart_url']}){status_emoji}"
@@ -83,11 +87,14 @@ class DigestCog(commands.Cog):
             # Format for "3-4pm" style with fedora
             current_hour = ny_time.strftime('%-I%p').lower()
             previous_hour = (ny_time - timedelta(hours=1)).strftime('%-I%p').lower()
-            time_text = f"{previous_hour}-{current_hour} <:fedora:1151138750768894003> "
+            # Convert NY time to Unix timestamp
+            unix_time = int(ny_time.timestamp())
+            time_text = f"{previous_hour}-{current_hour} (<t:{unix_time}:t>) <:fedora:1151138750768894003> "
         else:
             # Format for "since 3pm" style with fedora
-            last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
-            time_text = f"since {last_hour} <:fedora:1151138750768894003> "
+            last_hour = ny_time.replace(minute=0, second=0, microsecond=0)
+            unix_time = int(last_hour.timestamp())
+            time_text = f"since <t:{unix_time}:t> <:fedora:1151138750768894003> "
         
         description_lines.extend(["", "", time_text])  # Add two empty strings for double spacing
         

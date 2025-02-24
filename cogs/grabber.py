@@ -39,27 +39,36 @@ Has Embeds: %s
 Embed Count: %d
 """, message.content, bool(message.embeds), len(message.embeds) if message.embeds else 0)
                 
-                # Extract credit from first line after any emoji
-                credit_user = None
-                if message.content:
-                    first_line = message.content.split('\n')[0]
-                    # Try multiple patterns for credit extraction
-                    patterns = [
-                        r'[\U0001F300-\U0001F9FF]\s*(\S+.*?)(?:\s|$)',  # Original emoji pattern
-                        r'🏷️\s*(\S+.*?)(?:\s|$)',  # Specific tag emoji
-                        r'(?:^|\s)(\S+.*?)(?:\s|$)'  # Fallback: any non-whitespace after space
-                    ]
-                    
-                    for pattern in patterns:
-                        label_match = re.search(pattern, first_line)
-                        if label_match:
-                            credit_user = label_match.group(1)
-                            logging.info(f"Found credit user using pattern {pattern}: {credit_user}")
-                            break
-                    
-                    if not credit_user:
-                        logging.warning(f"Could not extract credit from line: {first_line}")
+                # Detailed embed field logging
+                if message.embeds:
+                    for i, embed in enumerate(message.embeds):
+                        logging.info(f"\nEmbed {i} Details:")
+                        if embed.author:
+                            logging.info(f"Author: {embed.author.name}")
+                        logging.info(f"Title: {embed.title}")
+                        logging.info(f"Description: {embed.description}")
+                        # Log the raw embed data to see the tag field
+                        logging.info(f"Raw embed data: {embed.to_dict()}")
+                        
+                        for j, field in enumerate(embed.fields):
+                            logging.info(f"Field {j}:")
+                            logging.info(f"  Name: '{field.name}'")
+                            logging.info(f"  Value: '{field.value}'")
+                            logging.info(f"  Inline: {field.inline}")
                 
+                # Extract credit from embed fields
+                credit_user = None
+                if message.embeds:
+                    for embed in message.embeds:
+                        # The first field usually contains the tag/credit
+                        if embed.fields and embed.fields[0].value:
+                            credit_user = embed.fields[0].value.strip()
+                            logging.info(f"Found credit user in embed: {credit_user}")
+                            break
+                
+                if not credit_user:
+                    logging.warning("Could not find credit user in embed fields")
+
                 if message.embeds:
                     for embed in message.embeds:
                         for field in embed.fields:
