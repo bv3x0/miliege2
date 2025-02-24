@@ -128,6 +128,9 @@ Embed Count: %d
                     'chart_url': chart_url,
                     'chain': chain,
                     'initial_market_cap_formatted': initial_mcap_formatted,
+                    'message_id': message.id,
+                    'channel_id': message.channel.id,
+                    'guild_id': message.guild.id if message.guild else None
                 }
                 
                 # Log token with 'rick' source and trigger user

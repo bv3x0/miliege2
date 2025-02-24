@@ -170,9 +170,12 @@ Embed Count: %d
                     token_data = {
                         'name': token_name,
                         'chart_url': chart_url,
-                        'initial_market_cap': market_cap_value,  # Store raw value
-                        'initial_market_cap_formatted': formatted_mcap,  # Store formatted value
-                        'chain': chain
+                        'initial_market_cap': market_cap_value,
+                        'initial_market_cap_formatted': formatted_mcap,
+                        'chain': chain,
+                        'message_id': message.id,
+                        'channel_id': message.channel.id,
+                        'guild_id': message.guild.id if message.guild else None
                     }
                     self.token_tracker.log_token(contract_address, token_data, 'cielo', credit_user)
                     

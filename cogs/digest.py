@@ -27,7 +27,7 @@ class DigestCog(commands.Cog):
         embed = discord.Embed(color=0x5b594f)
         recent_tokens = list(self.token_tracker.tokens.items())[-10:]  # Last 10 tokens
         
-        description_lines = []  # Remove the "Latest Token Alerts" header
+        description_lines = []
         
         async with aiohttp.ClientSession() as session:
             for contract, token in recent_tokens:
@@ -36,6 +36,11 @@ class DigestCog(commands.Cog):
                 initial_mcap = token.get('initial_market_cap_formatted', 'N/A')
                 source = token.get('source', 'unknown')
                 user = token.get('user', 'unknown')
+                
+                # Create Discord message link if we have the necessary info
+                message_link = None
+                if token.get('message_id') and token.get('channel_id'):
+                    message_link = f"https://discord.com/channels/{token.get('guild_id', '')}/{token['channel_id']}/{token['message_id']}"
                 
                 # Fetch current market cap
                 dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract}"
@@ -46,10 +51,10 @@ class DigestCog(commands.Cog):
                         if 'fdv' in pair:
                             current_mcap = f"${format_large_number(float(pair['fdv']))}"
 
-                # Format token information (without markdown headers)
+                # Format token information
                 token_line = f"**[{name}]({token['chart_url']})**"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
-                source_line = f"{source} via {user}" if user else source  # Simplified format with "via"
+                source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
                 
                 description_lines.extend([token_line, stats_line, source_line, ""])
         
@@ -113,7 +118,7 @@ class DigestCog(commands.Cog):
                 ny_time = datetime.now(self.ny_tz)
                 # Format for "Since 3PM" style
                 last_hour = ny_time.replace(minute=0, second=0, microsecond=0).strftime('%-I%p').lower()
-                embed.title = f"## Hourly Digest: Since {last_hour}"
+                embed.title = f"Hourly Digest: Since {last_hour}"  # Remove ## here too
                 await ctx.send(embed=embed)
                 
         except Exception as e:
