@@ -80,19 +80,34 @@ Embed Count: %d
                                     
                                     # Extract chart URL from DEX link
                                     chart_url = None
-                                    for field in embed.fields:
-                                        if field.name == "Chart":
-                                            # Try both DEX link formats
-                                            chart_links = re.findall(r'\[DEX\]\((.*?)\)', field.value)
-                                            if not chart_links:
+                                    dex_link_pattern = r'\[DEX\]\((https?://(?:www\.)?dexscreener\.com/[^)]+)\)'
+                                    
+                                    # First check in the embed description for DEX link
+                                    if embed.description:
+                                        dex_matches = re.search(dex_link_pattern, embed.description)
+                                        if dex_matches:
+                                            chart_url = dex_matches.group(1)
+                                            logging.info(f"Found chart URL in description: {chart_url}")
+                                    
+                                    # If not found in description, check fields
+                                    if not chart_url:
+                                        for field in embed.fields:
+                                            if field.name == "Chart":
+                                                # Try both DEX link formats
+                                                dex_matches = re.search(dex_link_pattern, field.value)
+                                                if dex_matches:
+                                                    chart_url = dex_matches.group(1)
+                                                    logging.info(f"Found chart URL in Chart field: {chart_url}")
+                                                    break
+                                                
                                                 # Try alternative format with dexscreener.com
-                                                chart_links = re.findall(r'dexscreener\.com/[^)\s]+', field.value)
-                                            if chart_links:
-                                                chart_url = chart_links[0]
-                                                if not chart_url.startswith('http'):
-                                                    chart_url = f"https://{chart_url}"
-                                                logging.info(f"Found chart URL: {chart_url}")
-                                                break
+                                                alt_matches = re.search(r'dexscreener\.com/([^/]+)/([^)\s]+)', field.value)
+                                                if alt_matches:
+                                                    chain = alt_matches.group(1)
+                                                    pair = alt_matches.group(2)
+                                                    chart_url = f"https://dexscreener.com/{chain}/{pair}"
+                                                    logging.info(f"Found chart URL in Chart field (alt format): {chart_url}")
+                                                    break
                                     
                                     if not chart_url:
                                         # Fallback: Create dexscreener URL from contract
@@ -161,23 +176,38 @@ Embed Count: %d
             chain_match = re.search(r'https://(?:www\.)?dexscreener\.com/([^/]+)/', chart_url)
             if chain_match:
                 chain = chain_match.group(1)
+                logging.info(f"Extracted chain from chart URL: {chain}")
             
-            # If we couldn't extract from URL, try to extract from embed description
-            if chain == "unknown" and message.embeds and message.embeds[0].description:
+            # If we couldn't extract from URL or it's "search", try to extract from embed description
+            if (chain == "unknown" or chain == "search") and message.embeds and message.embeds[0].description:
                 # Look for chain indicators in the description
                 desc = message.embeds[0].description
-                if "<:sonic:" in desc or "Sonic @" in desc:
-                    chain = "sonic"
-                elif "Solana" in desc or "SOL" in desc:
-                    chain = "solana"
-                elif "Ethereum" in desc or "ETH" in desc:
-                    chain = "ethereum"
-                elif "BSC" in desc or "BNB" in desc:
-                    chain = "bsc"
-                elif "Arbitrum" in desc or "ARB" in desc:
-                    chain = "arbitrum"
-                elif "Base" in desc:
-                    chain = "base"
+                
+                # Look for DEX link in description which contains the chain
+                dex_match = re.search(r'dexscreener\.com/([^/]+)/([^)\s]+)', desc)
+                if dex_match:
+                    chain = dex_match.group(1)
+                    # Update chart URL if we found a better one
+                    if chain != "search":
+                        chart_url = f"https://dexscreener.com/{chain}/{dex_match.group(2)}"
+                        logging.info(f"Updated chart URL from description: {chart_url}")
+                
+                # If still not found, try other indicators
+                if chain == "unknown" or chain == "search":
+                    if "<:sonic:" in desc or "Sonic @" in desc:
+                        chain = "sonic"
+                    elif "Solana" in desc or "SOL" in desc:
+                        chain = "solana"
+                    elif "Ethereum" in desc or "ETH" in desc:
+                        chain = "ethereum"
+                    elif "BSC" in desc or "BNB" in desc:
+                        chain = "bsc"
+                    elif "Arbitrum" in desc or "ARB" in desc:
+                        chain = "arbitrum"
+                    elif "Base" in desc:
+                        chain = "base"
+                
+                logging.info(f"Extracted chain from description: {chain}")
             
             token_data['chain'] = chain
             

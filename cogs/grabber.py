@@ -118,19 +118,36 @@ Embed Count: %d
                     market_cap_value = None
                     market_cap = "N/A"
                 
+                # Extract chain information from the message embed
+                chain = 'ethereum'  # Default to Ethereum
+                for embed in message.embeds:
+                    for field in embed.fields:
+                        if field.name == 'Chain':
+                            chain = field.value.lower()
+                            logging.info(f"Found chain in embed: {chain}")
+                            break
+                
+                # Also check if chart URL contains chain information
+                chart_chain_match = re.search(r'dexscreener\.com/([^/]+)/', chart_url)
+                if chart_chain_match and chart_chain_match.group(1) != 'ethereum':
+                    chain = chart_chain_match.group(1)
+                    logging.info(f"Updated chain from chart URL: {chain}")
+                
                 token_data = {
                     'name': base_token['name'],
                     'symbol': base_token['symbol'],
                     'chart_url': chart_url,
                     'market_cap': market_cap,
                     'market_cap_value': market_cap_value,
-                    'chain': 'ethereum',  # Default to Ethereum
+                    'chain': chain,  # Use extracted chain
                     'initial_market_cap': market_cap_value,
                     'initial_market_cap_formatted': market_cap,
                     'timestamp': message.created_at,
                     'message_id': message.id,
                     'channel_id': message.channel.id,
-                    'guild_id': message.guild.id if message.guild else None
+                    'guild_id': message.guild.id if message.guild else None,
+                    'source': 'cielo',  # Explicitly set source
+                    'user': credit_user if credit_user else 'unknown'  # Explicitly set user
                 }
                 
                 # Log to our in-memory tracker and database

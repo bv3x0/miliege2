@@ -211,19 +211,22 @@ class DigestCog(commands.Cog):
             self.hour_tokens[self.current_hour_key] = OrderedDict()
         
         # Ensure we have all required fields
-        if 'source' not in token_data:
-            token_data['source'] = 'unknown'
-        if 'user' not in token_data:
-            token_data['user'] = 'unknown'
-        if 'chain' not in token_data:
-            token_data['chain'] = 'unknown'
+        token_data_copy = token_data.copy()  # Create a copy to avoid modifying the original
+        
+        # Only set default values if they're not already present
+        if 'source' not in token_data_copy:
+            token_data_copy['source'] = 'unknown'
+        if 'user' not in token_data_copy:
+            token_data_copy['user'] = 'unknown'
+        if 'chain' not in token_data_copy:
+            token_data_copy['chain'] = 'unknown'
             
         # Log the token data for debugging
-        logging.info(f"Adding token to digest hour {self.current_hour_key}: {token_data.get('name')} - source: {token_data.get('source')}, user: {token_data.get('user')}, chain: {token_data.get('chain')}")
+        logging.info(f"Adding token to digest hour {self.current_hour_key}: {token_data_copy.get('name')} - source: {token_data_copy.get('source')}, user: {token_data_copy.get('user')}, chain: {token_data_copy.get('chain')}")
         
         # Add to hour-specific tracker
-        self.hour_tokens[self.current_hour_key][contract] = token_data
-        logging.info(f"Token {token_data.get('name', contract)} added to hour {self.current_hour_key}")
+        self.hour_tokens[self.current_hour_key][contract] = token_data_copy
+        logging.info(f"Token {token_data_copy.get('name', contract)} added to hour {self.current_hour_key}")
 
     @commands.command()
     async def digest(self, ctx):
@@ -259,13 +262,17 @@ class DigestCog(commands.Cog):
             
             # Create a copy of the data with source and user explicitly included
             digest_data = data.copy()
-            digest_data['source'] = source
-            digest_data['user'] = user if user else 'unknown'
+            
+            # Only set these if they're not already in the data
+            if 'source' not in digest_data:
+                digest_data['source'] = source
+            if 'user' not in digest_data:
+                digest_data['user'] = user if user else 'unknown'
             
             # Also add to our hour tracking
             self.process_new_token(contract, digest_data)
             
-            logging.info(f"DigestCog: Processed token {data.get('name', contract)} from {source} via {user}")
+            logging.info(f"DigestCog: Processed token {data.get('name', contract)} from {digest_data.get('source')} via {digest_data.get('user')}")
             
             return result
             
