@@ -14,8 +14,6 @@ class RickGrabber(commands.Cog):
         self.digest_cog = digest_cog
         self.last_api_call = None
         self.rate_limit = 1.0  # seconds between API calls
-        # Use the same channel as the digest cog for alerts
-        self.alert_channel_id = digest_cog.channel_id if digest_cog else None
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -229,53 +227,11 @@ Embed Count: %d
                     'user': trigger_user
                 })
             
-            # Post alert to the channel
-            await self._post_token_alert(token_data, contract_address, trigger_user)
-                
             return True
             
         except Exception as e:
             logging.error(f"Error processing token {contract_address}: {e}")
             return False
-
-    async def _post_token_alert(self, token_data, contract_address, trigger_user):
-        """Post a token alert to the channel"""
-        try:
-            if not self.alert_channel_id:
-                logging.warning("No alert channel ID configured, skipping alert post")
-                return
-                
-            channel = self.bot.get_channel(self.alert_channel_id)
-            if not channel:
-                logging.error(f"Could not find channel with ID {self.alert_channel_id}")
-                return
-                
-            # Create an embed for the token alert
-            embed = discord.Embed(
-                title=f"🚨 New Token Alert: {token_data['name']}",
-                url=token_data['chart_url'],
-                color=0x5b594f
-            )
-            
-            # Add token information
-            embed.add_field(name="Chain", value=token_data['chain'].capitalize(), inline=True)
-            embed.add_field(name="Initial Market Cap", value=token_data['initial_market_cap_formatted'], inline=True)
-            embed.add_field(name="Source", value=f"rick via {trigger_user}", inline=True)
-            
-            # Add contract address with shortened display
-            short_address = f"{contract_address[:6]}...{contract_address[-4:]}"
-            embed.add_field(name="Contract", value=f"[{short_address}]({token_data['chart_url']})", inline=True)
-            
-            # Add timestamp
-            from datetime import datetime
-            embed.timestamp = datetime.now()
-            
-            # Send the embed
-            await channel.send(embed=embed)
-            logging.info(f"Posted token alert for {token_data['name']} to channel {self.alert_channel_id}")
-            
-        except Exception as e:
-            logging.error(f"Error posting token alert: {e}")
 
     @commands.Cog.listener()
     async def on_ready(self):
