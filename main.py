@@ -12,7 +12,10 @@ from cogs.health import HealthMonitor
 from functools import wraps
 from cogs.fun import FunCommands
 from cogs.rick_grabber import RickGrabber
+from cogs.analytics import Analytics
 import aiohttp
+from db.engine import Database
+from db.models import Token
 
 # Enhanced logging setup
 def setup_logging():
@@ -59,6 +62,7 @@ logger = setup_logging()
 load_dotenv()
 token = os.getenv('DISCORD_BOT_TOKEN')
 daily_digest_channel_id = os.getenv('DAILY_DIGEST_CHANNEL_ID')
+database_url = os.getenv('DATABASE_URL')  # Optional, will use default if not set
 
 # Validate configuration
 if not token:
@@ -86,8 +90,15 @@ class DiscordBot(commands.Bot):
         logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
+        # Initialize database
+        self.db = Database(database_url)
+        self.db.create_tables()
+        
+        # Create a session for the token tracker
+        self.db_session = self.db.get_session()
+        
         self.monitor = BotMonitor()
-        self.token_tracker = TokenTracker()
+        self.token_tracker = TokenTracker(db_session=self.db_session)
         self.session = None  # Will be initialized in setup_hook
 
     async def on_message(self, message):
@@ -121,6 +132,7 @@ class DiscordBot(commands.Bot):
         await self.add_cog(DigestCog(self, self.token_tracker, daily_digest_channel_id))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
+        await self.add_cog(Analytics(self))
         logger.info("Cogs loaded successfully")
 
     async def on_ready(self):
@@ -176,16 +188,35 @@ class DiscordBot(commands.Bot):
                 last_message = "No messages yet"
                 
             embed.add_field(name="Last Message", value=last_message)
+            
+            # Add token tracking stats
+            token_count = len(self.token_tracker.tokens)
+            embed.add_field(name="Tracked Tokens", value=str(token_count))
+            
+            # Add database stats if available
+            if hasattr(self, 'db_session'):
+                try:
+                    db_token_count = self.db_session.query(Token).count()
+                    embed.add_field(name="Database Tokens", value=str(db_token_count))
+                except Exception as e:
+                    logger.error(f"Error getting database stats: {e}")
+            
             await ctx.send(embed=embed)
         except Exception as e:
             logger.error(f"Error in status command: {e}")
             await ctx.send("❌ **Error:** Unable to fetch bot status.")
 
     async def close(self):
+        # Close the database connection
+        if hasattr(self, 'db'):
+            self.db.close()
+            logger.info("Closed database connection")
+            
         # Close the shared session when the bot shuts down
         if self.session:
             await self.session.close()
             logger.info("Closed shared aiohttp session")
+            
         await super().close()
 
 if __name__ == "__main__":
@@ -200,4 +231,3 @@ if __name__ == "__main__":
         logger.critical(f"Unexpected error: {e}")
     finally:
         logger.info("Bot shutdown")
-        # Remove duplicate error logging and finally block
