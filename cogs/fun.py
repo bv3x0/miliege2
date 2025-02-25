@@ -38,6 +38,8 @@ class FunCommands(commands.Cog):
             "https://pbs.twimg.com/media/F5At7etXMAEGZoj?format=jpg&name=medium",
             "https://pbs.twimg.com/media/GkRudWxWQAAeCL4?format=jpg&name=small",
             "https://pbs.twimg.com/media/GZzA4QiWsAAX25d?format=jpg&name=small",
+            "https://media.discordapp.net/attachments/1180965924459778151/1343746736924917800/IMG_0526.jpg?ex=67bf0deb&is=67bdbc6b&hm=bd624660e068907a054ce48d683eecf79902845730be21181e3e09234bd890df&=&format=webp&width=920&height=920",
+            "https://cdn.discordapp.com/attachments/1180965924459778151/1343548119320760360/IMG_0391.jpg?ex=67befdb1&is=67bdac31&hm=35584f5e4b15cd42deb755a59bb2027cb14144358eef3f94edf04c985cc36bb6&",
             "https://pbs.twimg.com/media/Ga5XIPKXEAAJ_p9?format=jpg&name=900x900",
             "https://pbs.twimg.com/media/GNSoRakXMAApB80?format=jpg&name=900x900",
             "https://pbs.twimg.com/media/GTLzZt3WcAE45qw?format=jpg&name=small",
@@ -58,6 +60,24 @@ class FunCommands(commands.Cog):
         except Exception as e:
             logging.error(f"Error in goon command: {e}")
             await ctx.send("❌ Failed to post goon image")
+
+    @commands.command()
+    async def shotcaller(self, ctx):
+        """Post the Shot Caller GIF followed by the quote"""
+        try:
+            # Send the GIF URL first - Discord will automatically embed it
+            await ctx.send("https://tenor.com/view/burpees-shot-caller-2017-prison-gif-17889553258612147199")
+            
+            # Send the text as a separate message
+            quote = ("The safety of these numbers comes with a price. There are no free rides here. "
+                    "Everyone puts in work, whether cliqued up or not. I'm not talking about helping us "
+                    "with our computer skills. You'll get your fucking hands dirty like the rest of us. "
+                    "Or you can go back to seeing how that lone bullshit works out for you, money man.")
+            
+            await ctx.send(quote)
+        except Exception as e:
+            logging.error(f"Error in shotcaller command: {e}")
+            await ctx.send("❌ Failed to post shotcaller content")
 
     # Add more fun commands here
     @commands.command()
