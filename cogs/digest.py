@@ -59,8 +59,8 @@ class DigestCog(commands.Cog):
                 
                 # Create Discord message link if we have the necessary info
                 message_link = None
-                if token.get('message_id') and token.get('channel_id'):
-                    message_link = f"https://discord.com/channels/{token.get('guild_id', '')}/{token['channel_id']}/{token['message_id']}"
+                if token.get('message_id') and token.get('channel_id') and token.get('guild_id'):
+                    message_link = f"https://discord.com/channels/{token['guild_id']}/{token['channel_id']}/{token['message_id']}"
                 
                 # Fetch current market cap
                 dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract}"
@@ -111,6 +111,17 @@ class DigestCog(commands.Cog):
                 except Exception as e:
                     logging.error(f"Error calculating percent change for {name}: {e}")
                     status_emoji = ""  # If there's any error in conversion, don't show any emoji
+                
+                # Make sure we have valid values for display
+                if not source or source == "":
+                    source = "unknown"
+                if not user or user == "":
+                    user = "unknown"
+                if not chain or chain == "":
+                    chain = "unknown"
+                
+                # Log the values for debugging
+                logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
                 token_line = f"## [{name}]({token['chart_url']}){status_emoji}"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
@@ -199,6 +210,17 @@ class DigestCog(commands.Cog):
         if self.current_hour_key not in self.hour_tokens:
             self.hour_tokens[self.current_hour_key] = OrderedDict()
         
+        # Ensure we have all required fields
+        if 'source' not in token_data:
+            token_data['source'] = 'unknown'
+        if 'user' not in token_data:
+            token_data['user'] = 'unknown'
+        if 'chain' not in token_data:
+            token_data['chain'] = 'unknown'
+            
+        # Log the token data for debugging
+        logging.info(f"Adding token to digest hour {self.current_hour_key}: {token_data.get('name')} - source: {token_data.get('source')}, user: {token_data.get('user')}, chain: {token_data.get('chain')}")
+        
         # Add to hour-specific tracker
         self.hour_tokens[self.current_hour_key][contract] = token_data
         logging.info(f"Token {token_data.get('name', contract)} added to hour {self.current_hour_key}")
@@ -235,8 +257,15 @@ class DigestCog(commands.Cog):
             # Call the original method
             result = original_log_token(contract, data, source, user)
             
+            # Create a copy of the data with source and user explicitly included
+            digest_data = data.copy()
+            digest_data['source'] = source
+            digest_data['user'] = user if user else 'unknown'
+            
             # Also add to our hour tracking
-            self.process_new_token(contract, data)
+            self.process_new_token(contract, digest_data)
+            
+            logging.info(f"DigestCog: Processed token {data.get('name', contract)} from {source} via {user}")
             
             return result
             

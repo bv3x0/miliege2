@@ -151,22 +151,51 @@ Embed Count: %d
                 'chart_url': chart_url,
                 'initial_market_cap': initial_mcap_value,
                 'initial_market_cap_formatted': formatted_mcap,
-                'message_id': message.id,
-                'channel_id': message.channel.id,
-                'guild_id': message.guild.id if message.guild else None
+                'message_id': str(message.id),
+                'channel_id': str(message.channel.id),
+                'guild_id': str(message.guild.id) if message.guild else None
             }
             
             # Attempt to get chain information if available
+            chain = "unknown"
             chain_match = re.search(r'https://(?:www\.)?dexscreener\.com/([^/]+)/', chart_url)
             if chain_match:
-                token_data['chain'] = chain_match.group(1)
+                chain = chain_match.group(1)
+            
+            # If we couldn't extract from URL, try to extract from embed description
+            if chain == "unknown" and message.embeds and message.embeds[0].description:
+                # Look for chain indicators in the description
+                desc = message.embeds[0].description
+                if "<:sonic:" in desc or "Sonic @" in desc:
+                    chain = "sonic"
+                elif "Solana" in desc or "SOL" in desc:
+                    chain = "solana"
+                elif "Ethereum" in desc or "ETH" in desc:
+                    chain = "ethereum"
+                elif "BSC" in desc or "BNB" in desc:
+                    chain = "bsc"
+                elif "Arbitrum" in desc or "ARB" in desc:
+                    chain = "arbitrum"
+                elif "Base" in desc:
+                    chain = "base"
+            
+            token_data['chain'] = chain
+            
+            # Make sure we have a valid user
+            if not trigger_user or trigger_user == "":
+                trigger_user = "unknown"
             
             # Log token in both trackers
             self.token_tracker.log_token(contract_address, token_data, 'rick', trigger_user)
             
             # Also log to hour-specific tracker in DigestCog if available
             if self.digest_cog:
-                self.digest_cog.process_new_token(contract_address, token_data)
+                # Make sure the digest cog gets all the necessary information
+                self.digest_cog.process_new_token(contract_address, {
+                    **token_data,
+                    'source': 'rick',
+                    'user': trigger_user
+                })
                 
             return True
             
