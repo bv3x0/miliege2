@@ -55,18 +55,51 @@ Embed Count: %d
                 if not credit_user:
                     logging.warning("Could not find credit user in embed title")
 
+                # Extract swap information and dexscreener maker link
+                swap_info = None
+                token_address = None
+                dexscreener_maker_link = None
                 if message.embeds:
                     for embed in message.embeds:
-                        for field in embed.fields:
-                            # Look for "Token:" within the field value
+                        for j, field in enumerate(embed.fields):
+                            # Look for swap information in field 0
+                            if j == 0 and field.value and '⭐️ Swapped' in field.value:
+                                # Remove the star emoji and the market cap part
+                                swap_info = field.value.replace('⭐️ ', '')
+                                # Remove the market cap part if it exists
+                                if ' | MC:' in swap_info:
+                                    swap_info = swap_info.split(' | MC:')[0]
+                                logging.info(f"Found swap info: {swap_info}")
+                                
+                            # Look for token address in field 1
                             if "Token:" in field.value:
                                 logging.info(f"Found Token field: {field.value}")
                                 match = re.search(r'Token:\s*`([a-zA-Z0-9]+)`', field.value)
                                 if match:
-                                    contract_address = match.group(1)
-                                    logging.info(f"Processing token: {contract_address}")
-                                    await self._process_token(contract_address, message, credit_user)
-                                    return
+                                    token_address = match.group(1)
+                                    logging.info(f"Processing token: {token_address}")
+                            
+                            # Look for dexscreener maker link in the Chart field
+                            if field.name == 'Chart' and 'maker=' in field.value:
+                                link_match = re.search(r'\[Link\]\((https://dexscreener\.com/.+?maker=.+?)\)', field.value)
+                                if link_match:
+                                    dexscreener_maker_link = link_match.group(1)
+                                    logging.info(f"Found dexscreener maker link: {dexscreener_maker_link}")
+                        
+                        # If we found a token, process it
+                        if token_address:
+                            await self._process_token(token_address, message, credit_user, swap_info, dexscreener_maker_link)
+                            
+                            # Now try to delete the original message
+                            try:
+                                await message.delete()
+                                logging.info(f"Deleted original Cielo message: {message.id}")
+                            except discord.Forbidden:
+                                logging.warning("Bot doesn't have permission to delete messages")
+                            except Exception as e:
+                                logging.error(f"Error deleting message: {e}")
+                                
+                            return
                 else:
                     logging.warning("Cielo message had no embeds")
             else:
@@ -77,7 +110,7 @@ Embed Count: %d
             logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
 
-    async def _process_token(self, contract_address, message, credit_user=None):
+    async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None):
         try:
             dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
             logging.info(f"Querying Dexscreener API: {dex_api_url}")
@@ -146,23 +179,48 @@ Embed Count: %d
                         color=0x5b594f
                     )
                     
-                    # Add banner if available
-                    if banner_image:
-                        embed.set_image(url=banner_image)
-                    
                     # Format market cap with dollar sign
                     if market_cap_value is not None:
                         formatted_mcap = f"${format_large_number(market_cap_value)}"
                     else:
                         formatted_mcap = "N/A"
                     
-                    # Create multi-line format - using h2 header formatting for first line
-                    title_line = f"## [{token_name} ({pair.get('baseToken', {}).get('symbol', 'Unknown')})]({chart_url})"
-                    stats_line = f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}"
+                    # Create multi-line description
                     
-                    embed.description = f"{title_line}\n{stats_line}"
+                    # Title line: Remove ticker symbol and add credited user right-aligned if available
+                    if credit_user:
+                        # Make the username a link if we have a dexscreener maker link
+                        if dexscreener_maker_link:
+                            title_line = f"## [{token_name}]({chart_url})                                          *via [{credit_user}]({dexscreener_maker_link})*"
+                        else:
+                            title_line = f"## [{token_name}]({chart_url})                                          *via {credit_user}*"
+                    else:
+                        title_line = f"## [{token_name}]({chart_url})"
                     
-                    # Add social links and age
+                    # Simplify the swap info and stats lines into a single consolidated line
+                    description_parts = [title_line]
+                    
+                    # Extract the token used for buying (SOL, ETH, etc.)
+                    buy_token = "Unknown"
+                    if swap_info:
+                        # Use regex to extract what token was used for the purchase
+                        # Pattern needs to handle both bold and non-bold formatting from Cielo
+                        buy_match = re.search(r'Swapped\s+(?:\*\*)?([0-9,.]+)(?:\*\*)?\s+(?:\*\*)?(\w+)(?:\*\*)?', swap_info)
+                        if buy_match:
+                            amount = buy_match.group(1)
+                            buy_token = buy_match.group(2)
+                            
+                            # Combine into simplified format: "Bought XX.XX SOL at $XX.XM mc • chain"
+                            simple_line = f"Bought {amount} {buy_token} at {formatted_mcap} mc ⋅ {chain.lower()}"
+                            description_parts.append(simple_line)
+                        else:
+                            # Fallback if regex doesn't match
+                            description_parts.append(f"{formatted_mcap} mc ⋅ {chain.lower()}")
+                    else:
+                        # Fallback if no swap info is available
+                        description_parts.append(f"{formatted_mcap} mc ⋅ {chain.lower()}")
+                    
+                    # Format social links and age
                     links_text = []
                     if social_parts:
                         links_text.append(" ⋅ ".join(social_parts))
@@ -170,7 +228,19 @@ Embed Count: %d
                         links_text.append("No socials")
                     if age_string:
                         links_text.append(age_string)
-                    embed.add_field(name="", value=" ⋅ ".join(links_text), inline=False)
+                    
+                    # Add social links and age before the banner image
+                    description_parts.append(" ⋅ ".join(links_text))
+                    
+                    # Set the description
+                    embed.description = "\n".join(description_parts)
+                    
+                    # Add banner image after the description
+                    if banner_image:
+                        embed.set_image(url=banner_image)
+                    
+                    # Add token address as plain text as the very last item
+                    embed.add_field(name="", value=f"{contract_address}", inline=False)
                     
                     # Add note for market caps under $2M (without "Note:" prefix)
                     if market_cap_value and market_cap_value < 2_000_000:

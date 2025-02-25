@@ -12,7 +12,6 @@ from cogs.health import HealthMonitor
 from functools import wraps
 from cogs.fun import FunCommands
 from cogs.rick_grabber import RickGrabber
-from cogs.analytics import Analytics
 import aiohttp
 from db.engine import Database
 from db.models import Token
@@ -135,7 +134,6 @@ class DiscordBot(commands.Bot):
         await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
-        await self.add_cog(Analytics(self))
         logger.info("Cogs loaded successfully")
 
     async def on_ready(self):
