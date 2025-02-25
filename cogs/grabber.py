@@ -188,7 +188,7 @@ Embed Count: %d
                     # Create multi-line description
                     
                     # Title line: Just the token name and URL (no credit user)
-                    title_line = f"## [{token_name}]({chart_url})"
+                    title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
                     
                     # Initialize description parts array
                     description_parts = [title_line]
@@ -394,7 +394,7 @@ Embed Count: %d
                     description_parts = []
                     
                     # Title line with the token name and chart URL
-                    title_line = f"## [{token_name}]({chart_url})"
+                    title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
                     description_parts.append(title_line)
                     
                     # Second line with user and basic info
