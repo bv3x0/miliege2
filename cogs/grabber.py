@@ -107,11 +107,16 @@ Embed Count: %d
                     chart_url = pair['url']
                 
                 # Extract and format market cap if available
-                market_cap = "Unknown"
+                market_cap = "N/A"
                 market_cap_value = None
-                if 'fdv' in pair:
-                    market_cap_value = float(pair['fdv'])
-                    market_cap = f"${format_large_number(market_cap_value)}"
+                try:
+                    if 'fdv' in pair:
+                        market_cap_value = float(pair['fdv'])
+                        market_cap = f"${format_large_number(market_cap_value)}"
+                except (ValueError, TypeError) as e:
+                    logging.warning(f"Could not parse market cap value from API: {e}")
+                    market_cap_value = None
+                    market_cap = "N/A"
                 
                 token_data = {
                     'name': base_token['name'],

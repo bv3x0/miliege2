@@ -76,6 +76,9 @@ class DigestCog(commands.Cog):
                 try:
                     # Fix the string to number conversion
                     def parse_market_cap(mcap_str):
+                        if not mcap_str or mcap_str == 'N/A':
+                            return None
+                            
                         # Remove $ symbol
                         clean_str = mcap_str.replace('$', '')
                         
@@ -92,18 +95,19 @@ class DigestCog(commands.Cog):
                     current_mcap_value = parse_market_cap(current_mcap)
                     initial_mcap_value = parse_market_cap(initial_mcap)
                     
-                    # Calculate percentage change
-                    percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
-                    
-                    # Debug log the calculation
-                    logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
-                    
-                    if percent_change >= 33:
-                        status_emoji = " 😯"  # hushed emoji for 33%+ up
-                    elif percent_change <= -33:
-                        status_emoji = " <:ggggg:1149703938153664633>"  # custom emoji for 33%+ down
-                    else:
-                        status_emoji = ""
+                    # Calculate percentage change only if both values are valid numbers
+                    status_emoji = ""
+                    if current_mcap_value is not None and initial_mcap_value is not None and initial_mcap_value > 0:
+                        # Calculate percentage change
+                        percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
+                        
+                        # Debug log the calculation
+                        logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
+                        
+                        if percent_change >= 33:
+                            status_emoji = " 😯"  # hushed emoji for 33%+ up
+                        elif percent_change <= -33:
+                            status_emoji = " <:ggggg:1149703938153664633>"  # custom emoji for 33%+ down
                 except Exception as e:
                     logging.error(f"Error calculating percent change for {name}: {e}")
                     status_emoji = ""  # If there's any error in conversion, don't show any emoji

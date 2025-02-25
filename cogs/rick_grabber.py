@@ -121,12 +121,36 @@ Embed Count: %d
     async def _process_token(self, contract_address, message, trigger_user, token_name, initial_mcap, chart_url):
         """Process detailed token information and store in tracker"""
         try:
+            # Convert initial_mcap to a numeric value if it's a string with K, M, B suffix
+            initial_mcap_value = None
+            try:
+                # Parse the market cap string (e.g., "2.1M")
+                if isinstance(initial_mcap, str):
+                    clean_mcap = initial_mcap.replace('$', '')
+                    if 'M' in clean_mcap:
+                        initial_mcap_value = float(clean_mcap.replace('M', '')) * 1000000
+                    elif 'K' in clean_mcap:
+                        initial_mcap_value = float(clean_mcap.replace('K', '')) * 1000
+                    elif 'B' in clean_mcap:
+                        initial_mcap_value = float(clean_mcap.replace('B', '')) * 1000000000
+                    else:
+                        initial_mcap_value = float(clean_mcap)
+                else:
+                    initial_mcap_value = float(initial_mcap)
+                
+                # Format the initial market cap
+                formatted_mcap = f"${format_large_number(initial_mcap_value)}"
+            except (ValueError, TypeError) as e:
+                logging.warning(f"Could not parse market cap value '{initial_mcap}': {e}")
+                initial_mcap_value = None
+                formatted_mcap = f"${initial_mcap}" if not initial_mcap.startswith('$') else initial_mcap
+            
             # Extra token data from Rick's embed
             token_data = {
                 'name': token_name,
                 'chart_url': chart_url,
-                'initial_market_cap': initial_mcap,
-                'initial_market_cap_formatted': f"${format_large_number(initial_mcap)}",
+                'initial_market_cap': initial_mcap_value,
+                'initial_market_cap_formatted': formatted_mcap,
                 'message_id': message.id,
                 'channel_id': message.channel.id,
                 'guild_id': message.guild.id if message.guild else None
