@@ -7,6 +7,9 @@ from utils import safe_api_call, format_large_number
 from datetime import datetime, timedelta
 import pytz
 import asyncio
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import desc
+from db.models import Token
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
@@ -17,7 +20,78 @@ class DigestCog(commands.Cog):
         # Store tokens by hour for better separation
         self.hour_tokens = OrderedDict()
         self.current_hour_key = self._get_current_hour_key()
-        self.hourly_digest.start()  # Start the hourly task
+        
+        # Load tokens from database if token_tracker has a db_session
+        self.db_session = None
+        if hasattr(token_tracker, 'db_session') and token_tracker.db_session:
+            self.db_session = token_tracker.db_session
+            self._load_tokens_from_db()
+        else:
+            logging.warning("DigestCog: No database session available - token data will not persist across reboots")
+        
+        # Start the hourly task
+        self.hourly_digest.start()
+        
+        # Flag to track if the hook is installed
+        self.hook_installed = False
+
+    def _load_tokens_from_db(self):
+        """Load tokens from the database into the hour buckets"""
+        try:
+            if not self.db_session:
+                logging.warning("Cannot load digest tokens: No database session")
+                return
+                
+            # Get the current time and 24 hours ago
+            now = datetime.now()
+            one_day_ago = now - timedelta(hours=24)
+            
+            # Query tokens from the last 24 hours (covers all digestible tokens)
+            recent_tokens = self.db_session.query(Token).filter(
+                Token.first_seen >= one_day_ago
+            ).order_by(Token.first_seen).all()
+            
+            token_count = 0
+            
+            # Group tokens by hour and add to the appropriate hour bucket
+            for token in recent_tokens:
+                # Get the hour key for when this token was first seen
+                token_time = token.first_seen
+                if token_time:
+                    token_time_ny = token_time.astimezone(self.ny_tz)
+                    hour_key = token_time_ny.strftime("%Y-%m-%d-%H")
+                    
+                    # Initialize the hour bucket if needed
+                    if hour_key not in self.hour_tokens:
+                        self.hour_tokens[hour_key] = OrderedDict()
+                    
+                    # Convert the token to the format used by digest
+                    token_data = {
+                        'name': token.name,
+                        'chart_url': token.chart_url,
+                        'initial_market_cap': token.initial_market_cap,
+                        'initial_market_cap_formatted': token.initial_market_cap_formatted,
+                        'chain': token.chain,
+                        'source': token.source,
+                        'user': token.credited_user,
+                        'message_id': token.message_id,
+                        'channel_id': token.channel_id,
+                        'guild_id': token.guild_id
+                    }
+                    
+                    # Add to the appropriate hour bucket
+                    self.hour_tokens[hour_key][token.contract_address] = token_data
+                    token_count += 1
+            
+            # Log success message with count
+            logging.info(f"DigestCog: Loaded {token_count} tokens from database into {len(self.hour_tokens)} hour buckets")
+            
+            # Ensure current hour is initialized
+            if self.current_hour_key not in self.hour_tokens:
+                self.hour_tokens[self.current_hour_key] = OrderedDict()
+                
+        except Exception as e:
+            logging.error(f"DigestCog: Error loading tokens from database: {e}", exc_info=True)
 
     def cog_unload(self):
         self.hourly_digest.cancel()  # Clean up task when cog is unloaded
@@ -232,11 +306,19 @@ class DigestCog(commands.Cog):
     async def digest(self, ctx):
         """Show the current hour's token digest on demand"""
         try:
+            # Ensure the hook is installed
+            if not self.hook_installed:
+                self._install_token_tracker_hook()
+                await ctx.send("⚠️ Token tracking hook was not installed. Installing now...")
+            
             # Update the current hour key
             self._update_token_hour()
             
             # Get tokens only from the current hour
             current_hour_tokens = self.hour_tokens.get(self.current_hour_key, OrderedDict())
+            
+            # Log the token count for debugging
+            logging.info(f"DigestCog: !digest command - found {len(current_hour_tokens)} tokens for current hour {self.current_hour_key}")
             
             if not current_hour_tokens:
                 await ctx.send("<:dwbb:1321571679109124126>")
@@ -250,9 +332,12 @@ class DigestCog(commands.Cog):
             logging.error(f"Error sending digest: {e}")
             await ctx.send("❌ **Error:** Unable to generate the digest.")
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """Set up token_tracker hook when cog is ready"""
+    def _install_token_tracker_hook(self):
+        """Install hook on token_tracker if not already installed"""
+        if self.hook_installed:
+            logging.info("DigestCog: Token tracker hook already installed")
+            return
+            
         # Replace the token_tracker's log_token method with our wrapped version
         original_log_token = self.token_tracker.log_token
         
@@ -278,4 +363,30 @@ class DigestCog(commands.Cog):
             
         # Replace the method
         self.token_tracker.log_token = wrapped_log_token
+        self.hook_installed = True
         logging.info("DigestCog: Added hook to token_tracker.log_token")
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Set up token_tracker hook when cog is ready"""
+        self._install_token_tracker_hook()
+        
+    @commands.command()
+    async def refresh_digest(self, ctx):
+        """Manually reload tokens from database and refresh the hook"""
+        try:
+            # Reload tokens from database
+            self._load_tokens_from_db()
+            
+            # Reinstall the hook
+            self._install_token_tracker_hook()
+            
+            # Log the current state
+            hour_counts = {hour: len(tokens) for hour, tokens in self.hour_tokens.items()}
+            
+            await ctx.send(f"✅ Digest refreshed! Loaded tokens from database into {len(self.hour_tokens)} hour buckets.")
+            await ctx.send(f"Current hour: {self.current_hour_key} with {len(self.hour_tokens.get(self.current_hour_key, {}))} tokens.")
+            
+        except Exception as e:
+            logging.error(f"Error refreshing digest: {e}", exc_info=True)
+            await ctx.send("❌ **Error:** Failed to refresh digest system.")
