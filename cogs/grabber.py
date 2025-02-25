@@ -198,8 +198,32 @@ Embed Count: %d
                     # Initialize description parts array
                     description_parts = [title_line]
                     
-                    # Extract the token used for buying (SOL, ETH, etc.)
+                    # Market cap line now comes first
+                    stats_line = f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}"
+                    description_parts.append(stats_line)
+                    
+                    # Add blank line for spacing
+                    description_parts.append("")
+                    
+                    # Format social links and age
+                    links_text = []
+                    if social_parts:
+                        links_text.append(" ⋅ ".join(social_parts))
+                    else:
+                        links_text.append("No socials")
+                    if age_string:
+                        links_text.append(age_string)
+                    
+                    # Add social links and age
+                    description_parts.append(" ⋅ ".join(links_text))
+                    
+                    # Add blank line for spacing
+                    description_parts.append("")
+                    
+                    # Extract the token used for buying (SOL, ETH, etc.) and add user line below socials
                     buy_token = "Unknown"
+                    user_line = ""
+                    
                     if swap_info:
                         logging.info(f"Attempting to parse swap info: {swap_info}")
                         
@@ -232,90 +256,61 @@ Embed Count: %d
                                     logging.info(f"Matched pattern 3: amount={amount}, token={buy_token}")
                                 else:
                                     logging.warning(f"Failed to parse swap info with any pattern: {swap_info}")
-                                    # Create line with credit user but without the buy amount
-                                    if credit_user:
-                                        if dexscreener_maker_link:
-                                            user_part = f"[{credit_user}]({dexscreener_maker_link})"
-                                        else:
-                                            user_part = credit_user
-                                        description_parts.append(f"{user_part}")
-                                        
-                                        # Add blank line for spacing
-                                        description_parts.append("")
-                                        
-                                        description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
-                                    else:
-                                        description_parts.append(f"New token")
-                                        
-                                        # Add blank line for spacing
-                                        description_parts.append("")
-                                        
-                                        description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
-                                    # Skip adding the user_line since we didn't find a match
-                                    continue_processing = False
                         
-                        # If we get here and have a valid match, format the line
-                        if 'continue_processing' not in locals() or continue_processing:
-                            # Format with credit user at the beginning
-                            if credit_user:
-                                if dexscreener_maker_link:
-                                    user_part = f"[{credit_user}]({dexscreener_maker_link})"
-                                else:
-                                    user_part = credit_user
-                                # First line: Just user and buy amount
-                                user_line = f"{user_part} bought {amount} {buy_token}"
-                                description_parts.append(user_line)
-                                
-                                # Add blank line for spacing
-                                description_parts.append("")
-                                
-                                # Second line: Market cap, 24h change, and chain
-                                stats_line = f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}"
-                                description_parts.append(stats_line)
-                            else:
-                                # No credit user
-                                description_parts.append(f"Bought {amount} {buy_token}")
-                                
-                                # Add blank line for spacing
-                                description_parts.append("")
-                                
-                                # Second line: Market cap, 24h change, and chain
-                                stats_line = f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}"
-                                description_parts.append(stats_line)
-                    else:
-                        # Fallback if no swap info is available
+                        # Format user line regardless of whether we found a match
+                        # Get the links ready
+                        dex_link = ""
+                        if dexscreener_maker_link:
+                            dex_link = f" [(dex)]({dexscreener_maker_link})"
+                        
+                        # Extract Cielo profile link from embed if available
+                        cielo_link = ""
+                        if message.embeds:
+                            for embed in message.embeds:
+                                for field in embed.fields:
+                                    if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
+                                        cielo_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
+                                        if cielo_match:
+                                            cielo_link = f" [(cielo)]({cielo_match.group(1)})"
+                                            logging.info(f"Found Cielo profile link: {cielo_match.group(1)}")
+                        
+                        # Create user line based on available info
                         if credit_user:
-                            if dexscreener_maker_link:
-                                user_part = f"[{credit_user}]({dexscreener_maker_link})"
+                            if 'amount' in locals() and buy_token != "Unknown":
+                                user_line = f"{credit_user} bought {amount} {buy_token}{dex_link}{cielo_link}"
                             else:
-                                user_part = credit_user
-                            description_parts.append(f"{user_part}")
-                            
-                            # Add blank line for spacing
-                            description_parts.append("")
-                            
-                            description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
+                                user_line = f"{credit_user}{dex_link}{cielo_link}"
                         else:
-                            description_parts.append(f"New token")
-                            
-                            # Add blank line for spacing
-                            description_parts.append("")
-                            
-                            description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
-                    
-                    # Format social links and age
-                    links_text = []
-                    if social_parts:
-                        links_text.append(" ⋅ ".join(social_parts))
+                            if 'amount' in locals() and buy_token != "Unknown":
+                                user_line = f"Bought {amount} {buy_token}"
+                            else:
+                                user_line = "New token"
                     else:
-                        links_text.append("No socials")
-                    if age_string:
-                        links_text.append(age_string)
+                        # No swap info available
+                        if credit_user:
+                            # Get the links ready
+                            dex_link = ""
+                            if dexscreener_maker_link:
+                                dex_link = f" [(dex)]({dexscreener_maker_link})"
+                            
+                            # Extract Cielo profile link from embed if available
+                            cielo_link = ""
+                            if message.embeds:
+                                for embed in message.embeds:
+                                    for field in embed.fields:
+                                        if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
+                                            cielo_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
+                                            if cielo_match:
+                                                cielo_link = f" [(cielo)]({cielo_match.group(1)})"
+                                                logging.info(f"Found Cielo profile link: {cielo_match.group(1)}")
+                            
+                            user_line = f"{credit_user}{dex_link}{cielo_link}"
+                        else:
+                            user_line = "New token"
                     
-                    # Add social links and age before the banner image
-                    # Add extra line break for more spacing between credit and socials
-                    description_parts.append("")  # Empty line for spacing
-                    description_parts.append(" ⋅ ".join(links_text))
+                    # Add the user line after socials
+                    if user_line:
+                        description_parts.append(user_line)
                     
                     # Set the description
                     embed.description = "\n".join(description_parts)
@@ -413,39 +408,13 @@ Embed Count: %d
                         title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
                     description_parts.append(title_line)
                     
-                    # Second line with user and basic info
-                    if credit_user:
-                        if dexscreener_maker_link:
-                            user_part = f"[{credit_user}]({dexscreener_maker_link})"
-                        else:
-                            user_part = credit_user
-                            
-                        # If we have swap info, try to extract the amount and token
-                        if swap_info:
-                            # Try to get the amount and token from swap info
-                            amount_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*', swap_info)
-                            if amount_match:
-                                amount = amount_match.group(1)
-                                token = amount_match.group(2)
-                                description_parts.append(f"{user_part} bought {amount} {token}")
-                            else:
-                                # Fallback if we can't parse
-                                description_parts.append(f"{user_part}")
-                        else:
-                            description_parts.append(f"{user_part}")
-                    else:
-                        description_parts.append("New token")
+                    # Add chain info line
+                    description_parts.append(f"New token ⋅ {chain_info}")
                     
                     # Add blank line for spacing
                     description_parts.append("")
                     
-                    # Add chain info line - don't repeat "New token" if we don't have user info
-                    if credit_user:
-                        description_parts.append(f"New token ⋅ {chain_info}")
-                    else:
-                        description_parts.append(f"{chain_info}")
-                    
-                    # Add a note that it's not on Dexscreener yet (as part of social info line)
+                    # Add social parts (transaction link and "Not on Dexscreener yet" message)
                     social_parts = []
                     
                     # Add transaction link if available
@@ -456,8 +425,42 @@ Embed Count: %d
                     social_parts.append("Not on Dexscreener yet")
                     
                     # Add social info line
-                    description_parts.append("")  # Empty line for spacing
                     description_parts.append(" ⋅ ".join(social_parts))
+                    
+                    # Add blank line for spacing
+                    description_parts.append("")
+                    
+                    # Add user line after socials
+                    if credit_user:
+                        # Get the links ready
+                        dex_link = ""
+                        if dexscreener_maker_link:
+                            dex_link = f" [(dex)]({dexscreener_maker_link})"
+                        
+                        # Extract Cielo profile link from embed if available
+                        cielo_link = ""
+                        if message.embeds:
+                            for embed in message.embeds:
+                                for field in embed.fields:
+                                    if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
+                                        cielo_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
+                                        if cielo_match:
+                                            cielo_link = f" [(cielo)]({cielo_match.group(1)})"
+                                            logging.info(f"Found Cielo profile link: {cielo_match.group(1)}")
+                        
+                        # If we have swap info, try to extract the amount and token
+                        if swap_info:
+                            # Try to get the amount and token from swap info
+                            amount_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*', swap_info)
+                            if amount_match:
+                                amount = amount_match.group(1)
+                                token = amount_match.group(2)
+                                description_parts.append(f"{credit_user} bought {amount} {token}{dex_link}{cielo_link}")
+                            else:
+                                # Fallback if we can't parse
+                                description_parts.append(f"{credit_user}{dex_link}{cielo_link}")
+                        else:
+                            description_parts.append(f"{credit_user}{dex_link}{cielo_link}")
                     
                     # Set the description
                     embed.description = "\n".join(description_parts)
