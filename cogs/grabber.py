@@ -228,8 +228,8 @@ Embed Count: %d
                     stats_line = f"{formatted_mcap} mc • {price_change_formatted} • {chain.lower()}"
                     description_parts.append(stats_line)
                     
-                    # Add blank line for spacing
-                    description_parts.append("")
+                    # Remove empty line to make spacing more consistent
+                    # description_parts.append("")
                     
                     # Format social links and age
                     links_text = []
@@ -238,7 +238,17 @@ Embed Count: %d
                     else:
                         links_text.append("No socials")
                     if age_string:
-                        links_text.append(age_string)
+                        # Simplify age format to use abbreviated units
+                        simplified_age = age_string
+                        simplified_age = simplified_age.replace(" days old", "d old")
+                        simplified_age = simplified_age.replace(" day old", "d old")
+                        simplified_age = simplified_age.replace(" hours old", "h old")
+                        simplified_age = simplified_age.replace(" hour old", "h old")
+                        simplified_age = simplified_age.replace(" minutes old", "m old")
+                        simplified_age = simplified_age.replace(" minute old", "m old")
+                        simplified_age = simplified_age.replace(" months old", "mo old")
+                        simplified_age = simplified_age.replace(" month old", "mo old")
+                        links_text.append(simplified_age)
                     
                     # Extract the token used for buying (SOL, ETH, etc.) and add user line below socials
                     buy_token = "Unknown"
