@@ -124,6 +124,7 @@ Embed Count: %d
                     price_change_24h = pair.get('priceChange', {}).get('h24', 'N/A')
                     market_cap = pair.get('fdv', 'N/A')
                     token_name = pair.get('baseToken', {}).get('name', 'Unknown Token')
+                    token_symbol = pair.get('baseToken', {}).get('symbol', '')
                     banner_image = pair.get('info', {}).get('header', None)
                     
                     # Get socials from pair info
@@ -187,8 +188,12 @@ Embed Count: %d
                     
                     # Create multi-line description
                     
-                    # Title line: Just the token name and URL (no credit user)
-                    title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
+                    # Title line with token name, symbol, and URL
+                    title_line = ""
+                    if token_symbol:
+                        title_line = f"## [{token_name} ({token_symbol})]({chart_url}) <:huh:1151138741197479996>"
+                    else:
+                        title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
                     
                     # Initialize description parts array
                     description_parts = [title_line]
@@ -357,11 +362,18 @@ Embed Count: %d
                     
                     # Extract token name from swap info if possible
                     token_name = "Unknown Token"
+                    token_symbol = ""
                     if swap_info:
                         # Try to extract the token name from the swap info
                         name_match = re.search(r'for\s+\*\*[\d,.]+\*\*\s+\*\*\*\*([^*]+)\*\*\*\*', swap_info)
                         if name_match:
                             token_name = name_match.group(1).strip()
+                            
+                        # Try to extract symbol from token name (common format is "Token Name (SYMBOL)")
+                        symbol_match = re.search(r'(.+?)\s+\((\w+)\)$', token_name)
+                        if symbol_match:
+                            token_name = symbol_match.group(1).strip()
+                            token_symbol = symbol_match.group(2).strip()
                     
                     # Extract chain info if available
                     chain_info = "unknown"
@@ -394,7 +406,11 @@ Embed Count: %d
                     description_parts = []
                     
                     # Title line with the token name and chart URL
-                    title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
+                    title_line = ""
+                    if token_symbol:
+                        title_line = f"## [{token_name} ({token_symbol})]({chart_url}) <:huh:1151138741197479996>"
+                    else:
+                        title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
                     description_parts.append(title_line)
                     
                     # Second line with user and basic info
