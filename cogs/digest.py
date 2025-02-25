@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import logging
-from collections import deque
+from collections import deque, OrderedDict
 import aiohttp
 from utils import safe_api_call, format_large_number
 from datetime import datetime, timedelta
@@ -14,20 +14,38 @@ class DigestCog(commands.Cog):
         self.token_tracker = token_tracker
         self.channel_id = channel_id
         self.ny_tz = pytz.timezone('America/New_York')
+        # Store tokens by hour for better separation
+        self.hour_tokens = OrderedDict()
+        self.current_hour_key = self._get_current_hour_key()
         self.hourly_digest.start()  # Start the hourly task
 
     def cog_unload(self):
         self.hourly_digest.cancel()  # Clean up task when cog is unloaded
+        
+    def _get_current_hour_key(self):
+        """Get a string key for the current hour"""
+        ny_time = datetime.now(self.ny_tz)
+        return ny_time.strftime("%Y-%m-%d-%H")
+        
+    def _update_token_hour(self):
+        """Update the current hour key if needed"""
+        current_key = self._get_current_hour_key()
+        if current_key != self.current_hour_key:
+            self.current_hour_key = current_key
+            # Initialize new hour
+            if current_key not in self.hour_tokens:
+                self.hour_tokens[current_key] = OrderedDict()
+        return current_key
 
-    async def create_digest_embed(self, is_hourly=True):
+    async def create_digest_embed(self, tokens, is_hourly=True):
         """Create the digest embed - shared between auto and manual digests"""
-        if not self.token_tracker.tokens:
+        if not tokens:
             return None
 
         embed = discord.Embed(
             title="Hourly Digest" if is_hourly else "Latest Alerts"
         )
-        recent_tokens = list(self.token_tracker.tokens.items())[-10:]  # Last 10 tokens
+        recent_tokens = list(tokens.items())[-10:]  # Last 10 tokens
         
         description_lines = []
         
@@ -128,15 +146,28 @@ class DigestCog(commands.Cog):
                 logging.error(f"Could not find channel {self.channel_id}")
                 return
 
-            if self.token_tracker.tokens:
-                logging.info(f"Found {len(self.token_tracker.tokens)} tokens for digest")
-                embed = await self.create_digest_embed(is_hourly=True)
+            # Process tokens from the hour that just ended
+            hour_key = self.current_hour_key
+            self._update_token_hour()  # Updates to the new hour
+            
+            tokens_to_report = self.hour_tokens.get(hour_key, OrderedDict())
+            
+            if tokens_to_report:
+                logging.info(f"Found {len(tokens_to_report)} tokens for digest in hour {hour_key}")
+                embed = await self.create_digest_embed(tokens_to_report, is_hourly=True)
                 if embed:
                     await channel.send(embed=embed)
                     logging.info("Hourly digest posted successfully")
                 
-                self.token_tracker.tokens.clear()
-                logging.info("Tokens cleared after digest")
+                # Clear the hour that just ended
+                if hour_key in self.hour_tokens:
+                    del self.hour_tokens[hour_key]
+                logging.info(f"Tokens for hour {hour_key} cleared after digest")
+                
+                # Also clear the global token tracker if there are tokens from this hour
+                if self.token_tracker.tokens:
+                    self.token_tracker.tokens.clear()
+                    logging.info("Global token tracker cleared")
             else:
                 logging.info("No tokens to report in hourly digest")
                 await channel.send("<:fedora:1151138750768894003> nothing to report")
@@ -154,19 +185,57 @@ class DigestCog(commands.Cog):
         wait_seconds = (next_hour - now).total_seconds()
         logging.info(f"Hourly digest scheduled to start in {wait_seconds} seconds (at {next_hour})")
         await asyncio.sleep(wait_seconds)
+        
+    def process_new_token(self, contract, token_data):
+        """Process a new token and add it to both the global tracker and hour-specific tracker"""
+        # Update the current hour key
+        self._update_token_hour()
+        
+        # Initialize the hour if it doesn't exist
+        if self.current_hour_key not in self.hour_tokens:
+            self.hour_tokens[self.current_hour_key] = OrderedDict()
+        
+        # Add to hour-specific tracker
+        self.hour_tokens[self.current_hour_key][contract] = token_data
+        logging.info(f"Token {token_data.get('name', contract)} added to hour {self.current_hour_key}")
 
     @commands.command()
     async def digest(self, ctx):
         """Show the current hour's token digest on demand"""
         try:
-            if not self.token_tracker.tokens:
+            # Update the current hour key
+            self._update_token_hour()
+            
+            # Get tokens only from the current hour
+            current_hour_tokens = self.hour_tokens.get(self.current_hour_key, OrderedDict())
+            
+            if not current_hour_tokens:
                 await ctx.send("<:dwbb:1321571679109124126>")
                 return
 
-            embed = await self.create_digest_embed(is_hourly=False)
+            embed = await self.create_digest_embed(current_hour_tokens, is_hourly=False)
             if embed:
                 await ctx.send(embed=embed)
                 
         except Exception as e:
             logging.error(f"Error sending digest: {e}")
             await ctx.send("❌ **Error:** Unable to generate the digest.")
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Set up token_tracker hook when cog is ready"""
+        # Replace the token_tracker's log_token method with our wrapped version
+        original_log_token = self.token_tracker.log_token
+        
+        def wrapped_log_token(contract, data, source, user=None):
+            # Call the original method
+            result = original_log_token(contract, data, source, user)
+            
+            # Also add to our hour tracking
+            self.process_new_token(contract, data)
+            
+            return result
+            
+        # Replace the method
+        self.token_tracker.log_token = wrapped_log_token
+        logging.info("DigestCog: Added hook to token_tracker.log_token")

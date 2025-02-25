@@ -126,10 +126,13 @@ class DiscordBot(commands.Bot):
         self.session = aiohttp.ClientSession()
         logger.info("Created shared aiohttp session")
         
-        # Add cogs with shared session
-        await self.add_cog(TokenGrabber(self, self.token_tracker, self.monitor, self.session))
-        await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session))
-        await self.add_cog(DigestCog(self, self.token_tracker, daily_digest_channel_id))
+        # Create DigestCog first to share reference
+        digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id)
+        await self.add_cog(digest_cog)
+        
+        # Add cogs with shared session and digest_cog reference
+        await self.add_cog(TokenGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
+        await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
         await self.add_cog(Analytics(self))

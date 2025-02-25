@@ -6,11 +6,12 @@ from utils import format_large_number, get_age_string, safe_api_call
 import asyncio
 
 class RickGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor, session):
+    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
         self.session = session
+        self.digest_cog = digest_cog
         self.last_api_call = None
         self.rate_limit = 1.0  # seconds between API calls
 
@@ -118,37 +119,36 @@ Embed Count: %d
             self.monitor.record_error()
 
     async def _process_token(self, contract_address, message, trigger_user, token_name, initial_mcap, chart_url):
+        """Process detailed token information and store in tracker"""
         try:
-            dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
-            async with safe_api_call(self.session, dex_api_url) as dex_data:
-                if not dex_data or 'pairs' not in dex_data or not dex_data['pairs']:
-                    logging.warning(f"No valid data returned for token {token_name} ({contract_address})")
-                    return
+            # Extra token data from Rick's embed
+            token_data = {
+                'name': token_name,
+                'chart_url': chart_url,
+                'initial_market_cap': initial_mcap,
+                'initial_market_cap_formatted': f"${format_large_number(initial_mcap)}",
+                'message_id': message.id,
+                'channel_id': message.channel.id,
+                'guild_id': message.guild.id if message.guild else None
+            }
+            
+            # Attempt to get chain information if available
+            chain_match = re.search(r'https://(?:www\.)?dexscreener\.com/([^/]+)/', chart_url)
+            if chain_match:
+                token_data['chain'] = chain_match.group(1)
+            
+            # Log token in both trackers
+            self.token_tracker.log_token(contract_address, token_data, 'rick', trigger_user)
+            
+            # Also log to hour-specific tracker in DigestCog if available
+            if self.digest_cog:
+                self.digest_cog.process_new_token(contract_address, token_data)
                 
-                pair = dex_data['pairs'][0]
-                chain = pair.get('chainId', 'Unknown Chain')
-                
-                # Format initial market cap
-                initial_mcap_formatted = initial_mcap
-                if not initial_mcap.startswith('$'):
-                    initial_mcap_formatted = f"${initial_mcap}"
-                
-                token_data = {
-                    'name': token_name,
-                    'chart_url': chart_url,
-                    'chain': chain,
-                    'initial_market_cap_formatted': initial_mcap_formatted,
-                    'message_id': message.id,
-                    'channel_id': message.channel.id,
-                    'guild_id': message.guild.id if message.guild else None
-                }
-                
-                # Log token with 'rick' source and trigger user
-                self.token_tracker.log_token(contract_address, token_data, 'rick', trigger_user)
-                logging.info(f"Successfully logged Rick token: {token_name} ({contract_address})")
-                
+            return True
+            
         except Exception as e:
-            logging.error(f"Error processing Rick token {contract_address}: {e}", exc_info=True)
+            logging.error(f"Error processing token {contract_address}: {e}")
+            return False
 
     @commands.Cog.listener()
     async def on_ready(self):
