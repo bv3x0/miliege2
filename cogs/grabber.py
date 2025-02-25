@@ -59,6 +59,9 @@ Embed Count: %d
                 swap_info = None
                 token_address = None
                 dexscreener_maker_link = None
+                tx_link = None
+                chain_info = "unknown"
+                
                 if message.embeds:
                     for embed in message.embeds:
                         for j, field in enumerate(embed.fields):
@@ -85,10 +88,29 @@ Embed Count: %d
                                 if link_match:
                                     dexscreener_maker_link = link_match.group(1)
                                     logging.info(f"Found dexscreener maker link: {dexscreener_maker_link}")
+                                    
+                            # Extract transaction link if available
+                            if field.name == 'Transaction':
+                                # Extract the URL from markdown link [Details](url)
+                                tx_match = re.search(r'\[.+?\]\((https?://.+?)\)', field.value)
+                                if tx_match:
+                                    tx_link = tx_match.group(1)
+                                    
+                            # Extract chain info
+                            if field.name == 'Chain':
+                                chain_info = field.value.lower()
                         
                         # If we found a token, process it
                         if token_address:
-                            await self._process_token(token_address, message, credit_user, swap_info, dexscreener_maker_link)
+                            # Create a new clean message without embed for processing
+                            clean_message = await message.channel.send("Processing token...")
+                            await self._process_token(token_address, clean_message, credit_user, swap_info, dexscreener_maker_link, tx_link, chain_info)
+                            
+                            # Delete our temporary message
+                            try:
+                                await clean_message.delete()
+                            except Exception as e:
+                                logging.error(f"Error deleting temporary message: {e}")
                             
                             # Now try to delete the original message
                             try:
@@ -110,12 +132,15 @@ Embed Count: %d
             logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
 
-    async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None):
+    async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None, tx_link=None, chain_info=None):
         try:
             dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
             logging.info(f"Querying Dexscreener API: {dex_api_url}")
             
             async with safe_api_call(self.session, dex_api_url) as dex_data:
+                # Create a completely fresh embed with no inherited properties
+                channel = message.channel
+                
                 if dex_data and 'pairs' in dex_data and dex_data['pairs']:
                     pair = dex_data['pairs'][0]
                     
@@ -175,10 +200,8 @@ Embed Count: %d
                     if tg_link:
                         social_parts.append(f"[TG]({tg_link})")
                     
-                    # Create embed response
-                    embed = discord.Embed(
-                        color=0x5b594f
-                    )
+                    # Create embed response - make sure it's a completely new embed
+                    new_embed = discord.Embed(color=0x5b594f)
                     
                     # Format market cap with dollar sign
                     if market_cap_value is not None:
@@ -313,15 +336,15 @@ Embed Count: %d
                         description_parts.append(user_line)
                     
                     # Set the description
-                    embed.description = "\n".join(description_parts)
+                    new_embed.description = "\n".join(description_parts)
                     
                     # Add banner image after the description
                     if banner_image:
-                        embed.set_image(url=banner_image)
+                        new_embed.set_image(url=banner_image)
                     
                     # Add note for market caps under $2M (without "Note:" prefix)
                     if market_cap_value and market_cap_value < 2_000_000:
-                        embed.add_field(name="", value="_Under $2m !_ <:wow:1149703956746997871>", inline=False)
+                        new_embed.add_field(name="", value="_Under $2m !_ <:wow:1149703956746997871>", inline=False)
                     
                     # Store token data with raw market cap value
                     token_data = {
@@ -345,12 +368,12 @@ Embed Count: %d
                             'user': credit_user if credit_user else 'unknown'
                         })
                     
-                    # Send the main embed first
-                    await message.channel.send(embed=embed)
+                    # Send the main embed first - use the channel directly
+                    await channel.send(embed=new_embed)
                     
                     # Send the token address as a plain text message immediately after
                     # Now with backticks around it to format as code
-                    await message.channel.send(f"`{contract_address}`")
+                    await channel.send(f"`{contract_address}`")
                 else:
                     # Improved error handling for tokens not found in Dexscreener
                     # Use the same format as our regular token alerts for consistency
@@ -370,32 +393,15 @@ Embed Count: %d
                             token_name = symbol_match.group(1).strip()
                             token_symbol = symbol_match.group(2).strip()
                     
-                    # Extract chain info if available
-                    chain_info = "unknown"
-                    if message.embeds:
-                        for embed in message.embeds:
-                            for field in embed.fields:
-                                if field.name == 'Chain':
-                                    chain_info = field.value.lower()
-                    
-                    # Extract transaction link if available
-                    tx_link = None
-                    if message.embeds:
-                        for embed in message.embeds:
-                            for field in embed.fields:
-                                if field.name == 'Transaction':
-                                    # Extract the URL from markdown link [Details](url)
-                                    tx_match = re.search(r'\[.+?\]\((https?://.+?)\)', field.value)
-                                    if tx_match:
-                                        tx_link = tx_match.group(1)
+                    # Use the chain_info that was passed to us instead of trying to extract it again
+                    if chain_info is None or chain_info == "unknown":
+                        chain_info = "unknown"
                     
                     # Create a placeholder chart URL using the contract and chain
                     chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                     
-                    # Create embed response with same color as normal alerts
-                    embed = discord.Embed(
-                        color=0x5b594f
-                    )
+                    # Create embed response with same color as normal alerts - use a totally fresh embed
+                    new_embed = discord.Embed(color=0x5b594f)
                     
                     # Build description lines to match our regular format
                     description_parts = []
@@ -417,7 +423,7 @@ Embed Count: %d
                     # Add social parts (transaction link and "Not on Dexscreener yet" message)
                     social_parts = []
                     
-                    # Add transaction link if available
+                    # Add transaction link if available - use the one passed to us
                     if tx_link:
                         social_parts.append(f"[TX]({tx_link})")
                         
@@ -463,14 +469,14 @@ Embed Count: %d
                             description_parts.append(f"{credit_user}{dex_link}{cielo_link}")
                     
                     # Set the description
-                    embed.description = "\n".join(description_parts)
+                    new_embed.description = "\n".join(description_parts)
                     
-                    # Send embed with available info
-                    await message.channel.send(embed=embed)
+                    # Send embed with available info - use the channel directly
+                    await channel.send(embed=new_embed)
                     
                     # Send the token address separately
                     # Now with backticks around it to format as code
-                    await message.channel.send(f"`{contract_address}`")
+                    await channel.send(f"`{contract_address}`")
                     
         except Exception as e:
             logging.error(f"Error processing token {contract_address}: {e}", exc_info=True)
