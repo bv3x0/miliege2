@@ -28,6 +28,8 @@ class Token(Base):
     
     # Relationships
     market_cap_updates = relationship("MarketCapUpdate", back_populates="token", cascade="all, delete-orphan")
+    alerts = relationship("Alert", back_populates="token", cascade="all, delete-orphan")
+    market_caps = relationship("MarketCapSnapshot", back_populates="token", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Token(name='{self.name}', contract='{self.contract_address}')>"
@@ -48,3 +50,43 @@ class MarketCapUpdate(Base):
     
     def __repr__(self):
         return f"<MarketCapUpdate(token_id={self.token_id}, market_cap={self.market_cap_formatted})>"
+
+
+class Alert(Base):
+    """Model for storing token alert information."""
+    __tablename__ = 'alerts'
+    
+    id = Column(Integer, primary_key=True)
+    token_id = Column(Integer, ForeignKey('tokens.id'), nullable=False)
+    contract_address = Column(String(255), index=True, nullable=False)
+    message_id = Column(String(50))
+    channel_id = Column(String(50))
+    guild_id = Column(String(50))
+    source = Column(String(50))  # 'cielo', 'rick', etc.
+    credited_user = Column(String(100))
+    timestamp = Column(DateTime, default=datetime.now)
+    
+    # Relationship
+    token = relationship("Token", back_populates="alerts")
+    
+    def __repr__(self):
+        return f"<Alert(token_id={self.token_id}, source='{self.source}')>"
+
+
+class MarketCapSnapshot(Base):
+    """Model for storing point-in-time market cap snapshots."""
+    __tablename__ = 'market_cap_snapshots'
+    
+    id = Column(Integer, primary_key=True)
+    token_id = Column(Integer, ForeignKey('tokens.id'), nullable=False)
+    contract_address = Column(String(255), index=True, nullable=False)
+    market_cap = Column(Float)
+    market_cap_formatted = Column(String(50))
+    price_change_24h = Column(Float)
+    timestamp = Column(DateTime, default=datetime.now)
+    
+    # Relationship
+    token = relationship("Token", back_populates="market_caps")
+    
+    def __repr__(self):
+        return f"<MarketCapSnapshot(token_id={self.token_id}, market_cap={self.market_cap_formatted})>"
