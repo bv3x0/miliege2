@@ -171,9 +171,9 @@ Embed Count: %d
                     if isinstance(price_change_24h, (int, float)):
                         # Add + sign for positive changes, - is automatically included for negative
                         sign = '+' if float(price_change_24h) >= 0 else ''
-                        price_change_formatted = f"24h: {sign}{price_change_24h}%"
+                        price_change_formatted = f"{sign}{price_change_24h}%"
                     else:
-                        price_change_formatted = "24h: N/A"
+                        price_change_formatted = "N/A"
                     
                     # Create chart URL
                     chart_url = f"https://dexscreener.com/{chain.lower()}/{contract_address}"
