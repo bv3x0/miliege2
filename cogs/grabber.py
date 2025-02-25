@@ -187,15 +187,8 @@ Embed Count: %d
                     
                     # Create multi-line description
                     
-                    # Title line: Remove ticker symbol and add credited user right-aligned if available
-                    if credit_user:
-                        # Make the username a link if we have a dexscreener maker link
-                        if dexscreener_maker_link:
-                            title_line = f"## [{token_name}]({chart_url})                                          *via [{credit_user}]({dexscreener_maker_link})*"
-                        else:
-                            title_line = f"## [{token_name}]({chart_url})                                          *via {credit_user}*"
-                    else:
-                        title_line = f"## [{token_name}]({chart_url})"
+                    # Title line: Just the token name and URL (no credit user)
+                    title_line = f"## [{token_name}]({chart_url})"
                     
                     # Simplify the swap info and stats lines into a single consolidated line
                     description_parts = [title_line]
@@ -203,22 +196,71 @@ Embed Count: %d
                     # Extract the token used for buying (SOL, ETH, etc.)
                     buy_token = "Unknown"
                     if swap_info:
-                        # Use regex to extract what token was used for the purchase
-                        # Pattern needs to handle both bold and non-bold formatting from Cielo
-                        buy_match = re.search(r'Swapped\s+(?:\*\*)?([0-9,.]+)(?:\*\*)?\s+(?:\*\*)?(\w+)(?:\*\*)?', swap_info)
+                        logging.info(f"Attempting to parse swap info: {swap_info}")
+                        
+                        # Try multiple patterns to match Cielo's various formatting styles
+                        
+                        # Pattern 1: Standard format with double asterisks for token (most common)
+                        # Example: Swapped **0.0099** ****WETH**** ($23.81) for...
+                        buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*', swap_info)
+                        
                         if buy_match:
                             amount = buy_match.group(1)
                             buy_token = buy_match.group(2)
-                            
-                            # Combine into simplified format: "Bought XX.XX SOL at $XX.XM mc • chain"
-                            simple_line = f"Bought {amount} {buy_token} at {formatted_mcap} mc ⋅ {chain.lower()}"
-                            description_parts.append(simple_line)
+                            logging.info(f"Matched pattern 1: amount={amount}, token={buy_token}")
                         else:
-                            # Fallback if regex doesn't match
-                            description_parts.append(f"{formatted_mcap} mc ⋅ {chain.lower()}")
+                            # Pattern 2: Alternative with single asterisks
+                            # Example: Swapped **0.0099** **WETH** ($23.81) for...
+                            alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*', swap_info)
+                            
+                            if alt_match:
+                                amount = alt_match.group(1)
+                                buy_token = alt_match.group(2)
+                                logging.info(f"Matched pattern 2: amount={amount}, token={buy_token}")
+                            else:
+                                # Pattern 3: More flexible pattern to try to catch other variations
+                                flex_match = re.search(r'Swapped.*?([0-9,.]+).*?(\w{3,}).*?\(', swap_info)
+                                
+                                if flex_match:
+                                    amount = flex_match.group(1)
+                                    buy_token = flex_match.group(2)
+                                    logging.info(f"Matched pattern 3: amount={amount}, token={buy_token}")
+                                else:
+                                    logging.warning(f"Failed to parse swap info with any pattern: {swap_info}")
+                                    # Create line with credit user but without the buy amount
+                                    if credit_user:
+                                        if dexscreener_maker_link:
+                                            user_part = f"[{credit_user}]({dexscreener_maker_link})"
+                                        else:
+                                            user_part = credit_user
+                                        description_parts.append(f"{user_part} • {formatted_mcap} mc • {chain.lower()}")
+                                    else:
+                                        description_parts.append(f"{formatted_mcap} mc • {chain.lower()}")
+                                    # Skip adding the simple_line since we didn't find a match
+                                    continue_processing = False
+                        
+                        # If we get here and have a valid match, format the line
+                        if 'continue_processing' not in locals() or continue_processing:
+                            # Format with credit user at the beginning
+                            if credit_user:
+                                if dexscreener_maker_link:
+                                    user_part = f"[{credit_user}]({dexscreener_maker_link})"
+                                else:
+                                    user_part = credit_user
+                                simple_line = f"{user_part} bought {amount} {buy_token} at {formatted_mcap} mc • {chain.lower()}"
+                            else:
+                                simple_line = f"Bought {amount} {buy_token} at {formatted_mcap} mc • {chain.lower()}"
+                            description_parts.append(simple_line)
                     else:
                         # Fallback if no swap info is available
-                        description_parts.append(f"{formatted_mcap} mc ⋅ {chain.lower()}")
+                        if credit_user:
+                            if dexscreener_maker_link:
+                                user_part = f"[{credit_user}]({dexscreener_maker_link})"
+                            else:
+                                user_part = credit_user
+                            description_parts.append(f"{user_part} • {formatted_mcap} mc • {chain.lower()}")
+                        else:
+                            description_parts.append(f"{formatted_mcap} mc • {chain.lower()}")
                     
                     # Format social links and age
                     links_text = []
@@ -238,9 +280,6 @@ Embed Count: %d
                     # Add banner image after the description
                     if banner_image:
                         embed.set_image(url=banner_image)
-                    
-                    # Add token address as plain text as the very last item
-                    embed.add_field(name="", value=f"{contract_address}", inline=False)
                     
                     # Add note for market caps under $2M (without "Note:" prefix)
                     if market_cap_value and market_cap_value < 2_000_000:
@@ -268,9 +307,105 @@ Embed Count: %d
                             'user': credit_user if credit_user else 'unknown'
                         })
                     
+                    # Send the main embed first
                     await message.channel.send(embed=embed)
+                    
+                    # Send the token address as a plain text message immediately after
+                    # Now with backticks around it to format as code
+                    await message.channel.send(f"`{contract_address}`")
                 else:
-                    await message.channel.send("❌ **Error:** No trading pairs found for this token.")
+                    # Improved error handling for tokens not found in Dexscreener
+                    # Use the same format as our regular token alerts for consistency
+                    
+                    # Extract token name from swap info if possible
+                    token_name = "Unknown Token"
+                    if swap_info:
+                        # Try to extract the token name from the swap info
+                        name_match = re.search(r'for\s+\*\*[\d,.]+\*\*\s+\*\*\*\*([^*]+)\*\*\*\*', swap_info)
+                        if name_match:
+                            token_name = name_match.group(1).strip()
+                    
+                    # Extract chain info if available
+                    chain_info = "unknown"
+                    if message.embeds:
+                        for embed in message.embeds:
+                            for field in embed.fields:
+                                if field.name == 'Chain':
+                                    chain_info = field.value.lower()
+                    
+                    # Extract transaction link if available
+                    tx_link = None
+                    if message.embeds:
+                        for embed in message.embeds:
+                            for field in embed.fields:
+                                if field.name == 'Transaction':
+                                    # Extract the URL from markdown link [Details](url)
+                                    tx_match = re.search(r'\[.+?\]\((https?://.+?)\)', field.value)
+                                    if tx_match:
+                                        tx_link = tx_match.group(1)
+                    
+                    # Create a placeholder chart URL using the contract and chain
+                    chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
+                    
+                    # Create embed response with same color as normal alerts
+                    embed = discord.Embed(
+                        color=0x5b594f
+                    )
+                    
+                    # Build description lines to match our regular format
+                    description_parts = []
+                    
+                    # Title line with the token name and chart URL
+                    title_line = f"## [{token_name}]({chart_url})"
+                    description_parts.append(title_line)
+                    
+                    # Second line with user and basic info
+                    if credit_user:
+                        if dexscreener_maker_link:
+                            user_part = f"[{credit_user}]({dexscreener_maker_link})"
+                        else:
+                            user_part = credit_user
+                            
+                        # If we have swap info, try to extract the amount and token
+                        if swap_info:
+                            # Try to get the amount and token from swap info
+                            amount_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*', swap_info)
+                            if amount_match:
+                                amount = amount_match.group(1)
+                                token = amount_match.group(2)
+                                second_line = f"{user_part} bought {amount} {token} • {chain_info}"
+                            else:
+                                # Fallback if we can't parse
+                                second_line = f"{user_part} • New token • {chain_info}"
+                        else:
+                            second_line = f"{user_part} • New token • {chain_info}"
+                    else:
+                        second_line = f"New token • {chain_info}"
+                        
+                    description_parts.append(second_line)
+                    
+                    # Add a note that it's not on Dexscreener yet (as part of social info line)
+                    social_parts = []
+                    
+                    # Add transaction link if available
+                    if tx_link:
+                        social_parts.append(f"[TX]({tx_link})")
+                        
+                    # Always add this note
+                    social_parts.append("Not on Dexscreener yet")
+                    
+                    # Add social info line
+                    description_parts.append(" • ".join(social_parts))
+                    
+                    # Set the description
+                    embed.description = "\n".join(description_parts)
+                    
+                    # Send embed with available info
+                    await message.channel.send(embed=embed)
+                    
+                    # Send the token address separately
+                    # Now with backticks around it to format as code
+                    await message.channel.send(f"`{contract_address}`")
                     
         except Exception as e:
             logging.error(f"Error processing token {contract_address}: {e}", exc_info=True)
