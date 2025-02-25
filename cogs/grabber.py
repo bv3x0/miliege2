@@ -190,7 +190,7 @@ Embed Count: %d
                     # Title line: Just the token name and URL (no credit user)
                     title_line = f"## [{token_name}]({chart_url})"
                     
-                    # Simplify the swap info and stats lines into a single consolidated line
+                    # Initialize description parts array
                     description_parts = [title_line]
                     
                     # Extract the token used for buying (SOL, ETH, etc.)
@@ -233,10 +233,20 @@ Embed Count: %d
                                             user_part = f"[{credit_user}]({dexscreener_maker_link})"
                                         else:
                                             user_part = credit_user
-                                        description_parts.append(f"{user_part} • {formatted_mcap} mc • {chain.lower()}")
+                                        description_parts.append(f"{user_part}")
+                                        
+                                        # Add blank line for spacing
+                                        description_parts.append("")
+                                        
+                                        description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
                                     else:
-                                        description_parts.append(f"{formatted_mcap} mc • {chain.lower()}")
-                                    # Skip adding the simple_line since we didn't find a match
+                                        description_parts.append(f"New token")
+                                        
+                                        # Add blank line for spacing
+                                        description_parts.append("")
+                                        
+                                        description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
+                                    # Skip adding the user_line since we didn't find a match
                                     continue_processing = False
                         
                         # If we get here and have a valid match, format the line
@@ -247,10 +257,26 @@ Embed Count: %d
                                     user_part = f"[{credit_user}]({dexscreener_maker_link})"
                                 else:
                                     user_part = credit_user
-                                simple_line = f"{user_part} bought {amount} {buy_token} at {formatted_mcap} mc • {chain.lower()}"
+                                # First line: Just user and buy amount
+                                user_line = f"{user_part} bought {amount} {buy_token}"
+                                description_parts.append(user_line)
+                                
+                                # Add blank line for spacing
+                                description_parts.append("")
+                                
+                                # Second line: Market cap, 24h change, and chain
+                                stats_line = f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}"
+                                description_parts.append(stats_line)
                             else:
-                                simple_line = f"Bought {amount} {buy_token} at {formatted_mcap} mc • {chain.lower()}"
-                            description_parts.append(simple_line)
+                                # No credit user
+                                description_parts.append(f"Bought {amount} {buy_token}")
+                                
+                                # Add blank line for spacing
+                                description_parts.append("")
+                                
+                                # Second line: Market cap, 24h change, and chain
+                                stats_line = f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}"
+                                description_parts.append(stats_line)
                     else:
                         # Fallback if no swap info is available
                         if credit_user:
@@ -258,9 +284,19 @@ Embed Count: %d
                                 user_part = f"[{credit_user}]({dexscreener_maker_link})"
                             else:
                                 user_part = credit_user
-                            description_parts.append(f"{user_part} • {formatted_mcap} mc • {chain.lower()}")
+                            description_parts.append(f"{user_part}")
+                            
+                            # Add blank line for spacing
+                            description_parts.append("")
+                            
+                            description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
                         else:
-                            description_parts.append(f"{formatted_mcap} mc • {chain.lower()}")
+                            description_parts.append(f"New token")
+                            
+                            # Add blank line for spacing
+                            description_parts.append("")
+                            
+                            description_parts.append(f"{formatted_mcap} mc ⋅ {price_change_formatted} ⋅ {chain.lower()}")
                     
                     # Format social links and age
                     links_text = []
@@ -272,6 +308,8 @@ Embed Count: %d
                         links_text.append(age_string)
                     
                     # Add social links and age before the banner image
+                    # Add extra line break for more spacing between credit and socials
+                    description_parts.append("")  # Empty line for spacing
                     description_parts.append(" ⋅ ".join(links_text))
                     
                     # Set the description
@@ -373,16 +411,23 @@ Embed Count: %d
                             if amount_match:
                                 amount = amount_match.group(1)
                                 token = amount_match.group(2)
-                                second_line = f"{user_part} bought {amount} {token} • {chain_info}"
+                                description_parts.append(f"{user_part} bought {amount} {token}")
                             else:
                                 # Fallback if we can't parse
-                                second_line = f"{user_part} • New token • {chain_info}"
+                                description_parts.append(f"{user_part}")
                         else:
-                            second_line = f"{user_part} • New token • {chain_info}"
+                            description_parts.append(f"{user_part}")
                     else:
-                        second_line = f"New token • {chain_info}"
-                        
-                    description_parts.append(second_line)
+                        description_parts.append("New token")
+                    
+                    # Add blank line for spacing
+                    description_parts.append("")
+                    
+                    # Add chain info line - don't repeat "New token" if we don't have user info
+                    if credit_user:
+                        description_parts.append(f"New token ⋅ {chain_info}")
+                    else:
+                        description_parts.append(f"{chain_info}")
                     
                     # Add a note that it's not on Dexscreener yet (as part of social info line)
                     social_parts = []
@@ -395,7 +440,8 @@ Embed Count: %d
                     social_parts.append("Not on Dexscreener yet")
                     
                     # Add social info line
-                    description_parts.append(" • ".join(social_parts))
+                    description_parts.append("")  # Empty line for spacing
+                    description_parts.append(" ⋅ ".join(social_parts))
                     
                     # Set the description
                     embed.description = "\n".join(description_parts)
