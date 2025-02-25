@@ -5,6 +5,7 @@ import logging
 import asyncio
 from utils import format_large_number, get_age_string, safe_api_call
 from db.models import Token, Alert, MarketCapSnapshot
+from datetime import datetime
 
 class TokenGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
@@ -14,6 +15,8 @@ class TokenGrabber(commands.Cog):
         self.session = session
         self.digest_cog = digest_cog
         self.db = bot.db_session  # Get the database session from the bot
+        # Use the same channel as the digest cog for alerts
+        self.alert_channel_id = digest_cog.channel_id if digest_cog else None
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -157,9 +160,50 @@ Embed Count: %d
                 if self.digest_cog:
                     self.digest_cog.process_new_token(contract_address, token_data)
                 
+                # Post alert to the channel
+                await self._post_token_alert(token_data, contract_address)
+                
                 logging.info(f"Successfully processed token: {base_token['name']} ({contract_address})")
                 return True
                 
         except Exception as e:
             logging.error(f"Error processing token {contract_address}: {e}")
             return False
+            
+    async def _post_token_alert(self, token_data, contract_address):
+        """Post a token alert to the channel"""
+        try:
+            if not self.alert_channel_id:
+                logging.warning("No alert channel ID configured, skipping alert post")
+                return
+                
+            channel = self.bot.get_channel(self.alert_channel_id)
+            if not channel:
+                logging.error(f"Could not find channel with ID {self.alert_channel_id}")
+                return
+                
+            # Create an embed for the token alert
+            embed = discord.Embed(
+                title=f"🚨 New Token Alert: {token_data['name']}",
+                url=token_data['chart_url'],
+                color=0x5b594f
+            )
+            
+            # Add token information
+            embed.add_field(name="Chain", value=token_data['chain'].capitalize(), inline=True)
+            embed.add_field(name="Initial Market Cap", value=token_data['initial_market_cap_formatted'], inline=True)
+            embed.add_field(name="Source", value=f"{token_data['source']} via {token_data['user']}", inline=True)
+            
+            # Add contract address with shortened display
+            short_address = f"{contract_address[:6]}...{contract_address[-4:]}"
+            embed.add_field(name="Contract", value=f"[{short_address}]({token_data['chart_url']})", inline=True)
+            
+            # Add timestamp
+            embed.timestamp = datetime.now()
+            
+            # Send the embed
+            await channel.send(embed=embed)
+            logging.info(f"Posted token alert for {token_data['name']} to channel {self.alert_channel_id}")
+            
+        except Exception as e:
+            logging.error(f"Error posting token alert: {e}")
