@@ -146,222 +146,308 @@ Embed Count: %d
                 logging.info(f"Dexscreener API response: {dex_data}")
                 
                 if dex_data and 'pairs' in dex_data and dex_data['pairs']:
-                    pair = dex_data['pairs'][0]
-                    logging.info(f"Found pair data: {pair.get('baseToken', {}).get('name', 'Unknown')}")
-                    
-                    # Create a new embed with the standard color
-                    new_embed = discord.Embed(color=0x5b594f)
-                    
-                    # Extract data
-                    chain = pair.get('chainId', 'Unknown Chain')
-                    price_change_24h = pair.get('priceChange', {}).get('h24', 'N/A')
-                    market_cap = pair.get('fdv', 'N/A')
-                    token_name = pair.get('baseToken', {}).get('name', 'Unknown Token')
-                    token_symbol = pair.get('baseToken', {}).get('symbol', '')
-                    banner_image = pair.get('info', {}).get('header', None)
-                    
-                    # Get socials from pair info
-                    socials = pair.get('info', {})
-                    website = socials.get('website', '')
-                    twitter = socials.get('twitter', '')
-                    telegram = socials.get('telegram', '')
-                    
-                    # Store raw market cap value for comparison
-                    market_cap_value = market_cap if isinstance(market_cap, (int, float)) else None
-                    
-                    # Format market cap
-                    if market_cap_value is not None:
-                        formatted_mcap = format_large_number(market_cap_value)
-                    else:
-                        formatted_mcap = "N/A"
-                    
-                    # Format price change with explicit +/- and "24h: " prefix
-                    if isinstance(price_change_24h, (int, float)):
-                        # Add + sign for positive changes, - is automatically included for negative
-                        sign = '+' if float(price_change_24h) >= 0 else ''
-                        price_change_formatted = f"{sign}{price_change_24h}%"
-                    else:
-                        price_change_formatted = "N/A"
-                    
-                    # Create chart URL
-                    chart_url = f"https://dexscreener.com/{chain.lower()}/{contract_address}"
-                    
-                    # Extract pair creation time
-                    pair_created_at = pair.get('pairCreatedAt')
-                    age_string = get_age_string(pair_created_at)
+                    try:
+                        pair = dex_data['pairs'][0]
+                        logging.info(f"Found pair data: {pair.get('baseToken', {}).get('name', 'Unknown')}")
+                        
+                        # Create a new embed with the standard color
+                        new_embed = discord.Embed(color=0x5b594f)
+                        
+                        # Extract data
+                        chain = pair.get('chainId', 'Unknown Chain')
+                        price_change_24h = pair.get('priceChange', {}).get('h24', 'N/A')
+                        market_cap = pair.get('fdv', 'N/A')
+                        token_name = pair.get('baseToken', {}).get('name', 'Unknown Token')
+                        token_symbol = pair.get('baseToken', {}).get('symbol', '')
+                        banner_image = pair.get('info', {}).get('header', None)
+                        
+                        # Get socials from pair info
+                        socials = pair.get('info', {})
+                        website = socials.get('website', '')
+                        twitter = socials.get('twitter', '')
+                        telegram = socials.get('telegram', '')
+                        
+                        # Store raw market cap value for comparison
+                        market_cap_value = market_cap if isinstance(market_cap, (int, float)) else None
+                        
+                        # Format market cap
+                        if market_cap_value is not None:
+                            formatted_mcap = format_large_number(market_cap_value)
+                        else:
+                            formatted_mcap = "N/A"
+                        
+                        # Format price change with explicit +/- and "24h: " prefix
+                        if isinstance(price_change_24h, (int, float)):
+                            # Add + sign for positive changes, - is automatically included for negative
+                            sign = '+' if float(price_change_24h) >= 0 else ''
+                            price_change_formatted = f"{sign}{price_change_24h}%"
+                        else:
+                            price_change_formatted = "N/A"
+                        
+                        # Create chart URL
+                        chart_url = f"https://dexscreener.com/{chain.lower()}/{contract_address}"
+                        
+                        # Extract pair creation time
+                        pair_created_at = pair.get('pairCreatedAt')
+                        age_string = get_age_string(pair_created_at)
 
-                    # Extract social links from the new format in Dexscreener API
-                    social_parts = []
-                    
-                    # Check for websites in the new format first
-                    websites = pair.get('info', {}).get('websites', [])
-                    if websites and isinstance(websites, list):
-                        for website in websites:
-                            if isinstance(website, dict) and 'url' in website:
-                                social_parts.append(f"[web]({website['url']})")
-                                break  # Just get the first website
-                    
-                    # Then check for socials in the new format
-                    socials_new = pair.get('info', {}).get('socials', [])
-                    if socials_new and isinstance(socials_new, list):
-                        for social in socials_new:
-                            if isinstance(social, dict) and 'type' in social and 'url' in social:
-                                if social['type'] == 'twitter':
-                                    social_parts.append(f"[𝕏]({social['url']})")
-                                elif social['type'] == 'telegram':
-                                    social_parts.append(f"[tg]({social['url']})")
-                                elif social['type'] == 'discord' and not any('𝕏' in p for p in social_parts):
-                                    # Only add Discord if we don't have Twitter already
-                                    social_parts.append(f"[dc]({social['url']})")
-                    
-                    # Legacy social extraction as fallback
-                    if not social_parts:
-                        # Try to extract from the old format
-                        socials_old = pair.get('info', {})
-                        website_link = socials_old.get('website', '')
-                        twitter_link = socials_old.get('twitter', '')
-                        telegram_link = socials_old.get('telegram', '')
+                        # Extract social links from the new format in Dexscreener API
+                        social_parts = []
                         
-                        if website_link:
-                            social_parts.append(f"[web]({website_link})")
-                        if twitter_link:
-                            social_parts.append(f"[𝕏]({twitter_link})")
-                        if telegram_link:
-                            social_parts.append(f"[tg]({telegram_link})")
-                    
-                    # Extract the token used for buying (SOL, ETH, etc.)
-                    buy_token = "Unknown"
-                    
-                    if swap_info:
-                        logging.info(f"Attempting to parse swap info: {swap_info}")
-                        
-                        # Try multiple patterns to match Cielo's various formatting styles
-                        
-                        # Pattern 1: Standard format with double asterisks for token (most common)
-                        # Example: Swapped **0.0099** ****WETH**** ($23.81) for...
-                        buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
-                        
-                        if buy_match:
-                            amount = buy_match.group(1)
-                            buy_token = buy_match.group(2)
-                            dollar_amount = buy_match.group(3)
-                            logging.info(f"Matched pattern 1: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
-                        else:
-                            # Pattern 2: Alternative with single asterisks
-                            # Example: Swapped **0.0099** **WETH** ($23.81) for...
-                            alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*\s*\(\$([0-9,.]+)\)', swap_info)
+                        try:
+                            # Check for websites in the new format first
+                            websites = pair.get('info', {}).get('websites', [])
+                            if websites and isinstance(websites, list):
+                                for website in websites:
+                                    if isinstance(website, dict) and 'url' in website:
+                                        social_parts.append(f"[web]({website['url']})")
+                                        break  # Just get the first website
                             
-                            if alt_match:
-                                amount = alt_match.group(1)
-                                buy_token = alt_match.group(2)  # Fixed: Was referencing buy_match incorrectly
-                                dollar_amount = alt_match.group(3)  # Fixed: Was referencing buy_match incorrectly
-                                logging.info(f"Matched pattern 2: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
-                            else:
-                                # Pattern 3: More flexible pattern to try to catch other variations
-                                flex_match = re.search(r'Swapped.*?([0-9,.]+).*?(\w{3,}).*?\(\$([0-9,.]+)', swap_info)
+                            # Then check for socials in the new format
+                            socials_new = pair.get('info', {}).get('socials', [])
+                            if socials_new and isinstance(socials_new, list):
+                                for social in socials_new:
+                                    if isinstance(social, dict) and 'type' in social and 'url' in social:
+                                        if social['type'] == 'twitter':
+                                            social_parts.append(f"[𝕏]({social['url']})")
+                                        elif social['type'] == 'telegram':
+                                            social_parts.append(f"[tg]({social['url']})")
+                                        elif social['type'] == 'discord' and not any('𝕏' in p for p in social_parts):
+                                            # Only add Discord if we don't have Twitter already
+                                            social_parts.append(f"[dc]({social['url']})")
+                            
+                            # Legacy social extraction as fallback
+                            if not social_parts:
+                                # Try to extract from the old format
+                                socials_old = pair.get('info', {})
+                                website_link = socials_old.get('website', '')
+                                twitter_link = socials_old.get('twitter', '')
+                                telegram_link = socials_old.get('telegram', '')
                                 
-                                if flex_match:
-                                    amount = flex_match.group(1)
-                                    buy_token = flex_match.group(2)
-                                    dollar_amount = flex_match.group(3)
-                                    logging.info(f"Matched pattern 3: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
+                                if website_link:
+                                    social_parts.append(f"[web]({website_link})")
+                                if twitter_link:
+                                    social_parts.append(f"[𝕏]({twitter_link})")
+                                if telegram_link:
+                                    social_parts.append(f"[tg]({telegram_link})")
+                        except Exception as e:
+                            logging.error(f"Error extracting social links: {e}", exc_info=True)
+                            # Continue with empty social_parts if there's an error
+                        
+                        # Extract the token used for buying (SOL, ETH, etc.)
+                        buy_token = "Unknown"
+                        
+                        try:
+                            if swap_info:
+                                logging.info(f"Attempting to parse swap info: {swap_info}")
+                                
+                                # Try multiple patterns to match Cielo's various formatting styles
+                                
+                                # Pattern 1: Standard format with double asterisks for token (most common)
+                                # Example: Swapped **0.0099** ****WETH**** ($23.81) for...
+                                buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
+                                
+                                if buy_match:
+                                    amount = buy_match.group(1)
+                                    buy_token = buy_match.group(2)
+                                    dollar_amount = buy_match.group(3)
+                                    logging.info(f"Matched pattern 1: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
                                 else:
-                                    logging.warning(f"Failed to parse swap info with any pattern: {swap_info}")
-                    
-                    # Extract the buy info from swap_info for use in stats_line
-                    buy_info = ""
-                    if 'dollar_amount' in locals() and dollar_amount:
-                        formatted_buy = format_buy_amount(dollar_amount)
-                        if dexscreener_maker_link:
-                            buy_info = f"{formatted_buy} [buy]({dexscreener_maker_link})"
-                        else:
-                            buy_info = f"{formatted_buy} buy"
-                    elif 'amount' in locals() and buy_token != "Unknown":
-                        if dexscreener_maker_link:
-                            buy_info = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
-                        else:
-                            buy_info = f"{amount} {buy_token} buy"
-                    
-                    # Market cap line with price change in parentheses and buy info
-                    # Add wow emoji before market cap if it's under $1M
-                    if market_cap_value and market_cap_value < 1_000_000:
-                        if buy_info:
-                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {buy_info} ⋅ {chain.lower()}"
-                        else:
-                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {chain.lower()}"
-                    else:
-                        if buy_info:
-                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {buy_info} ⋅ {chain.lower()}"
-                        else:
-                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {chain.lower()}"
-                    
-                    # Add the stats line to the description
-                    description_parts = [stats_line]
-                    
-                    # Format social links and age
-                    links_text = []
-                    if social_parts:
-                        links_text.append(" ⋅ ".join(social_parts))  # Use the social parts directly, they're already formatted
-                    else:
-                        links_text.append("no socials")  # Lowercase "no socials"
-                    
-                    # Ensure age_string is properly simplified
-                    if age_string:
-                        # Simplify age format to use abbreviated units
-                        simplified_age = age_string
-                        simplified_age = simplified_age.replace(" days old", "d old")
-                        simplified_age = simplified_age.replace(" day old", "d old")
-                        simplified_age = simplified_age.replace(" hours old", "h old")
-                        simplified_age = simplified_age.replace(" hour old", "h old")
-                        simplified_age = simplified_age.replace(" minutes old", "min old")
-                        simplified_age = simplified_age.replace(" minute old", "min old")
-                        simplified_age = simplified_age.replace(" months old", "mo old")
-                        simplified_age = simplified_age.replace(" month old", "mo old")
-                        links_text.append(simplified_age)
-                    
-                    # Add the social info on its own line
-                    if links_text:
-                        description_parts.append(" ⋅ ".join(links_text))
-                    
-                    # Log the final description to help with debugging
-                    final_description = "\n".join(description_parts)
-                    logging.info(f"Final embed description: {final_description}")
-                    
-                    # Set the description
-                    new_embed.description = final_description
-                    
-                    # Add banner image after the description
-                    if banner_image:
-                        new_embed.set_image(url=banner_image)
-                    
-                    # Store token data with raw market cap value
-                    token_data = {
-                        'name': token_name,
-                        'chart_url': chart_url,
-                        'initial_market_cap': market_cap_value,
-                        'initial_market_cap_formatted': formatted_mcap,
-                        'chain': chain,
-                        'message_id': message.id,
-                        'channel_id': message.channel.id,
-                        'guild_id': message.guild.id if message.guild else None
-                    }
-                    self.token_tracker.log_token(contract_address, token_data, 'cielo', credit_user)
-                    
-                    # Also log to hour-specific tracker in DigestCog if available
-                    if self.digest_cog:
-                        # Make sure the digest cog gets all the necessary information
-                        self.digest_cog.process_new_token(contract_address, {
-                            **token_data,
-                            'source': 'cielo',
-                            'user': credit_user if credit_user else 'unknown'
-                        })
-                    
-                    # Send the main embed first - use the channel directly
-                    await channel.send(embed=new_embed)
-                    
-                    # Send the token address as a plain text message immediately after
-                    # Now with backticks around it to format as code
-                    await channel.send(f"`{contract_address}`")
+                                    # Pattern 2: Alternative with single asterisks
+                                    # Example: Swapped **0.0099** **WETH** ($23.81) for...
+                                    alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*\s*\(\$([0-9,.]+)\)', swap_info)
+                                    
+                                    if alt_match:
+                                        amount = alt_match.group(1)
+                                        buy_token = alt_match.group(2)
+                                        dollar_amount = alt_match.group(3)
+                                        logging.info(f"Matched pattern 2: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
+                                    else:
+                                        # Pattern 3: More flexible pattern to try to catch other variations
+                                        flex_match = re.search(r'Swapped.*?([0-9,.]+).*?(\w{3,}).*?\(\$([0-9,.]+)', swap_info)
+                                        
+                                        if flex_match:
+                                            amount = flex_match.group(1)
+                                            buy_token = flex_match.group(2)
+                                            dollar_amount = flex_match.group(3)
+                                            logging.info(f"Matched pattern 3: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
+                                        else:
+                                            logging.warning(f"Failed to parse swap info with any pattern: {swap_info}")
+                        except Exception as e:
+                            logging.error(f"Error parsing swap info: {e}", exc_info=True)
+                            # If we fail to parse swap info, we'll continue with default values
+                        
+                        # Extract the buy info from swap_info for use in stats_line
+                        buy_info = ""
+                        try:
+                            if 'dollar_amount' in locals() and dollar_amount:
+                                formatted_buy = format_buy_amount(dollar_amount)
+                                if dexscreener_maker_link:
+                                    buy_info = f"{formatted_buy} [buy]({dexscreener_maker_link})"
+                                else:
+                                    buy_info = f"{formatted_buy} buy"
+                            elif 'amount' in locals() and buy_token != "Unknown":
+                                if dexscreener_maker_link:
+                                    buy_info = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
+                                else:
+                                    buy_info = f"{amount} {buy_token} buy"
+                        except Exception as e:
+                            logging.error(f"Error formatting buy info: {e}", exc_info=True)
+                            buy_info = ""  # Default to empty string if there's an error
+                        
+                        # Set the Buy Alert title
+                        new_embed.title = "Buy Alert"
+                        
+                        # Update title with buyer's name if available
+                        if credit_user:
+                            # Determine emoji based on dollar amount if available
+                            buy_emoji = ""
+                            try:
+                                if 'dollar_amount' in locals() and dollar_amount:
+                                    amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
+                                    if amount_float < 250:
+                                        buy_emoji = " 🤏"
+                                    elif amount_float < 2000:
+                                        buy_emoji = " 💰"
+                                    else:
+                                        buy_emoji = " 🤑"
+                            except Exception as e:
+                                logging.error(f"Error determining buy emoji: {e}", exc_info=True)
+                                # Continue without emoji if there's an error
+                            
+                            new_embed.title = f"Buy Alert: {credit_user}{buy_emoji}"
+                        
+                        # Create a title line with token name and symbol
+                        title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
+                        
+                        # Market cap line with price change in parentheses and buy info
+                        # Add wow emoji before market cap if it's under $1M
+                        try:
+                            if market_cap_value and market_cap_value < 1_000_000:
+                                if buy_info:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {buy_info} ⋅ {chain.lower()}"
+                                else:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {chain.lower()}"
+                            else:
+                                if buy_info:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {buy_info} ⋅ {chain.lower()}"
+                                else:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {chain.lower()}"
+                        except Exception as e:
+                            logging.error(f"Error formatting stats line: {e}", exc_info=True)
+                            # Default stats line if there's an error
+                            stats_line = f"mc: {formatted_mcap} ⋅ {chain.lower()}"
+                        
+                        # Add the title line and stats line to the description
+                        description_parts = [title_line, stats_line]
+                        
+                        # Format social links and age
+                        links_text = []
+                        try:
+                            if social_parts:
+                                links_text.append(" ⋅ ".join(social_parts))  # Use the social parts directly, they're already formatted
+                            else:
+                                links_text.append("no socials")  # Lowercase "no socials"
+                            
+                            # Ensure age_string is properly simplified
+                            if age_string:
+                                # Simplify age format to use abbreviated units
+                                simplified_age = age_string
+                                simplified_age = simplified_age.replace(" days old", "d old")
+                                simplified_age = simplified_age.replace(" day old", "d old")
+                                simplified_age = simplified_age.replace(" hours old", "h old")
+                                simplified_age = simplified_age.replace(" hour old", "h old")
+                                simplified_age = simplified_age.replace(" minutes old", "min old")
+                                simplified_age = simplified_age.replace(" minute old", "min old")
+                                simplified_age = simplified_age.replace(" months old", "mo old")
+                                simplified_age = simplified_age.replace(" month old", "mo old")
+                                links_text.append(simplified_age)
+                        except Exception as e:
+                            logging.error(f"Error formatting links and age: {e}", exc_info=True)
+                            # Continue with empty links_text if there's an error
+                        
+                        # Add the social info on its own line
+                        if links_text:
+                            description_parts.append(" ⋅ ".join(links_text))
+                        
+                        # Log the final description to help with debugging
+                        final_description = "\n".join(description_parts)
+                        logging.info(f"Final embed description: {final_description}")
+                        
+                        # Set the description
+                        new_embed.description = final_description
+                        
+                        # Add banner image after the description
+                        if banner_image:
+                            try:
+                                new_embed.set_image(url=banner_image)
+                            except Exception as e:
+                                logging.error(f"Error setting banner image {banner_image}: {e}", exc_info=True)
+                                # Continue without banner if there's an error
+                        
+                        # Store token data with raw market cap value
+                        token_data = {
+                            'name': token_name,
+                            'chart_url': chart_url,
+                            'initial_market_cap': market_cap_value,
+                            'initial_market_cap_formatted': formatted_mcap,
+                            'chain': chain,
+                            'message_id': message.id,
+                            'channel_id': message.channel.id,
+                            'guild_id': message.guild.id if message.guild else None
+                        }
+                        
+                        try:
+                            self.token_tracker.log_token(contract_address, token_data, 'cielo', credit_user)
+                            
+                            # Also log to hour-specific tracker in DigestCog if available
+                            if self.digest_cog:
+                                # Make sure the digest cog gets all the necessary information
+                                self.digest_cog.process_new_token(contract_address, {
+                                    **token_data,
+                                    'source': 'cielo',
+                                    'user': credit_user if credit_user else 'unknown'
+                                })
+                        except Exception as e:
+                            logging.error(f"Error logging token to database: {e}", exc_info=True)
+                            # Continue even if database logging fails
+                        
+                        # Send messages with error handling
+                        try:
+                            # Send the main embed first - use the channel directly
+                            await channel.send(embed=new_embed)
+                            
+                            # Send the token address as a plain text message immediately after
+                            await channel.send(f"`{contract_address}`")
+                        except discord.HTTPException as e:
+                            logging.error(f"Discord HTTP error when sending message: {e}", exc_info=True)
+                            # Try a simplified message if the original fails
+                            try:
+                                simplified_embed = discord.Embed(
+                                    title="Buy Alert", 
+                                    description=f"Token: {token_name}\nAddress: `{contract_address}`",
+                                    color=0x5b594f
+                                )
+                                await channel.send(embed=simplified_embed)
+                            except Exception as fallback_e:
+                                logging.error(f"Failed to send fallback message: {fallback_e}", exc_info=True)
+                                # Last resort plain text
+                                try:
+                                    await channel.send(f"New token alert: `{contract_address}`")
+                                except:
+                                    logging.error("All message sending attempts failed", exc_info=True)
+                        except Exception as e:
+                            logging.error(f"Unknown error when sending message: {e}", exc_info=True)
+                            try:
+                                await channel.send(f"Error displaying token info. Token address: `{contract_address}`")
+                            except:
+                                logging.error("Failed to send error message", exc_info=True)
+                    except Exception as inner_e:
+                        logging.error(f"Error processing token data: {inner_e}", exc_info=True)
+                        try:
+                            await channel.send(f"❌ **Error:** Failed to process token data. Token address: `{contract_address}`")
+                        except:
+                            logging.error("Failed to send error message", exc_info=True)
                 else:
                     # Log the failure reason
                     if not dex_data:
@@ -501,4 +587,7 @@ Embed Count: %d
                     
         except Exception as e:
             logging.error(f"Error processing token {contract_address}: {e}", exc_info=True)
-            await message.channel.send("❌ **Error:** Failed to process token information.")
+            try:
+                await message.channel.send("❌ **Error:** Failed to process token information.")
+            except:
+                logging.error("Failed to send error message", exc_info=True)
