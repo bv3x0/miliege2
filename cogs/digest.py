@@ -259,7 +259,7 @@ class DigestCog(commands.Cog):
                     logging.info("Global token tracker cleared")
             else:
                 logging.info("No tokens to report in hourly digest")
-                await channel.send("<:fedora:1151138750768894003> nothing to report")
+                await channel.send("<:fedora:1151138750768894003>")
 
         except Exception as e:
             logging.error(f"Error in hourly digest: {e}", exc_info=True)
