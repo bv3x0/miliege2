@@ -6,13 +6,13 @@ import aiohttp
 import asyncio
 
 def format_large_number(number):
-    """Format a large number as a human-readable string (e.g., 32.3M, 32K)."""
+    """Format a large number as a human-readable string (e.g., 32.3m, 32k)."""
     if number >= 1_000_000_000:
-        return f"{number / 1_000_000_000:.1f}B"
+        return f"{number / 1_000_000_000:.1f}b"
     elif number >= 1_000_000:
-        return f"{number / 1_000_000:.1f}M"
+        return f"{number / 1_000_000:.1f}m"
     elif number >= 1_000:
-        return f"{int(round(number / 1_000))}K"  # Round to nearest thousand, no decimal
+        return f"{int(round(number / 1_000))}k"  # Round to nearest thousand, no decimal
     else:
         return str(int(number))
 
@@ -41,10 +41,33 @@ def get_age_string(created_at):
         elif hours > 0:
             return f"{hours} hour{'s' if hours != 1 else ''} old"
         else:
-            return f"{minutes} minute{'s' if minutes != 1 else ''} old"
+            return f"{minutes} min old"
     except Exception as e:
         logging.error(f"Error calculating age: {e}")
         return None
+
+def format_buy_amount(amount):
+    """Format a buy amount according to specific rules:
+    - Under $100: '<$100 buy'
+    - $100-$999: '<$1k buy'
+    - $1000+: Round to nearest thousand with 'k' suffix
+    """
+    try:
+        # Convert string to float if needed
+        if isinstance(amount, str):
+            # Remove commas and dollar sign if present
+            amount = float(amount.replace(',', '').replace('$', ''))
+        
+        if amount < 100:
+            return "<$100"
+        elif amount < 1000:
+            return "<$1k"
+        else:
+            # Round to nearest thousand
+            rounded = round(amount / 1000)
+            return f"${rounded}k"
+    except (ValueError, TypeError):
+        return str(amount)  # Return original value if conversion fails
 
 @asynccontextmanager
 async def safe_api_call(session: aiohttp.ClientSession, url: str, timeout: int = 10) -> AsyncGenerator[Optional[dict], None]:

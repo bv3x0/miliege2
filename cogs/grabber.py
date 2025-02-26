@@ -3,7 +3,7 @@ from discord.ext import commands
 import re
 import logging
 import asyncio
-from utils import format_large_number, get_age_string, safe_api_call
+from utils import format_large_number, get_age_string, safe_api_call, format_buy_amount
 
 class TokenGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
@@ -120,7 +120,7 @@ Embed Count: %d
                                 logging.warning("Bot doesn't have permission to delete messages")
                             except Exception as e:
                                 logging.error(f"Error deleting message: {e}")
-                                
+                            
                             return
                 else:
                     logging.warning("Cielo message had no embeds")
@@ -206,6 +206,21 @@ Embed Count: %d
                     # Add "Buy Alert" title to match digest style
                     new_embed.title = "Buy Alert"
                     
+                    # Extract Cielo profile URL for the title
+                    cielo_profile_url = None
+                    if message.embeds:
+                        for embed in message.embeds:
+                            for field in embed.fields:
+                                if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
+                                    profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
+                                    if profile_match:
+                                        cielo_profile_url = profile_match.group(1)
+                                        logging.info(f"Found Cielo profile URL for title: {cielo_profile_url}")
+                    
+                    # Update title with buyer's name if available
+                    if credit_user and cielo_profile_url:
+                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url})"
+                    
                     # Format market cap with dollar sign
                     if market_cap_value is not None:
                         formatted_mcap = f"${format_large_number(market_cap_value)}"
@@ -223,7 +238,7 @@ Embed Count: %d
                     description_parts = [title_line]
                     
                     # Market cap line with price change in parentheses
-                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) • {chain.lower()}"
+                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {chain.lower()}"
                     description_parts.append(stats_line)
                     
                     # Remove empty line to make spacing more consistent
@@ -243,7 +258,7 @@ Embed Count: %d
                             elif part.startswith("[TG]("):
                                 part = part.replace("[TG](", "[tg](")
                             lowercase_social_parts.append(part)
-                        links_text.append(" · ".join(lowercase_social_parts))  # Change bullet point style
+                        links_text.append(" ⋅ ".join(lowercase_social_parts))  # Change bullet point style
                     else:
                         links_text.append("no socials")  # Lowercase "no socials"
                     if age_string:
@@ -253,8 +268,8 @@ Embed Count: %d
                         simplified_age = simplified_age.replace(" day old", "d old")
                         simplified_age = simplified_age.replace(" hours old", "h old")
                         simplified_age = simplified_age.replace(" hour old", "h old")
-                        simplified_age = simplified_age.replace(" minutes old", "m old")
-                        simplified_age = simplified_age.replace(" minute old", "m old")
+                        simplified_age = simplified_age.replace(" minutes old", "min old")
+                        simplified_age = simplified_age.replace(" minute old", "min old")
                         simplified_age = simplified_age.replace(" months old", "mo old")
                         simplified_age = simplified_age.replace(" month old", "mo old")
                         links_text.append(simplified_age)
@@ -322,40 +337,40 @@ Embed Count: %d
                             user_display = f"[{credit_user}]({dexscreener_maker_link})" if dexscreener_maker_link else credit_user
                             
                             if 'dollar_amount' in locals() and dollar_amount:
-                                # Remove cents and format as whole dollar amount
-                                try:
-                                    # Convert to float, round to nearest dollar, convert to int, then format with commas
-                                    clean_dollar = dollar_amount.replace(',', '')
-                                    rounded_dollar = int(round(float(clean_dollar)))
-                                    user_line = f"{user_display} bought ${rounded_dollar:,}"
-                                except (ValueError, TypeError):
-                                    # Fallback to displaying the original dollar amount string if conversion fails
-                                    user_line = f"{user_display} bought ${dollar_amount}"
-                                
-                                if cielo_link:
-                                    user_line += f" {cielo_link}"
+                                # Format buy amount using new helper function
+                                formatted_buy = format_buy_amount(dollar_amount)
+                                if dexscreener_maker_link:
+                                    user_line = f"{formatted_buy} [buy]({dexscreener_maker_link})"
+                                else:
+                                    user_line = f"{formatted_buy} buy"
+
                             elif 'amount' in locals() and buy_token != "Unknown":
                                 # Fallback to token amount if no dollar value found
-                                user_line = f"{user_display} bought {amount} {buy_token}"
-                                if cielo_link:
-                                    user_line += f" {cielo_link}"
+                                if dexscreener_maker_link:
+                                    user_line = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
+                                else:
+                                    user_line = f"{amount} {buy_token} buy"
                             else:
-                                user_line = f"{user_display}"
-                                if cielo_link:
-                                    user_line += f" {cielo_link}"
+                                user_line = f"New token"
+
+                            # Add social info after user line
+                            if links_text:
+                                user_line += f" ⋅ {' ⋅ '.join(links_text)}"
                         else:
                             if 'dollar_amount' in locals() and dollar_amount:
-                                # Remove cents and format as whole dollar amount
-                                try:
-                                    clean_dollar = dollar_amount.replace(',', '')
-                                    rounded_dollar = int(round(float(clean_dollar)))
-                                    user_line = f"Bought ${rounded_dollar:,}"
-                                except (ValueError, TypeError):
-                                    # Fallback to displaying the original dollar amount string
-                                    user_line = f"Bought ${dollar_amount}"
+                                # Format buy amount using new helper function
+                                formatted_buy = format_buy_amount(dollar_amount)
+                                if dexscreener_maker_link:
+                                    user_line = f"{formatted_buy} [buy]({dexscreener_maker_link})"
+                                else:
+                                    user_line = f"{formatted_buy} buy"
+
                             elif 'amount' in locals() and buy_token != "Unknown":
                                 # Fallback to token amount if no dollar value found
-                                user_line = f"Bought {amount} {buy_token}"
+                                if dexscreener_maker_link:
+                                    user_line = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
+                                else:
+                                    user_line = f"{amount} {buy_token} buy"
                             else:
                                 user_line = "New token"
                     else:
@@ -384,11 +399,11 @@ Embed Count: %d
                     # Add the user line and social info on the same line if possible
                     if user_line:
                         # Combine user info and social links into one line with a separator
-                        combined_line = f"{user_line} • {' · '.join(links_text)}"
+                        combined_line = f"{user_line} ⋅ {' ⋅ '.join(links_text)}"
                         description_parts.append(combined_line)
                     else:
                         # Just add the social links if no user info
-                        description_parts.append(" · ".join(links_text))
+                        description_parts.append(" ⋅ ".join(links_text))
                     
                     # Add "wow" emoji and text at the bottom if market cap is under $1M
                     if market_cap_value and market_cap_value < 1_000_000:
@@ -462,91 +477,41 @@ Embed Count: %d
                     # Add "Buy Alert" title to match digest style
                     new_embed.title = "Buy Alert"
                     
+                    # Extract Cielo profile URL for the title
+                    cielo_profile_url = None
+                    if message.embeds:
+                        for embed in message.embeds:
+                            for field in embed.fields:
+                                if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
+                                    profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
+                                    if profile_match:
+                                        cielo_profile_url = profile_match.group(1)
+                                        logging.info(f"Found Cielo profile URL for title: {cielo_profile_url}")
+                    
+                    # Update title with buyer's name if available
+                    if credit_user and cielo_profile_url:
+                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url})"
+                    
                     # Build description lines to match our regular format
                     description_parts = []
                     
                     # Title line with the token name and chart URL
-                    title_line = ""
-                    title_line = f"## [{token_name} ({token_symbol})]({chart_url}) <:huh:1151138741197479996>"
+                    title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
                     description_parts.append(title_line)
                     
                     # Add chain info line
                     description_parts.append(f"New token • {chain_info}")
                     
-                    # Add social parts (transaction link and "Not on Dexscreener yet" message)
-                    social_parts = []
-                    
-                    # Add transaction link if available - use the one passed to us
-                    if tx_link:
-                        social_parts.append(f"[TX]({tx_link})")
-                        
-                    # Always add this note
-                    social_parts.append("Not on Dexscreener yet")
-                    
-                    # Add user line after basic info, more compact formatting
-                    if credit_user:
-                        # Format the credit user as a link if we have dexscreener maker link
-                        user_display = f"[{credit_user}]({dexscreener_maker_link})" if dexscreener_maker_link else credit_user
-                        
-                        # Extract Cielo profile link from embed if available
-                        cielo_link = ""
-                        if message.embeds:
-                            for embed in message.embeds:
-                                for field in embed.fields:
-                                    if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
-                                        cielo_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
-                                        if cielo_match:
-                                            cielo_link = f" [(cielo)]({cielo_match.group(1)})"
-                                            logging.info(f"Found Cielo profile link: {cielo_match.group(1)}")
-                        
-                        # If we have swap info, try to extract the amount and token and combine with social parts
-                        if swap_info:
-                            # Try to get the amount and token from swap info
-                            amount_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
-                            if amount_match:
-                                amount = amount_match.group(1)
-                                token = amount_match.group(2)
-                                dollar_amount = amount_match.group(3)
-                                
-                                # Format dollar amount without cents
-                                try:
-                                    clean_dollar = dollar_amount.replace(',', '')
-                                    rounded_dollar = int(round(float(clean_dollar)))
-                                    description_parts.append("")  # Just one blank line
-                                    description_parts.append(f"{user_display} bought ${rounded_dollar:,} • {' · '.join(social_parts)}")
-                                except (ValueError, TypeError):
-                                    # Fallback if conversion fails
-                                    description_parts.append("")
-                                    description_parts.append(f"{user_display} bought ${dollar_amount} • {' · '.join(social_parts)}")
-                            else:
-                                # Try alternative patterns if the first one doesn't match
-                                alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*\s*\(\$([0-9,.]+)\)', swap_info)
-                                if alt_match:
-                                    amount = alt_match.group(1)
-                                    token = alt_match.group(2)
-                                    dollar_amount = alt_match.group(3)
-                                    
-                                    # Format dollar amount without cents
-                                    try:
-                                        clean_dollar = dollar_amount.replace(',', '')
-                                        rounded_dollar = int(round(float(clean_dollar)))
-                                        description_parts.append("")
-                                        description_parts.append(f"{user_display} bought ${rounded_dollar:,} • {' · '.join(social_parts)}")
-                                    except (ValueError, TypeError):
-                                        # Fallback if conversion fails
-                                        description_parts.append("")
-                                        description_parts.append(f"{user_display} bought ${dollar_amount} • {' · '.join(social_parts)}")
-                                else:
-                                    # Fallback if we can't parse or find dollar amount
-                                    description_parts.append("")  # Just one blank line
-                                    description_parts.append(f"{user_display} • {' · '.join(social_parts)}")
+                    # Format buy amount if available
+                    if 'dollar_amount' in locals() and dollar_amount:
+                        formatted_buy = format_buy_amount(dollar_amount)
+                        if dexscreener_maker_link:
+                            description_parts.append(f"{formatted_buy} [buy]({dexscreener_maker_link}) • {' · '.join(social_parts)}")
                         else:
-                            description_parts.append("")  # Just one blank line
-                            description_parts.append(f"{user_display} • {' · '.join(social_parts)}")
+                            description_parts.append(f"{formatted_buy} buy • {' · '.join(social_parts)}")
                     else:
-                        # No credit user, just add social parts
                         description_parts.append("")  # Just one blank line
-                        description_parts.append(f"{' · '.join(social_parts)}")
+                        description_parts.append(f"New token • {' · '.join(social_parts)}")
                     
                     # Set the description
                     new_embed.description = "\n".join(description_parts)

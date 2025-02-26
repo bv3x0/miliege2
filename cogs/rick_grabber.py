@@ -142,12 +142,15 @@ Embed Count: %d
                 # Parse the market cap string (e.g., "2.1M")
                 if isinstance(initial_mcap, str):
                     clean_mcap = initial_mcap.replace('$', '')
-                    if 'M' in clean_mcap:
-                        initial_mcap_value = float(clean_mcap.replace('M', '')) * 1000000
-                    elif 'K' in clean_mcap:
-                        initial_mcap_value = float(clean_mcap.replace('K', '')) * 1000
-                    elif 'B' in clean_mcap:
-                        initial_mcap_value = float(clean_mcap.replace('B', '')) * 1000000000
+                    if 'M' in clean_mcap or 'm' in clean_mcap:
+                        clean_mcap = clean_mcap.replace('M', '').replace('m', '')
+                        initial_mcap_value = float(clean_mcap) * 1000000
+                    elif 'K' in clean_mcap or 'k' in clean_mcap:
+                        clean_mcap = clean_mcap.replace('K', '').replace('k', '')
+                        initial_mcap_value = float(clean_mcap) * 1000
+                    elif 'B' in clean_mcap or 'b' in clean_mcap:
+                        clean_mcap = clean_mcap.replace('B', '').replace('b', '')
+                        initial_mcap_value = float(clean_mcap) * 1000000000
                     else:
                         initial_mcap_value = float(clean_mcap)
                 else:

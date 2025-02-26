@@ -156,13 +156,16 @@ class DigestCog(commands.Cog):
                         # Remove $ symbol
                         clean_str = mcap_str.replace('$', '')
                         
-                        # Handle suffixes properly
-                        if 'M' in clean_str:
-                            return float(clean_str.replace('M', '')) * 1000000
-                        elif 'K' in clean_str:
-                            return float(clean_str.replace('K', '')) * 1000
-                        elif 'B' in clean_str:
-                            return float(clean_str.replace('B', '')) * 1000000000
+                        # Handle suffixes properly (both uppercase and lowercase)
+                        if 'M' in clean_str or 'm' in clean_str:
+                            clean_str = clean_str.replace('M', '').replace('m', '')
+                            return float(clean_str) * 1000000
+                        elif 'K' in clean_str or 'k' in clean_str:
+                            clean_str = clean_str.replace('K', '').replace('k', '')
+                            return float(clean_str) * 1000
+                        elif 'B' in clean_str or 'b' in clean_str:
+                            clean_str = clean_str.replace('B', '').replace('b', '')
+                            return float(clean_str) * 1000000000
                         else:
                             return float(clean_str)
                     
