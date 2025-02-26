@@ -188,23 +188,60 @@ Embed Count: %d
                     pair_created_at = pair.get('pairCreatedAt')
                     age_string = get_age_string(pair_created_at)
 
-                    # Extract social links (using the old format)
-                    socials = pair.get('info', {}).get('socials', [])
-                    tg_link = next((s['url'] for s in socials if s['type'] == 'telegram'), None)
-                    twitter_link = next((s['url'] for s in socials if s['type'] == 'twitter'), None)
+                    # Ensure age_string is formatted properly
+                    if age_string:
+                        # Simplify age format to use abbreviated units
+                        simplified_age = age_string
+                        simplified_age = simplified_age.replace(" days old", "d old")
+                        simplified_age = simplified_age.replace(" day old", "d old")
+                        simplified_age = simplified_age.replace(" hours old", "h old")
+                        simplified_age = simplified_age.replace(" hour old", "h old")
+                        simplified_age = simplified_age.replace(" minutes old", "min old")
+                        simplified_age = simplified_age.replace(" minute old", "min old")
+                        simplified_age = simplified_age.replace(" months old", "mo old")
+                        simplified_age = simplified_age.replace(" month old", "mo old")
+                    else:
+                        # Default to 1h old if we can't determine the age
+                        simplified_age = "1h old"
 
-                    # Extract website link
-                    websites = pair.get('info', {}).get('websites', [])
-                    website_link = websites[0]['url'] if websites else None
-
-                    # Format social links
+                    # Extract social links from the new format in Dexscreener API
                     social_parts = []
-                    if website_link:
-                        social_parts.append(f"[Web]({website_link})")
-                    if twitter_link:
-                        social_parts.append(f"[𝕏]({twitter_link})")
-                    if tg_link:
-                        social_parts.append(f"[TG]({tg_link})")
+                    
+                    # Check for websites in the new format first
+                    websites = pair.get('info', {}).get('websites', [])
+                    if websites and isinstance(websites, list):
+                        for website in websites:
+                            if isinstance(website, dict) and 'url' in website:
+                                social_parts.append(f"[web]({website['url']})")
+                                break  # Just get the first website
+                    
+                    # Then check for socials in the new format
+                    socials_new = pair.get('info', {}).get('socials', [])
+                    if socials_new and isinstance(socials_new, list):
+                        for social in socials_new:
+                            if isinstance(social, dict) and 'type' in social and 'url' in social:
+                                if social['type'] == 'twitter':
+                                    social_parts.append(f"[𝕏]({social['url']})")
+                                elif social['type'] == 'telegram':
+                                    social_parts.append(f"[tg]({social['url']})")
+                                elif social['type'] == 'discord' and not any('𝕏' in p for p in social_parts):
+                                    # Only add Discord if we don't have Twitter already
+                                    social_parts.append(f"[dc]({social['url']})")
+                    
+                    # Legacy social extraction as fallback
+                    if not social_parts:
+                        # Try to extract from the old format
+                        socials_old = pair.get('info', {})
+                        website_link = socials_old.get('website', '')
+                        twitter_link = socials_old.get('twitter', '')
+                        telegram_link = socials_old.get('telegram', '')
+                        
+                        if website_link:
+                            social_parts.append(f"[web]({website_link})")
+                        if twitter_link:
+                            social_parts.append(f"[𝕏]({twitter_link})")
+                        if telegram_link:
+                            social_parts.append(f"[tg]({telegram_link})")
                     
                     # Extract the token used for buying (SOL, ETH, etc.)
                     buy_token = "Unknown"
@@ -282,35 +319,31 @@ Embed Count: %d
                         lowercase_social_parts = []
                         for part in social_parts:
                             # Keep the URL structure intact but lowercase the link text
-                            if part.startswith("[Web]("):
-                                part = part.replace("[Web](", "[web](")
+                            if part.startswith("[web]("):
+                                part = part.replace("[web](", "[web](")
                             elif part.startswith("[𝕏]("):
                                 part = part.replace("[𝕏](", "[𝕏](")  # Keep the special X character
-                            elif part.startswith("[TG]("):
-                                part = part.replace("[TG](", "[tg](")
+                            elif part.startswith("[tg]("):
+                                part = part.replace("[tg](", "[tg](")
+                            elif part.startswith("[dc]("):
+                                part = part.replace("[dc](", "[dc](")
                             lowercase_social_parts.append(part)
                         links_text.append(" ⋅ ".join(lowercase_social_parts))  # Change bullet point style
                     else:
                         links_text.append("no socials")  # Lowercase "no socials"
-                    if age_string:
-                        # Simplify age format to use abbreviated units
-                        simplified_age = age_string
-                        simplified_age = simplified_age.replace(" days old", "d old")
-                        simplified_age = simplified_age.replace(" day old", "d old")
-                        simplified_age = simplified_age.replace(" hours old", "h old")
-                        simplified_age = simplified_age.replace(" hour old", "h old")
-                        simplified_age = simplified_age.replace(" minutes old", "min old")
-                        simplified_age = simplified_age.replace(" minute old", "min old")
-                        simplified_age = simplified_age.replace(" months old", "mo old")
-                        simplified_age = simplified_age.replace(" month old", "mo old")
+                    if simplified_age:
                         links_text.append(simplified_age)
                     
                     # Add the social info on its own line
                     if links_text:
                         description_parts.append(" ⋅ ".join(links_text))
                     
+                    # Log the final description to help with debugging
+                    final_description = "\n".join(description_parts)
+                    logging.info(f"Final embed description: {final_description}")
+                    
                     # Set the description
-                    new_embed.description = "\n".join(description_parts)
+                    new_embed.description = final_description
                     
                     # Add banner image after the description
                     if banner_image:
@@ -448,8 +481,12 @@ Embed Count: %d
                     description_parts = [stats_line]
                     description_parts.append("no socials ⋅ 1d old")  # Default social info
                     
+                    # Log the final description to help with debugging
+                    final_description = "\n".join(description_parts)
+                    logging.info(f"Final embed description: {final_description}")
+                    
                     # Set the description
-                    new_embed.description = "\n".join(description_parts)
+                    new_embed.description = final_description
                     
                     # Send embed with available info - use the channel directly
                     await channel.send(embed=new_embed)
