@@ -137,9 +137,8 @@ Embed Count: %d
             dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
             logging.info(f"Querying Dexscreener API: {dex_api_url}")
             
-            # Create a completely fresh embed with no inherited properties
+            # Get the channel but don't create the embed yet
             channel = message.channel
-            new_embed = discord.Embed(color=0x5b594f)
             
             async with safe_api_call(self.session, dex_api_url) as dex_data:
                 
@@ -149,6 +148,9 @@ Embed Count: %d
                 if dex_data and 'pairs' in dex_data and dex_data['pairs']:
                     pair = dex_data['pairs'][0]
                     logging.info(f"Found pair data: {pair.get('baseToken', {}).get('name', 'Unknown')}")
+                    
+                    # Create a new embed with the standard color
+                    new_embed = discord.Embed(color=0x5b594f)
                     
                     # Extract data
                     chain = pair.get('chainId', 'Unknown Chain')
@@ -187,22 +189,6 @@ Embed Count: %d
                     # Extract pair creation time
                     pair_created_at = pair.get('pairCreatedAt')
                     age_string = get_age_string(pair_created_at)
-
-                    # Ensure age_string is formatted properly
-                    if age_string:
-                        # Simplify age format to use abbreviated units
-                        simplified_age = age_string
-                        simplified_age = simplified_age.replace(" days old", "d old")
-                        simplified_age = simplified_age.replace(" day old", "d old")
-                        simplified_age = simplified_age.replace(" hours old", "h old")
-                        simplified_age = simplified_age.replace(" hour old", "h old")
-                        simplified_age = simplified_age.replace(" minutes old", "min old")
-                        simplified_age = simplified_age.replace(" minute old", "min old")
-                        simplified_age = simplified_age.replace(" months old", "mo old")
-                        simplified_age = simplified_age.replace(" month old", "mo old")
-                    else:
-                        # Default to 1h old if we can't determine the age
-                        simplified_age = "1h old"
 
                     # Extract social links from the new format in Dexscreener API
                     social_parts = []
@@ -267,8 +253,8 @@ Embed Count: %d
                             
                             if alt_match:
                                 amount = alt_match.group(1)
-                                buy_token = buy_match.group(2)
-                                dollar_amount = buy_match.group(3)
+                                buy_token = alt_match.group(2)  # Fixed: Was referencing buy_match incorrectly
+                                dollar_amount = alt_match.group(3)  # Fixed: Was referencing buy_match incorrectly
                                 logging.info(f"Matched pattern 2: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
                             else:
                                 # Pattern 3: More flexible pattern to try to catch other variations
@@ -315,23 +301,22 @@ Embed Count: %d
                     # Format social links and age
                     links_text = []
                     if social_parts:
-                        # Keep the URL structure intact but lowercase the link text
-                        lowercase_social_parts = []
-                        for part in social_parts:
-                            # Keep the URL structure intact but lowercase the link text
-                            if part.startswith("[web]("):
-                                part = part.replace("[web](", "[web](")
-                            elif part.startswith("[𝕏]("):
-                                part = part.replace("[𝕏](", "[𝕏](")  # Keep the special X character
-                            elif part.startswith("[tg]("):
-                                part = part.replace("[tg](", "[tg](")
-                            elif part.startswith("[dc]("):
-                                part = part.replace("[dc](", "[dc](")
-                            lowercase_social_parts.append(part)
-                        links_text.append(" ⋅ ".join(lowercase_social_parts))  # Change bullet point style
+                        links_text.append(" ⋅ ".join(social_parts))  # Use the social parts directly, they're already formatted
                     else:
                         links_text.append("no socials")  # Lowercase "no socials"
-                    if simplified_age:
+                    
+                    # Ensure age_string is properly simplified
+                    if age_string:
+                        # Simplify age format to use abbreviated units
+                        simplified_age = age_string
+                        simplified_age = simplified_age.replace(" days old", "d old")
+                        simplified_age = simplified_age.replace(" day old", "d old")
+                        simplified_age = simplified_age.replace(" hours old", "h old")
+                        simplified_age = simplified_age.replace(" hour old", "h old")
+                        simplified_age = simplified_age.replace(" minutes old", "min old")
+                        simplified_age = simplified_age.replace(" minute old", "min old")
+                        simplified_age = simplified_age.replace(" months old", "mo old")
+                        simplified_age = simplified_age.replace(" month old", "mo old")
                         links_text.append(simplified_age)
                     
                     # Add the social info on its own line
@@ -385,6 +370,9 @@ Embed Count: %d
                         logging.error(f"No 'pairs' field in Dexscreener response: {dex_data}")
                     elif not dex_data['pairs']:
                         logging.error(f"Empty pairs array in Dexscreener response: {dex_data}")
+                    
+                    # Create a completely fresh embed for the error case
+                    new_embed = discord.Embed(color=0x5b594f)
                     
                     # Extract token name from swap info if possible
                     token_name = "Unknown Token"
@@ -444,42 +432,58 @@ Embed Count: %d
                     # Create a placeholder chart URL using the contract and chain
                     chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                     
-                    # Create embed response - make sure it's a completely new embed
-                    new_embed = discord.Embed(color=0x5b594f)
+                    # Add "Buy Alert" title to match digest style
+                    new_embed.title = "Buy Alert"
                     
-                    # Format token name and symbol for title
-                    if token_symbol:
-                        token_display = f"{token_symbol}"
-                    else:
-                        token_display = token_name
+                    # Extract Cielo profile URL for the title
+                    cielo_profile_url = None
+                    if message.embeds:
+                        for embed in message.embeds:
+                            for field in embed.fields:
+                                if field.name == 'Profile':
+                                    profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
+                                    if profile_match:
+                                        cielo_profile_url = profile_match.group(1)
+                                        logging.info(f"Found Cielo profile URL for title: {cielo_profile_url}")
                     
-                    # Add token name/symbol as title
-                    new_embed.title = token_display
+                    # Update title with buyer's name if available
+                    if credit_user and cielo_profile_url:
+                        # Determine which emoji to use based on the buy amount
+                        buy_emoji = ""
+                        if 'dollar_amount' in locals() and dollar_amount:
+                            amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
+                            if amount_float < 250:
+                                buy_emoji = " 🤏"
+                            elif amount_float < 2000:
+                                buy_emoji = " 💰"
+                            else:
+                                buy_emoji = " 🤑"
+                        
+                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url}){buy_emoji}"
                     
-                    # Extract buy amount for stats line
-                    buy_info = ""
+                    # Create multi-line description
+                    
+                    # Title line with token name, symbol, and URL
+                    title_line = ""
+                    # Remove wow emoji from title line
+                    title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
+                    
+                    # Initialize description parts array
+                    description_parts = [title_line]
+                    
+                    # Add chain info line
+                    description_parts.append(f"New token • {chain_info}")
+                    
+                    # Format buy amount if available
                     if 'dollar_amount' in locals() and dollar_amount:
                         formatted_buy = format_buy_amount(dollar_amount)
                         if dexscreener_maker_link:
-                            buy_info = f"{formatted_buy} [buy]({dexscreener_maker_link})"
+                            description_parts.append(f"{formatted_buy} [buy]({dexscreener_maker_link}) • {' · '.join(social_parts)}")
                         else:
-                            buy_info = f"{formatted_buy} buy"
-                    
-                    # Create stats line similar to the successful case
-                    if market_cap_value and market_cap_value < 1_000_000:
-                        if buy_info:
-                            stats_line = f"{formatted_mcap} mc <:wow:1149703956746997871> ⋅ {buy_info} ⋅ {chain_info.lower()}"
-                        else:
-                            stats_line = f"{formatted_mcap} mc <:wow:1149703956746997871> ⋅ {chain_info.lower()}"
+                            description_parts.append(f"{formatted_buy} buy • {' · '.join(social_parts)}")
                     else:
-                        if buy_info:
-                            stats_line = f"{formatted_mcap} mc ⋅ {buy_info} ⋅ {chain_info.lower()}"
-                        else:
-                            stats_line = f"{formatted_mcap} mc ⋅ {chain_info.lower()}"
-                    
-                    # Create description with stats line and social info
-                    description_parts = [stats_line]
-                    description_parts.append("no socials ⋅ 1d old")  # Default social info
+                        description_parts.append("")  # Just one blank line
+                        description_parts.append(f"New token • {' · '.join(social_parts)}")
                     
                     # Log the final description to help with debugging
                     final_description = "\n".join(description_parts)
