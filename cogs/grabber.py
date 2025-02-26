@@ -143,8 +143,12 @@ Embed Count: %d
             
             async with safe_api_call(self.session, dex_api_url) as dex_data:
                 
+                # Add detailed logging of the API response
+                logging.info(f"Dexscreener API response: {dex_data}")
+                
                 if dex_data and 'pairs' in dex_data and dex_data['pairs']:
                     pair = dex_data['pairs'][0]
+                    logging.info(f"Found pair data: {pair.get('baseToken', {}).get('name', 'Unknown')}")
                     
                     # Extract data
                     chain = pair.get('chainId', 'Unknown Chain')
@@ -341,8 +345,13 @@ Embed Count: %d
                     # Now with backticks around it to format as code
                     await channel.send(f"`{contract_address}`")
                 else:
-                    # Improved error handling for tokens not found in Dexscreener
-                    # Use the same format as our regular token alerts for consistency
+                    # Log the failure reason
+                    if not dex_data:
+                        logging.error(f"No data returned from Dexscreener API for {contract_address}")
+                    elif 'pairs' not in dex_data:
+                        logging.error(f"No 'pairs' field in Dexscreener response: {dex_data}")
+                    elif not dex_data['pairs']:
+                        logging.error(f"Empty pairs array in Dexscreener response: {dex_data}")
                     
                     # Extract token name from swap info if possible
                     token_name = "Unknown Token"
@@ -357,12 +366,43 @@ Embed Count: %d
                         name_match = re.search(r'for\s+\*\*[\d,.]+\*\*\s+\*\*\*\*([^*]+)\*\*\*\*', swap_info)
                         if name_match:
                             token_name = name_match.group(1).strip()
+                            logging.info(f"Extracted token name from swap info: {token_name}")
                             
                         # Try to extract symbol from token name (common format is "Token Name (SYMBOL)")
                         symbol_match = re.search(r'(.+?)\s+\((\w+)\)$', token_name)
                         if symbol_match:
                             token_name = symbol_match.group(1).strip()
                             token_symbol = symbol_match.group(2).strip()
+                        else:
+                            # If no symbol in parentheses, try to extract it directly from the swap info
+                            symbol_match = re.search(r'\*\*\*\*([A-Z0-9]+)\*\*\*\*\s+@', swap_info)
+                            if symbol_match:
+                                token_symbol = symbol_match.group(1).strip()
+                                logging.info(f"Extracted token symbol from swap info: {token_symbol}")
+                        
+                        # Try to extract market cap from swap info
+                        mcap_match = re.search(r'MC:\s+\$([0-9.]+)([kmbt]?)', swap_info)
+                        if mcap_match:
+                            mcap_value = mcap_match.group(1)
+                            mcap_unit = mcap_match.group(2).lower()
+                            
+                            # Convert to numeric value
+                            try:
+                                mcap_value = float(mcap_value)
+                                if mcap_unit == 'k':
+                                    mcap_value *= 1_000
+                                elif mcap_unit == 'm':
+                                    mcap_value *= 1_000_000
+                                elif mcap_unit == 'b':
+                                    mcap_value *= 1_000_000_000
+                                elif mcap_unit == 't':
+                                    mcap_value *= 1_000_000_000_000
+                                
+                                market_cap_value = mcap_value
+                                formatted_mcap = format_large_number(market_cap_value)
+                                logging.info(f"Extracted market cap from swap info: {formatted_mcap}")
+                            except ValueError:
+                                logging.warning(f"Failed to parse market cap value: {mcap_value}")
                     
                     # Use the chain_info that was passed to us instead of trying to extract it again
                     if chain_info is None or chain_info == "unknown":
@@ -374,64 +414,39 @@ Embed Count: %d
                     # Create embed response - make sure it's a completely new embed
                     new_embed = discord.Embed(color=0x5b594f)
                     
-                    # Add "Buy Alert" title to match digest style
-                    new_embed.title = "Buy Alert"
-                    
-                    # Extract Cielo profile URL for the title
-                    cielo_profile_url = None
-                    if message.embeds:
-                        for embed in message.embeds:
-                            for field in embed.fields:
-                                if field.name == 'Profile':
-                                    profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
-                                    if profile_match:
-                                        cielo_profile_url = profile_match.group(1)
-                                        logging.info(f"Found Cielo profile URL for title: {cielo_profile_url}")
-                    
-                    # Update title with buyer's name if available
-                    if credit_user and cielo_profile_url:
-                        # Determine which emoji to use based on the buy amount
-                        buy_emoji = ""
-                        if 'dollar_amount' in locals() and dollar_amount:
-                            amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
-                            if amount_float < 250:
-                                buy_emoji = " 🤏"
-                            elif amount_float < 2000:
-                                buy_emoji = " 💰"
-                            else:
-                                buy_emoji = " 🤑"
-                        
-                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url}){buy_emoji}"
-                    
-                    # Format market cap with dollar sign
-                    if market_cap_value is not None:
-                        formatted_mcap = f"${format_large_number(market_cap_value)}"
+                    # Format token name and symbol for title
+                    if token_symbol:
+                        token_display = f"{token_symbol}"
                     else:
-                        formatted_mcap = "N/A"
+                        token_display = token_name
                     
-                    # Create multi-line description
+                    # Add token name/symbol as title
+                    new_embed.title = token_display
                     
-                    # Title line with token name, symbol, and URL
-                    title_line = ""
-                    # Remove wow emoji from title line
-                    title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
-                    
-                    # Initialize description parts array
-                    description_parts = [title_line]
-                    
-                    # Add chain info line
-                    description_parts.append(f"New token • {chain_info}")
-                    
-                    # Format buy amount if available
+                    # Extract buy amount for stats line
+                    buy_info = ""
                     if 'dollar_amount' in locals() and dollar_amount:
                         formatted_buy = format_buy_amount(dollar_amount)
                         if dexscreener_maker_link:
-                            description_parts.append(f"{formatted_buy} [buy]({dexscreener_maker_link}) • {' · '.join(social_parts)}")
+                            buy_info = f"{formatted_buy} [buy]({dexscreener_maker_link})"
                         else:
-                            description_parts.append(f"{formatted_buy} buy • {' · '.join(social_parts)}")
+                            buy_info = f"{formatted_buy} buy"
+                    
+                    # Create stats line similar to the successful case
+                    if market_cap_value and market_cap_value < 1_000_000:
+                        if buy_info:
+                            stats_line = f"{formatted_mcap} mc <:wow:1149703956746997871> ⋅ {buy_info} ⋅ {chain_info.lower()}"
+                        else:
+                            stats_line = f"{formatted_mcap} mc <:wow:1149703956746997871> ⋅ {chain_info.lower()}"
                     else:
-                        description_parts.append("")  # Just one blank line
-                        description_parts.append(f"New token • {' · '.join(social_parts)}")
+                        if buy_info:
+                            stats_line = f"{formatted_mcap} mc ⋅ {buy_info} ⋅ {chain_info.lower()}"
+                        else:
+                            stats_line = f"{formatted_mcap} mc ⋅ {chain_info.lower()}"
+                    
+                    # Create description with stats line and social info
+                    description_parts = [stats_line]
+                    description_parts.append("no socials ⋅ 1d old")  # Default social info
                     
                     # Set the description
                     new_embed.description = "\n".join(description_parts)
