@@ -200,49 +200,74 @@ Embed Count: %d
                     if tg_link:
                         social_parts.append(f"[TG]({tg_link})")
                     
-                    # Create embed response - make sure it's a completely new embed
-                    new_embed = discord.Embed(color=0x5b594f)
+                    # Extract the token used for buying (SOL, ETH, etc.)
+                    buy_token = "Unknown"
                     
-                    # Add "Buy Alert" title to match digest style
-                    new_embed.title = "Buy Alert"
+                    if swap_info:
+                        logging.info(f"Attempting to parse swap info: {swap_info}")
+                        
+                        # Try multiple patterns to match Cielo's various formatting styles
+                        
+                        # Pattern 1: Standard format with double asterisks for token (most common)
+                        # Example: Swapped **0.0099** ****WETH**** ($23.81) for...
+                        buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
+                        
+                        if buy_match:
+                            amount = buy_match.group(1)
+                            buy_token = buy_match.group(2)
+                            dollar_amount = buy_match.group(3)
+                            logging.info(f"Matched pattern 1: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
+                        else:
+                            # Pattern 2: Alternative with single asterisks
+                            # Example: Swapped **0.0099** **WETH** ($23.81) for...
+                            alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*\s*\(\$([0-9,.]+)\)', swap_info)
+                            
+                            if alt_match:
+                                amount = alt_match.group(1)
+                                buy_token = buy_match.group(2)
+                                dollar_amount = buy_match.group(3)
+                                logging.info(f"Matched pattern 2: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
+                            else:
+                                # Pattern 3: More flexible pattern to try to catch other variations
+                                flex_match = re.search(r'Swapped.*?([0-9,.]+).*?(\w{3,}).*?\(\$([0-9,.]+)', swap_info)
+                                
+                                if flex_match:
+                                    amount = flex_match.group(1)
+                                    buy_token = flex_match.group(2)
+                                    dollar_amount = flex_match.group(3)
+                                    logging.info(f"Matched pattern 3: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
+                                else:
+                                    logging.warning(f"Failed to parse swap info with any pattern: {swap_info}")
                     
-                    # Extract Cielo profile URL for the title
-                    cielo_profile_url = None
-                    if message.embeds:
-                        for embed in message.embeds:
-                            for field in embed.fields:
-                                if field.name == 'Profile':
-                                    profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
-                                    if profile_match:
-                                        cielo_profile_url = profile_match.group(1)
-                                        logging.info(f"Found Cielo profile URL for title: {cielo_profile_url}")
+                    # Extract the buy info from swap_info for use in stats_line
+                    buy_info = ""
+                    if 'dollar_amount' in locals() and dollar_amount:
+                        formatted_buy = format_buy_amount(dollar_amount)
+                        if dexscreener_maker_link:
+                            buy_info = f"{formatted_buy} [buy]({dexscreener_maker_link})"
+                        else:
+                            buy_info = f"{formatted_buy} buy"
+                    elif 'amount' in locals() and buy_token != "Unknown":
+                        if dexscreener_maker_link:
+                            buy_info = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
+                        else:
+                            buy_info = f"{amount} {buy_token} buy"
                     
-                    # Update title with buyer's name if available
-                    if credit_user and cielo_profile_url:
-                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url})"
-                    
-                    # Format market cap with dollar sign
-                    if market_cap_value is not None:
-                        formatted_mcap = f"${format_large_number(market_cap_value)}"
+                    # Market cap line with price change in parentheses and buy info
+                    # Add wow emoji before market cap if it's under $1M
+                    if market_cap_value and market_cap_value < 1_000_000:
+                        if buy_info:
+                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {buy_info} ⋅ {chain.lower()}"
+                        else:
+                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {chain.lower()}"
                     else:
-                        formatted_mcap = "N/A"
+                        if buy_info:
+                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {buy_info} ⋅ {chain.lower()}"
+                        else:
+                            stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {chain.lower()}"
                     
-                    # Create multi-line description
-                    
-                    # Title line with token name, symbol, and URL
-                    title_line = ""
-                    # Remove wow emoji from title line
-                    title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
-                    
-                    # Initialize description parts array
-                    description_parts = [title_line]
-                    
-                    # Market cap line with price change in parentheses
-                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {chain.lower()}"
-                    description_parts.append(stats_line)
-                    
-                    # Remove empty line to make spacing more consistent
-                    # description_parts.append("")
+                    # Add the stats line to the description
+                    description_parts = [stats_line]
                     
                     # Format social links and age
                     links_text = []
@@ -274,149 +299,9 @@ Embed Count: %d
                         simplified_age = simplified_age.replace(" month old", "mo old")
                         links_text.append(simplified_age)
                     
-                    # Extract the token used for buying (SOL, ETH, etc.) and add user line below socials
-                    buy_token = "Unknown"
-                    user_line = ""
-                    
-                    if swap_info:
-                        logging.info(f"Attempting to parse swap info: {swap_info}")
-                        
-                        # Try multiple patterns to match Cielo's various formatting styles
-                        
-                        # Pattern 1: Standard format with double asterisks for token (most common)
-                        # Example: Swapped **0.0099** ****WETH**** ($23.81) for...
-                        buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
-                        
-                        if buy_match:
-                            amount = buy_match.group(1)
-                            buy_token = buy_match.group(2)
-                            dollar_amount = buy_match.group(3)
-                            logging.info(f"Matched pattern 1: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
-                        else:
-                            # Pattern 2: Alternative with single asterisks
-                            # Example: Swapped **0.0099** **WETH** ($23.81) for...
-                            alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*\s*\(\$([0-9,.]+)\)', swap_info)
-                            
-                            if alt_match:
-                                amount = alt_match.group(1)
-                                buy_token = alt_match.group(2)
-                                dollar_amount = alt_match.group(3)
-                                logging.info(f"Matched pattern 2: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
-                            else:
-                                # Pattern 3: More flexible pattern to try to catch other variations
-                                flex_match = re.search(r'Swapped.*?([0-9,.]+).*?(\w{3,}).*?\(\$([0-9,.]+)', swap_info)
-                                
-                                if flex_match:
-                                    amount = flex_match.group(1)
-                                    buy_token = flex_match.group(2)
-                                    dollar_amount = flex_match.group(3)
-                                    logging.info(f"Matched pattern 3: amount={amount}, token={buy_token}, dollar_amount=${dollar_amount}")
-                                else:
-                                    logging.warning(f"Failed to parse swap info with any pattern: {swap_info}")
-                        
-                        # Format user line regardless of whether we found a match
-                        # Get the links ready
-                        dex_link = ""
-                        if dexscreener_maker_link:
-                            dex_link = f"[(dex)]({dexscreener_maker_link})"
-                        
-                        # Extract Cielo profile link from embed if available
-                        cielo_link = ""
-                        if message.embeds:
-                            for embed in message.embeds:
-                                for field in embed.fields:
-                                    if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
-                                        cielo_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
-                                        if cielo_match:
-                                            cielo_link = f" [(cielo)]({cielo_match.group(1)})"
-                                            logging.info(f"Found Cielo profile link: {cielo_match.group(1)}")
-                        
-                        # Create user line based on available info
-                        if credit_user:
-                            # Format the credit user as a link if we have dexscreener maker link
-                            user_display = f"[{credit_user}]({dexscreener_maker_link})" if dexscreener_maker_link else credit_user
-                            
-                            if 'dollar_amount' in locals() and dollar_amount:
-                                # Format buy amount using new helper function
-                                formatted_buy = format_buy_amount(dollar_amount)
-                                if dexscreener_maker_link:
-                                    user_line = f"{formatted_buy} [buy]({dexscreener_maker_link})"
-                                else:
-                                    user_line = f"{formatted_buy} buy"
-
-                            elif 'amount' in locals() and buy_token != "Unknown":
-                                # Fallback to token amount if no dollar value found
-                                if dexscreener_maker_link:
-                                    user_line = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
-                                else:
-                                    user_line = f"{amount} {buy_token} buy"
-                            else:
-                                user_line = f"New token"
-
-                            # Add social info after user line
-                            if links_text:
-                                # user_line += f" ⋅ {' ⋅ '.join(links_text)}"  # Commented out to prevent duplication
-                                pass  # Keep the indentation valid
-                        else:
-                            if 'dollar_amount' in locals() and dollar_amount:
-                                # Format buy amount using new helper function
-                                formatted_buy = format_buy_amount(dollar_amount)
-                                if dexscreener_maker_link:
-                                    user_line = f"{formatted_buy} [buy]({dexscreener_maker_link})"
-                                else:
-                                    user_line = f"{formatted_buy} buy"
-
-                            elif 'amount' in locals() and buy_token != "Unknown":
-                                # Fallback to token amount if no dollar value found
-                                if dexscreener_maker_link:
-                                    user_line = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
-                                else:
-                                    user_line = f"{amount} {buy_token} buy"
-                            else:
-                                user_line = "New token"
-                    else:
-                        # No swap info available
-                        if credit_user:
-                            # Format the credit user as a link if we have dexscreener maker link
-                            user_display = f"[{credit_user}]({dexscreener_maker_link})" if dexscreener_maker_link else credit_user
-                            
-                            # Extract Cielo profile link from embed if available
-                            cielo_link = ""
-                            if message.embeds:
-                                for embed in message.embeds:
-                                    for field in embed.fields:
-                                        if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
-                                            cielo_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
-                                            if cielo_match:
-                                                cielo_link = f" [(cielo)]({cielo_match.group(1)})"
-                                                logging.info(f"Found Cielo profile link: {cielo_match.group(1)}")
-                            
-                            user_line = f"{user_display}"
-                            if cielo_link:
-                                # Don't append cielo_link here to prevent duplication with socials later
-                                # user_line += f" {cielo_link}"
-                                pass  # Keep indentation valid
-                        else:
-                            user_line = "New token"
-                    
-                    # Add the user line and social info on the same line if possible
-                    if user_line:
-                        # Check if user_line already contains the social links text
-                        if any(link_text in user_line for link_text in links_text):
-                            # User line already contains social info, just add it as is
-                            description_parts.append(user_line)
-                        else:
-                            # Combine user info and social links into one line with a separator
-                            combined_line = f"{user_line} ⋅ {' ⋅ '.join(links_text)}"
-                            description_parts.append(combined_line)
-                    else:
-                        # Just add the social links if no user info
+                    # Add the social info on its own line
+                    if links_text:
                         description_parts.append(" ⋅ ".join(links_text))
-                    
-                    # Add "wow" emoji and text at the bottom if market cap is under $1M
-                    if market_cap_value and market_cap_value < 1_000_000:
-                        description_parts.append("")  # Add extra line break
-                        description_parts.append("*<:wow:1149703956746997871> Under $1m !*")
                     
                     # Set the description
                     new_embed.description = "\n".join(description_parts)
@@ -479,7 +364,7 @@ Embed Count: %d
                     # Create a placeholder chart URL using the contract and chain
                     chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                     
-                    # Create embed response with same color as normal alerts - use a totally fresh embed
+                    # Create embed response - make sure it's a completely new embed
                     new_embed = discord.Embed(color=0x5b594f)
                     
                     # Add "Buy Alert" title to match digest style
@@ -490,7 +375,7 @@ Embed Count: %d
                     if message.embeds:
                         for embed in message.embeds:
                             for field in embed.fields:
-                                if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
+                                if field.name == 'Profile':
                                     profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
                                     if profile_match:
                                         cielo_profile_url = profile_match.group(1)
@@ -500,12 +385,21 @@ Embed Count: %d
                     if credit_user and cielo_profile_url:
                         new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url})"
                     
-                    # Build description lines to match our regular format
-                    description_parts = []
+                    # Format market cap with dollar sign
+                    if market_cap_value is not None:
+                        formatted_mcap = f"${format_large_number(market_cap_value)}"
+                    else:
+                        formatted_mcap = "N/A"
                     
-                    # Title line with the token name and chart URL
+                    # Create multi-line description
+                    
+                    # Title line with token name, symbol, and URL
+                    title_line = ""
+                    # Remove wow emoji from title line
                     title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
-                    description_parts.append(title_line)
+                    
+                    # Initialize description parts array
+                    description_parts = [title_line]
                     
                     # Add chain info line
                     description_parts.append(f"New token • {chain_info}")
