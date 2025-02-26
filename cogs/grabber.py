@@ -383,7 +383,18 @@ Embed Count: %d
                     
                     # Update title with buyer's name if available
                     if credit_user and cielo_profile_url:
-                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url})"
+                        # Determine which emoji to use based on the buy amount
+                        buy_emoji = ""
+                        if 'dollar_amount' in locals() and dollar_amount:
+                            amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
+                            if amount_float < 250:
+                                buy_emoji = " 🤏"
+                            elif amount_float < 2000:
+                                buy_emoji = " 💰"
+                            else:
+                                buy_emoji = " 🤑"
+                        
+                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url}){buy_emoji}"
                     
                     # Format market cap with dollar sign
                     if market_cap_value is not None:

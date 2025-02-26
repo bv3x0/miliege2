@@ -48,9 +48,9 @@ def get_age_string(created_at):
 
 def format_buy_amount(amount):
     """Format a buy amount according to specific rules:
-    - Under $250: '<$250 buy 🤏'
-    - $250-$1999: '<$2k buy 💰'
-    - $2000+: Round to nearest thousand with 'k' suffix with emoji 🤑 at the end
+    - Under $250: '<$250'
+    - $250-$1999: '<$2k'
+    - $2000+: Round to nearest thousand with 'k' suffix
     """
     try:
         # Convert string to float if needed
@@ -59,13 +59,13 @@ def format_buy_amount(amount):
             amount = float(amount.replace(',', '').replace('$', ''))
         
         if amount < 250:
-            return "<$250 🤏"
+            return "<$250"
         elif amount < 2000:
-            return "<$2k 💰"
+            return "<$2k"
         else:
             # Round to nearest thousand
             rounded = round(amount / 1000)
-            return f"${rounded}k 🤑"
+            return f"${rounded}k"
     except (ValueError, TypeError):
         return str(amount)  # Return original value if conversion fails
 
