@@ -213,19 +213,14 @@ Embed Count: %d
                     
                     # Title line with token name, symbol, and URL
                     title_line = ""
-                    # Add wow emoji only if under $2M market cap
-                    title_emoji = " <:wow:1149703956746997871>" if market_cap_value and market_cap_value < 2_000_000 else ""
-                    
-                    if token_symbol:
-                        title_line = f"## [{token_name} ({token_symbol})]({chart_url}){title_emoji}"
-                    else:
-                        title_line = f"## [{token_name}]({chart_url}){title_emoji}"
+                    # Remove wow emoji from title line
+                    title_line = f"## [{token_name}]({chart_url})"
                     
                     # Initialize description parts array
                     description_parts = [title_line]
                     
-                    # Market cap line now comes first
-                    stats_line = f"{formatted_mcap} mc • {price_change_formatted} • {chain.lower()}"
+                    # Market cap line with price change in parentheses
+                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) • {chain.lower()}"
                     description_parts.append(stats_line)
                     
                     # Remove empty line to make spacing more consistent
@@ -234,9 +229,20 @@ Embed Count: %d
                     # Format social links and age
                     links_text = []
                     if social_parts:
-                        links_text.append(" • ".join(social_parts))
+                        # Lowercase all social links
+                        lowercase_social_parts = []
+                        for part in social_parts:
+                            # Keep the URL structure intact but lowercase the link text
+                            if part.startswith("[Web]("):
+                                part = part.replace("[Web](", "[web](")
+                            elif part.startswith("[𝕏]("):
+                                part = part.replace("[𝕏](", "[𝕏](")  # Keep the special X character
+                            elif part.startswith("[TG]("):
+                                part = part.replace("[TG](", "[tg](")
+                            lowercase_social_parts.append(part)
+                        links_text.append(" · ".join(lowercase_social_parts))  # Change bullet point style
                     else:
-                        links_text.append("No socials")
+                        links_text.append("no socials")  # Lowercase "no socials"
                     if age_string:
                         # Simplify age format to use abbreviated units
                         simplified_age = age_string
@@ -375,11 +381,16 @@ Embed Count: %d
                     # Add the user line and social info on the same line if possible
                     if user_line:
                         # Combine user info and social links into one line with a separator
-                        combined_line = f"{user_line} • {' • '.join(links_text)}"
+                        combined_line = f"{user_line} • {' · '.join(links_text)}"
                         description_parts.append(combined_line)
                     else:
                         # Just add the social links if no user info
-                        description_parts.append(" • ".join(links_text))
+                        description_parts.append(" · ".join(links_text))
+                    
+                    # Add "wow" emoji and text at the bottom if market cap is under $1M
+                    if market_cap_value and market_cap_value < 1_000_000:
+                        description_parts.append("")  # Add extra line break
+                        description_parts.append("*<:wow:1149703956746997871> Under $1m !*")
                     
                     # Set the description
                     new_embed.description = "\n".join(description_parts)
@@ -499,11 +510,11 @@ Embed Count: %d
                                     clean_dollar = dollar_amount.replace(',', '')
                                     rounded_dollar = int(round(float(clean_dollar)))
                                     description_parts.append("")  # Just one blank line
-                                    description_parts.append(f"{user_display} bought ${rounded_dollar:,} • {' • '.join(social_parts)}")
+                                    description_parts.append(f"{user_display} bought ${rounded_dollar:,} • {' · '.join(social_parts)}")
                                 except (ValueError, TypeError):
                                     # Fallback if conversion fails
                                     description_parts.append("")
-                                    description_parts.append(f"{user_display} bought ${dollar_amount} • {' • '.join(social_parts)}")
+                                    description_parts.append(f"{user_display} bought ${dollar_amount} • {' · '.join(social_parts)}")
                             else:
                                 # Try alternative patterns if the first one doesn't match
                                 alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*\s*\(\$([0-9,.]+)\)', swap_info)
@@ -517,22 +528,22 @@ Embed Count: %d
                                         clean_dollar = dollar_amount.replace(',', '')
                                         rounded_dollar = int(round(float(clean_dollar)))
                                         description_parts.append("")
-                                        description_parts.append(f"{user_display} bought ${rounded_dollar:,} • {' • '.join(social_parts)}")
+                                        description_parts.append(f"{user_display} bought ${rounded_dollar:,} • {' · '.join(social_parts)}")
                                     except (ValueError, TypeError):
                                         # Fallback if conversion fails
                                         description_parts.append("")
-                                        description_parts.append(f"{user_display} bought ${dollar_amount} • {' • '.join(social_parts)}")
+                                        description_parts.append(f"{user_display} bought ${dollar_amount} • {' · '.join(social_parts)}")
                                 else:
                                     # Fallback if we can't parse or find dollar amount
                                     description_parts.append("")  # Just one blank line
-                                    description_parts.append(f"{user_display} • {' • '.join(social_parts)}")
+                                    description_parts.append(f"{user_display} • {' · '.join(social_parts)}")
                         else:
                             description_parts.append("")  # Just one blank line
-                            description_parts.append(f"{user_display} • {' • '.join(social_parts)}")
+                            description_parts.append(f"{user_display} • {' · '.join(social_parts)}")
                     else:
                         # No credit user, just add social parts
                         description_parts.append("")  # Just one blank line
-                        description_parts.append(f"{' • '.join(social_parts)}")
+                        description_parts.append(f"{' · '.join(social_parts)}")
                     
                     # Set the description
                     new_embed.description = "\n".join(description_parts)
