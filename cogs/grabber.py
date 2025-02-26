@@ -137,9 +137,11 @@ Embed Count: %d
             dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
             logging.info(f"Querying Dexscreener API: {dex_api_url}")
             
+            # Create a completely fresh embed with no inherited properties
+            channel = message.channel
+            new_embed = discord.Embed(color=0x5b594f)
+            
             async with safe_api_call(self.session, dex_api_url) as dex_data:
-                # Create a completely fresh embed with no inherited properties
-                channel = message.channel
                 
                 if dex_data and 'pairs' in dex_data and dex_data['pairs']:
                     pair = dex_data['pairs'][0]
@@ -345,6 +347,11 @@ Embed Count: %d
                     # Extract token name from swap info if possible
                     token_name = "Unknown Token"
                     token_symbol = ""
+                    market_cap_value = None  # Initialize market_cap_value to avoid reference errors
+                    formatted_mcap = "N/A"  # Initialize formatted_mcap
+                    price_change_formatted = "N/A"  # Initialize price_change_formatted
+                    social_parts = []  # Initialize social_parts
+                    
                     if swap_info:
                         # Try to extract the token name from the swap info
                         name_match = re.search(r'for\s+\*\*[\d,.]+\*\*\s+\*\*\*\*([^*]+)\*\*\*\*', swap_info)
