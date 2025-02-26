@@ -211,7 +211,7 @@ Embed Count: %d
                     if message.embeds:
                         for embed in message.embeds:
                             for field in embed.fields:
-                                if field.name == 'Profile' and 'cielo.finance/profile' in field.value:
+                                if field.name == 'Profile':
                                     profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
                                     if profile_match:
                                         cielo_profile_url = profile_match.group(1)
@@ -355,7 +355,8 @@ Embed Count: %d
 
                             # Add social info after user line
                             if links_text:
-                                user_line += f" ⋅ {' ⋅ '.join(links_text)}"
+                                # user_line += f" ⋅ {' ⋅ '.join(links_text)}"  # Commented out to prevent duplication
+                                pass  # Keep the indentation valid
                         else:
                             if 'dollar_amount' in locals() and dollar_amount:
                                 # Format buy amount using new helper function
@@ -392,15 +393,22 @@ Embed Count: %d
                             
                             user_line = f"{user_display}"
                             if cielo_link:
-                                user_line += f" {cielo_link}"
+                                # Don't append cielo_link here to prevent duplication with socials later
+                                # user_line += f" {cielo_link}"
+                                pass  # Keep indentation valid
                         else:
                             user_line = "New token"
                     
                     # Add the user line and social info on the same line if possible
                     if user_line:
-                        # Combine user info and social links into one line with a separator
-                        combined_line = f"{user_line} ⋅ {' ⋅ '.join(links_text)}"
-                        description_parts.append(combined_line)
+                        # Check if user_line already contains the social links text
+                        if any(link_text in user_line for link_text in links_text):
+                            # User line already contains social info, just add it as is
+                            description_parts.append(user_line)
+                        else:
+                            # Combine user info and social links into one line with a separator
+                            combined_line = f"{user_line} ⋅ {' ⋅ '.join(links_text)}"
+                            description_parts.append(combined_line)
                     else:
                         # Just add the social links if no user info
                         description_parts.append(" ⋅ ".join(links_text))
