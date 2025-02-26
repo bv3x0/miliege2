@@ -274,7 +274,7 @@ Embed Count: %d
                     # Format social links and age
                     links_text = []
                     if social_parts:
-                        # Lowercase all social links
+                        # Keep the URL structure intact but lowercase the link text
                         lowercase_social_parts = []
                         for part in social_parts:
                             # Keep the URL structure intact but lowercase the link text
