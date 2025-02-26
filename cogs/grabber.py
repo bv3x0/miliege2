@@ -217,7 +217,7 @@ Embed Count: %d
                     # Title line with token name, symbol, and URL
                     title_line = ""
                     # Remove wow emoji from title line
-                    title_line = f"## [{token_name}]({chart_url})"
+                    title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
                     
                     # Initialize description parts array
                     description_parts = [title_line]
@@ -467,10 +467,7 @@ Embed Count: %d
                     
                     # Title line with the token name and chart URL
                     title_line = ""
-                    if token_symbol:
-                        title_line = f"## [{token_name} ({token_symbol})]({chart_url}) <:huh:1151138741197479996>"
-                    else:
-                        title_line = f"## [{token_name}]({chart_url}) <:huh:1151138741197479996>"
+                    title_line = f"## [{token_name} ({token_symbol})]({chart_url}) <:huh:1151138741197479996>"
                     description_parts.append(title_line)
                     
                     # Add chain info line

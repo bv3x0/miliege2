@@ -7,8 +7,8 @@ from utils import safe_api_call, format_large_number
 from datetime import datetime, timedelta
 import pytz
 import asyncio
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import desc
+from sqlalchemy.exc import SQLAlchemyError # type: ignore
+from sqlalchemy import desc # type: ignore
 from db.models import Token
 
 class DigestCog(commands.Cog):
@@ -179,9 +179,9 @@ class DigestCog(commands.Cog):
                         logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
                         
                         if percent_change >= 33:
-                            status_emoji = " 😯"  # hushed emoji for 33%+ up
+                            status_emoji = " 🟢"  # green circle for 33%+ up
                         elif percent_change <= -33:
-                            status_emoji = " <:ggggg:1149703938153664633>"  # custom emoji for 33%+ down
+                            status_emoji = " 🔴"  # red circle for 33%+ down
                 except Exception as e:
                     logging.error(f"Error calculating percent change for {name}: {e}")
                     status_emoji = ""  # If there's any error in conversion, don't show any emoji
@@ -197,8 +197,8 @@ class DigestCog(commands.Cog):
                 # Log the values for debugging
                 logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
-                token_line = f"## [{name}]({token['chart_url']}){status_emoji}"
-                stats_line = f"{current_mcap} mc (was {initial_mcap}) ⋅ {chain.lower()}"
+                token_line = f"## [{name}]({token['chart_url']})"
+                stats_line = f"{current_mcap} mc (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
                 
                 description_lines.extend([token_line, stats_line, source_line])
