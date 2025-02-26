@@ -203,6 +203,9 @@ Embed Count: %d
                     # Create embed response - make sure it's a completely new embed
                     new_embed = discord.Embed(color=0x5b594f)
                     
+                    # Add "Buy Alert" title to match digest style
+                    new_embed.title = "Buy Alert"
+                    
                     # Format market cap with dollar sign
                     if market_cap_value is not None:
                         formatted_mcap = f"${format_large_number(market_cap_value)}"
@@ -455,6 +458,9 @@ Embed Count: %d
                     
                     # Create embed response with same color as normal alerts - use a totally fresh embed
                     new_embed = discord.Embed(color=0x5b594f)
+                    
+                    # Add "Buy Alert" title to match digest style
+                    new_embed.title = "Buy Alert"
                     
                     # Build description lines to match our regular format
                     description_parts = []
