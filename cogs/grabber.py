@@ -173,9 +173,6 @@ Embed Count: %d
                         # Format market cap
                         if market_cap_value is not None:
                             formatted_mcap = format_large_number(market_cap_value)
-                            # Add wow emoji if market cap is under $1M
-                            if market_cap_value < 1_000_000:
-                                formatted_mcap = f"{formatted_mcap} <:wow:1149703956746997871>"
                         else:
                             formatted_mcap = "N/A"
                         
@@ -193,17 +190,6 @@ Embed Count: %d
                         # Extract pair creation time
                         pair_created_at = pair.get('pairCreatedAt')
                         age_string = get_age_string(pair_created_at)
-                        # Simplify age format to use abbreviated units without "old"
-                        simplified_age = ""
-                        if age_string:
-                            simplified_age = age_string.replace(" days old", "d")
-                            simplified_age = simplified_age.replace(" day old", "d")
-                            simplified_age = simplified_age.replace(" hours old", "h")
-                            simplified_age = simplified_age.replace(" hour old", "h")
-                            simplified_age = simplified_age.replace(" minutes old", "m")
-                            simplified_age = simplified_age.replace(" minute old", "m")
-                            simplified_age = simplified_age.replace(" months old", "mo")
-                            simplified_age = simplified_age.replace(" month old", "mo")
 
                         # Extract social links from the new format in Dexscreener API
                         social_parts = []
@@ -248,12 +234,8 @@ Embed Count: %d
                             logging.error(f"Error extracting social links: {e}", exc_info=True)
                             # Continue with empty social_parts if there's an error
                         
-                        # Format socials text
-                        socials_text = " ⋅ ".join(social_parts) if social_parts else "none"
-                        
                         # Extract the token used for buying (SOL, ETH, etc.)
                         buy_token = "Unknown"
-                        dollar_amount = None
                         
                         try:
                             if swap_info:
@@ -295,73 +277,113 @@ Embed Count: %d
                             logging.error(f"Error parsing swap info: {e}", exc_info=True)
                             # If we fail to parse swap info, we'll continue with default values
                         
-                        # Format the buy amount
-                        formatted_buy = ""
-                        if dollar_amount:
-                            try:
+                        # Extract the buy info from swap_info for use in stats_line
+                        buy_info = ""
+                        try:
+                            if 'dollar_amount' in locals() and dollar_amount:
                                 formatted_buy = format_buy_amount(dollar_amount)
-                                # Make it a hyperlink if we have dexscreener maker link
                                 if dexscreener_maker_link:
-                                    formatted_buy = f"[{formatted_buy}]({dexscreener_maker_link})"
-                            except Exception as e:
-                                logging.error(f"Error formatting buy amount: {e}", exc_info=True)
-                                formatted_buy = f"${dollar_amount}"
+                                    buy_info = f"{formatted_buy} [buy]({dexscreener_maker_link})"
+                                else:
+                                    buy_info = f"{formatted_buy} buy"
+                            elif 'amount' in locals() and buy_token != "Unknown":
+                                if dexscreener_maker_link:
+                                    buy_info = f"{amount} {buy_token} [buy]({dexscreener_maker_link})"
+                                else:
+                                    buy_info = f"{amount} {buy_token} buy"
+                        except Exception as e:
+                            logging.error(f"Error formatting buy info: {e}", exc_info=True)
+                            buy_info = ""  # Default to empty string if there's an error
                         
                         # Set the Buy Alert title
                         new_embed.title = "Buy Alert"
                         
-                        # Set token name without symbol as description with link to chart - using bold formatting for headline style
-                        new_embed.description = f"**[{token_name}]({chart_url})**"
-                        
-                        # Format buyer's name with link to Cielo profile if available
-                        buyer_display = "Unknown"
+                        # Update title with buyer's name if available
                         if credit_user:
-                            buyer_display = credit_user
-                            if tx_link and "cielo.finance" in tx_link:
-                                # Extract profile URL if available
-                                profile_match = re.search(r'(https://app\.cielo\.finance/profile/[A-Za-z0-9]+)', tx_link)
-                                if profile_match:
-                                    cielo_profile = profile_match.group(1)
-                                    buyer_display = f"[{credit_user}]({cielo_profile})"
+                            # Determine emoji based on dollar amount if available
+                            buy_emoji = ""
+                            try:
+                                if 'dollar_amount' in locals() and dollar_amount:
+                                    amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
+                                    if amount_float < 250:
+                                        buy_emoji = " 🤏"
+                                    elif amount_float < 2000:
+                                        buy_emoji = " 💰"
+                                    else:
+                                        buy_emoji = " 🤑"
+                            except Exception as e:
+                                logging.error(f"Error determining buy emoji: {e}", exc_info=True)
+                                # Continue without emoji if there's an error
+                            
+                            new_embed.title = f"Buy Alert: {credit_user}{buy_emoji}"
                         
-                        # Add the first row of fields: Market cap, Age, Socials
-                        new_embed.add_field(name="Market cap", value=formatted_mcap, inline=True)
-                        new_embed.add_field(name="Age", value=simplified_age, inline=True)
-                        new_embed.add_field(name="Socials", value=socials_text, inline=True)
+                        # Create a title line with token name and symbol
+                        title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
                         
-                        # Add an empty field to create space between rows
-                        new_embed.add_field(name="\u200b", value="\u200b", inline=False)
+                        # Market cap line with price change in parentheses and buy info
+                        # Add wow emoji before market cap if it's under $1M
+                        try:
+                            if market_cap_value and market_cap_value < 1_000_000:
+                                if buy_info:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {buy_info} ⋅ {chain.lower()}"
+                                else:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) <:wow:1149703956746997871> ⋅ {chain.lower()}"
+                            else:
+                                if buy_info:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {buy_info} ⋅ {chain.lower()}"
+                                else:
+                                    stats_line = f"{formatted_mcap} mc ({price_change_formatted}) ⋅ {chain.lower()}"
+                        except Exception as e:
+                            logging.error(f"Error formatting stats line: {e}", exc_info=True)
+                            # Default stats line if there's an error
+                            stats_line = f"mc: {formatted_mcap} ⋅ {chain.lower()}"
                         
-                        # Add the second row of fields: Buyer, Amount, Chain
-                        new_embed.add_field(name="Buyer", value=buyer_display, inline=True)
-                        new_embed.add_field(name="Amount", value=formatted_buy or "Unknown", inline=True)
-                        new_embed.add_field(name="Chain", value=chain.lower(), inline=True)
+                        # Add the title line and stats line to the description
+                        description_parts = [title_line, stats_line]
                         
-                        # Add banner image if available
+                        # Format social links and age
+                        links_text = []
+                        try:
+                            if social_parts:
+                                links_text.append(" ⋅ ".join(social_parts))  # Use the social parts directly, they're already formatted
+                            else:
+                                links_text.append("no socials")  # Lowercase "no socials"
+                            
+                            # Ensure age_string is properly simplified
+                            if age_string:
+                                # Simplify age format to use abbreviated units
+                                simplified_age = age_string
+                                simplified_age = simplified_age.replace(" days old", "d old")
+                                simplified_age = simplified_age.replace(" day old", "d old")
+                                simplified_age = simplified_age.replace(" hours old", "h old")
+                                simplified_age = simplified_age.replace(" hour old", "h old")
+                                simplified_age = simplified_age.replace(" minutes old", "min old")
+                                simplified_age = simplified_age.replace(" minute old", "min old")
+                                simplified_age = simplified_age.replace(" months old", "mo old")
+                                simplified_age = simplified_age.replace(" month old", "mo old")
+                                links_text.append(simplified_age)
+                        except Exception as e:
+                            logging.error(f"Error formatting links and age: {e}", exc_info=True)
+                            # Continue with empty links_text if there's an error
+                        
+                        # Add the social info on its own line
+                        if links_text:
+                            description_parts.append(" ⋅ ".join(links_text))
+                        
+                        # Log the final description to help with debugging
+                        final_description = "\n".join(description_parts)
+                        logging.info(f"Final embed description: {final_description}")
+                        
+                        # Set the description
+                        new_embed.description = final_description
+                        
+                        # Add banner image after the description
                         if banner_image:
                             try:
                                 new_embed.set_image(url=banner_image)
                             except Exception as e:
                                 logging.error(f"Error setting banner image {banner_image}: {e}", exc_info=True)
                                 # Continue without banner if there's an error
-                        
-                        # Add buy amount emoji to footer based on amount
-                        if dollar_amount:
-                            try:
-                                amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
-                                footer_emoji = ""
-                                if amount_float < 250:
-                                    footer_emoji = "🤏"  # Pinching emoji for small buys
-                                elif amount_float < 2000:
-                                    footer_emoji = "💰"  # Money bag for medium buys
-                                else:
-                                    footer_emoji = "🤑"  # Money mouth face for large buys
-                                
-                                # Set footer with just the emoji
-                                new_embed.set_footer(text=footer_emoji)
-                            except Exception as e:
-                                logging.error(f"Error setting footer emoji: {e}", exc_info=True)
-                                # Continue without footer if there's an error
                         
                         # Store token data with raw market cap value
                         token_data = {
