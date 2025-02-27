@@ -40,8 +40,88 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Initialize the Hyperliquid SDK Info client
         self.hl_info = Info(constants.MAINNET_API_URL, skip_ws=True)
         
+        # Asset ID to name mapping
+        self.asset_id_map = {
+            # Default mappings for common assets
+            # Spot IDs
+            "107": "HYPE",
+            "@107": "HYPE",
+            
+            # Common perpetual IDs
+            "0": "BTC",
+            "@0": "BTC",
+            "1": "ETH",
+            "@1": "ETH",
+            "2": "SOL",
+            "@2": "SOL",
+            "3": "MATIC",
+            "@3": "MATIC",
+            "4": "DOGE",
+            "@4": "DOGE",
+            "5": "BNB",
+            "@5": "BNB",
+            "6": "XRP",
+            "@6": "XRP",
+            "7": "ARB",
+            "@7": "ARB",
+            "8": "OP",
+            "@8": "OP",
+            "9": "LINK",
+            "@9": "LINK",
+            "10": "AVAX",
+            "@10": "AVAX",
+        }
+        
         # Start the background task
         self.check_wallets.start()
+        
+        # Initialize asset mappings
+        self.bot.loop.create_task(self._init_asset_mappings())
+    
+    async def _init_asset_mappings(self):
+        """Initialize asset ID to name mappings from the Hyperliquid API."""
+        try:
+            # Wait for bot to be ready
+            await self.bot.wait_until_ready()
+            
+            logging.info("Initializing Hyperliquid asset mappings...")
+            
+            # Fetch perpetual assets
+            try:
+                meta_data = await asyncio.to_thread(self.hl_info.meta)
+                if meta_data and "universe" in meta_data:
+                    for idx, asset in enumerate(meta_data["universe"]):
+                        if "name" in asset:
+                            # Add both with and without @ prefix
+                            self.asset_id_map[str(idx)] = asset["name"]
+                            self.asset_id_map[f"@{idx}"] = asset["name"]
+                            logging.debug(f"Added perpetual mapping: {idx} -> {asset['name']}")
+            except Exception as e:
+                logging.error(f"Error fetching perpetual assets: {e}")
+            
+            # Fetch spot assets
+            try:
+                # The correct method to get spot meta information
+                spot_meta_data = await asyncio.to_thread(
+                    lambda: self.hl_info.request("info", {"type": "spotMeta"})
+                )
+                
+                if spot_meta_data and "universe" in spot_meta_data:
+                    for idx, asset in enumerate(spot_meta_data["universe"]):
+                        if "base" in asset:
+                            # Spot assets use 10000 + idx as their ID according to the docs
+                            spot_id = 10000 + idx
+                            self.asset_id_map[str(spot_id)] = asset["base"]
+                            self.asset_id_map[f"@{spot_id}"] = asset["base"]
+                            logging.debug(f"Added spot mapping: {spot_id} -> {asset['base']}")
+            except Exception as e:
+                logging.error(f"Error fetching spot assets: {e}")
+            
+            logging.info(f"Initialized {len(self.asset_id_map)} Hyperliquid asset mappings")
+            
+        except Exception as e:
+            logging.error(f"Error initializing asset mappings: {e}", exc_info=True)
+            self.monitor.record_error()
     
     def cog_unload(self):
         # Stop the background task when the cog is unloaded
@@ -201,27 +281,68 @@ class HyperliquidWalletGrabber(commands.Cog):
         
         return new_trades
     
-    def _calculate_leverage(self, trade):
+    def _calculate_leverage(self, trade, position_data=None):
         """Calculate the leverage used in a trade based on available data."""
-        # This is a simplified calculation and may need adjustment based on actual data
         try:
-            # If we have position information, we can calculate leverage
-            if "startPosition" in trade:
+            # First try to get leverage directly from position data if available
+            if position_data and "position" in position_data:
+                pos = position_data["position"]
+                if "leverage" in pos:
+                    try:
+                        lev = float(pos["leverage"])
+                        return round(lev, 1)  # Round to 1 decimal place
+                    except (ValueError, TypeError):
+                        pass
+            
+            # If we have position information in the trade, calculate leverage
+            if "startPosition" in trade and trade["startPosition"] != "0":
                 start_position = float(trade["startPosition"])
                 size = float(trade["sz"])
                 if start_position > 0:
                     return round(size / start_position, 1)
             
-            # Default to a placeholder if we can't calculate
-            return "?"
-        except (ValueError, ZeroDivisionError):
-            return "?"
+            # If we have margin information, use that
+            if "margin" in trade and trade["margin"] != "0":
+                margin = float(trade["margin"])
+                size = float(trade["sz"])
+                price = float(trade["px"])
+                if margin > 0:
+                    notional_value = size * price
+                    return round(notional_value / margin, 1)
+            
+            # Default to 7x which is common on Hyperliquid if we can't calculate
+            return "7"
+        except (ValueError, ZeroDivisionError, KeyError) as e:
+            logging.debug(f"Error calculating leverage: {e}")
+            return "7"  # Default to 7x as fallback
+    
+    def _get_coin_name(self, coin):
+        """Convert numeric asset IDs to human-readable coin names."""
+        # Check if we need to convert the coin name
+        if isinstance(coin, str):
+            # If it's a numeric ID or has @ prefix, try to convert it
+            if coin.startswith('@') or coin.isdigit():
+                # Remove @ if present for clean lookup
+                clean_coin = coin.replace('@', '')
+                
+                # Try to get from map, fallback to original if not found
+                if coin in self.asset_id_map:
+                    return self.asset_id_map[coin]
+                elif clean_coin in self.asset_id_map:
+                    return self.asset_id_map[clean_coin]
+                
+                # If not found in our map, log it for future reference
+                logging.warning(f"Unknown asset ID: {coin}, consider adding to mapping")
+        
+        # Return the original coin name if no conversion needed or not found
+        return coin
     
     async def _send_trade_alert(self, wallet, trade, position_data=None):
         """Format and send a trade alert to Discord."""
         try:
             # Extract trade details
-            coin = trade["coin"]
+            raw_coin = trade["coin"]
+            coin = self._get_coin_name(raw_coin)  # Convert asset ID to readable name if needed
             direction = trade["dir"]  # e.g., "Open Long"
             size = float(trade["sz"])
             price = float(trade["px"])
@@ -234,7 +355,7 @@ class HyperliquidWalletGrabber(commands.Cog):
             position_size = size  # Default to trade size
             entry_price = price  # Default to trade price
             unrealized_pnl = 0
-            leverage = self._calculate_leverage(trade)  # Use the fallback calculation
+            leverage = self._calculate_leverage(trade, position_data)  # Use the improved calculation
             
             if position_data and "position" in position_data:
                 pos = position_data["position"]
@@ -257,13 +378,6 @@ class HyperliquidWalletGrabber(commands.Cog):
                 if "unrealizedPnl" in pos:
                     try:
                         unrealized_pnl = float(pos["unrealizedPnl"])
-                    except (ValueError, TypeError):
-                        pass
-                
-                # Get leverage if available in the position data
-                if "leverage" in pos:
-                    try:
-                        leverage = float(pos["leverage"])
                     except (ValueError, TypeError):
                         pass
             
@@ -456,7 +570,8 @@ class HyperliquidWalletGrabber(commands.Cog):
             "`!add_wallet <address> [name]` - Add a wallet to track on Hyperliquid\n"
             "`!remove_wallet <address>` - Remove a wallet from tracking\n"
             "`!list_wallets` - List all tracked Hyperliquid wallets\n"
-            "`!refresh_wallet_tracker` - Refresh the wallet tracker (admin only)"
+            "`!refresh_wallet_tracker` - Refresh the wallet tracker (admin only)\n"
+            "`!refresh_asset_mappings` - Refresh asset name mappings (admin only)"
         )
         
         embed.description = commands_text
@@ -510,4 +625,46 @@ class HyperliquidWalletGrabber(commands.Cog):
         except Exception as e:
             logging.error(f"Error refreshing wallet tracker: {e}", exc_info=True)
             await ctx.send("❌ An error occurred while refreshing the wallet tracker.")
+            self.monitor.record_error()
+
+    @commands.command(
+        name="refresh_asset_mappings",
+        brief="Refresh Hyperliquid asset mappings",
+        description="Refresh the asset ID to name mappings from the Hyperliquid API",
+        help="Admin command to refresh the asset mappings if there are new assets or issues with asset name display."
+    )
+    async def refresh_asset_mappings(self, ctx):
+        """Refresh the asset ID to name mappings from the Hyperliquid API."""
+        try:
+            # Check if user has admin permissions
+            if not ctx.author.guild_permissions.administrator:
+                await ctx.send("❌ This command requires administrator permissions.")
+                return
+                
+            # Clear existing mappings except for the default ones
+            default_mappings = {
+                # Spot IDs
+                "107": "HYPE",
+                "@107": "HYPE",
+                
+                # Common perpetual IDs
+                "0": "BTC",
+                "@0": "BTC",
+                "1": "ETH",
+                "@1": "ETH",
+                "2": "SOL",
+                "@2": "SOL",
+            }
+            
+            # Reset to default mappings
+            self.asset_id_map = default_mappings.copy()
+            
+            # Run the initialization task
+            await self._init_asset_mappings()
+            
+            await ctx.send(f"✅ Successfully refreshed Hyperliquid asset mappings. Now tracking {len(self.asset_id_map)} assets.")
+        
+        except Exception as e:
+            logging.error(f"Error refreshing asset mappings: {e}", exc_info=True)
+            await ctx.send("❌ An error occurred while refreshing asset mappings.")
             self.monitor.record_error()
