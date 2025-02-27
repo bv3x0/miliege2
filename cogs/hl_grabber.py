@@ -8,6 +8,10 @@ from utils import format_large_number, safe_api_call
 from db.models import Base, Token
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
 
+# Import the Hyperliquid SDK
+from hyperliquid.info import Info
+from hyperliquid.utils import constants
+
 # Define the new database model for tracked wallets
 class TrackedWallet(Base):
     __tablename__ = 'tracked_wallets'
@@ -32,6 +36,9 @@ class HyperliquidWalletGrabber(commands.Cog):
         self.digest_cog = digest_cog
         self.db_session = bot.db_session
         self.channel_id = channel_id  # Channel to send alerts to
+        
+        # Initialize the Hyperliquid SDK Info client
+        self.hl_info = Info(constants.MAINNET_API_URL, skip_ws=True)
         
         # Start the background task
         self.check_wallets.start()
@@ -65,80 +72,82 @@ class HyperliquidWalletGrabber(commands.Cog):
     async def _check_wallet_trades(self, wallet):
         """Check a specific wallet for new trades and fetch position data."""
         try:
-            # First, fetch recent trades
-            url = "https://api.hyperliquid.xyz/info"
-            trades_payload = {
-                "type": "userFills",
-                "user": wallet.address
-            }
+            # Use the SDK to fetch user fills (trades)
+            trades_data = await asyncio.to_thread(
+                self.hl_info.user_fills,
+                wallet.address
+            )
             
-            async with self.session.post(url, json=trades_payload) as response:
-                if response.status != 200:
-                    logging.error(f"Error fetching trades for wallet {wallet.address}: {response.status}")
-                    return
+            # Log the number of trades fetched
+            logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
+            
+            # Update the last checked time
+            wallet.last_checked_time = datetime.now()
+            
+            # Use the SDK to fetch user state (positions)
+            positions_data = await asyncio.to_thread(
+                self.hl_info.user_state,
+                wallet.address
+            )
+            
+            # Fetch leverage and margin data
+            leverage_data = await asyncio.to_thread(
+                self.hl_info.user_leverage_and_margin,
+                wallet.address
+            )
+            
+            logging.debug(f"Fetched positions and leverage data for wallet {wallet.address}")
+            
+            # Store positions by asset for easy lookup
+            positions_by_asset = {}
+            if positions_data and "assetPositions" in positions_data:
+                for position in positions_data["assetPositions"]:
+                    if "position" in position and "coin" in position["position"]:
+                        coin = position["position"]["coin"]
+                        positions_by_asset[coin] = position
+                        
+                        # Add leverage information from leverage_data if available
+                        if leverage_data and "leverageByAsset" in leverage_data:
+                            for lev_asset in leverage_data["leverageByAsset"]:
+                                if lev_asset["coin"] == coin:
+                                    # Add leverage info to the position data
+                                    if "position" in positions_by_asset[coin]:
+                                        positions_by_asset[coin]["position"]["leverage"] = lev_asset["leverage"]
+                                        break
+            
+            # Filter out trades we've already seen
+            if not trades_data:
+                logging.debug(f"No trades found for wallet {wallet.address}")
+                self.db_session.commit()  # Just update the last checked time
+                return
                 
-                trades_data = await response.json()
-                # Reduce log verbosity - only log count of trades, not all trade data
-                logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
+            # For newly added wallets, don't show old trades
+            if not wallet.last_trade_id:
+                # Store the most recent trade ID without sending alerts
+                if trades_data:
+                    # Sort by time in descending order (newest first)
+                    sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
+                    wallet.last_trade_id = str(sorted_trades[0]["tid"])
+                    logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet.last_trade_id}")
+                self.db_session.commit()
+                return
                 
-                # Update the last checked time
-                wallet.last_checked_time = datetime.now()
+            new_trades = self._filter_new_trades(trades_data, wallet.last_trade_id)
+            
+            if new_trades:
+                logging.info(f"Found {len(new_trades)} new trades for wallet {wallet.address}")
                 
-                # Now fetch current positions data
-                positions_payload = {
-                    "type": "userState",  # Changed from "clearinghouse" to "userState"
-                    "user": wallet.address
-                }
+                # Update the last seen trade ID (assuming trades are sorted by time, newest first)
+                wallet.last_trade_id = str(new_trades[0]["tid"])
+                self.db_session.commit()
                 
-                positions_data = {}
-                async with self.session.post(url, json=positions_payload) as positions_response:
-                    if positions_response.status == 200:
-                        positions_data = await positions_response.json()
-                        logging.debug(f"Fetched positions for wallet {wallet.address}")
-                    else:
-                        logging.error(f"Error fetching positions for wallet {wallet.address}: {positions_response.status}")
-                
-                # Store positions by asset for easy lookup
-                positions_by_asset = {}
-                if positions_data and "assetPositions" in positions_data:
-                    for position in positions_data["assetPositions"]:
-                        if "position" in position and "coin" in position["position"]:
-                            coin = position["position"]["coin"]
-                            positions_by_asset[coin] = position
-                
-                # Filter out trades we've already seen
-                if not trades_data:
-                    logging.debug(f"No trades found for wallet {wallet.address}")
-                    self.db_session.commit()  # Just update the last checked time
-                    return
-                    
-                # For newly added wallets, don't show old trades
-                if not wallet.last_trade_id:
-                    # Store the most recent trade ID without sending alerts
-                    if trades_data:
-                        # Sort by time in descending order (newest first)
-                        sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
-                        wallet.last_trade_id = str(sorted_trades[0]["tid"])
-                        logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet.last_trade_id}")
-                    self.db_session.commit()
-                    return
-                    
-                new_trades = self._filter_new_trades(trades_data, wallet.last_trade_id)
-                
-                if new_trades:
-                    logging.info(f"Found {len(new_trades)} new trades for wallet {wallet.address}")
-                    
-                    # Update the last seen trade ID (assuming trades are sorted by time, newest first)
-                    wallet.last_trade_id = str(new_trades[0]["tid"])
-                    self.db_session.commit()
-                    
-                    # Send alerts for new trades (newest first)
-                    for trade in new_trades:
-                        # Get position data for this asset if available
-                        position_data = positions_by_asset.get(trade["coin"], {})
-                        await self._send_trade_alert(wallet, trade, position_data)
-                else:
-                    self.db_session.commit()  # Just update the last checked time
+                # Send alerts for new trades (newest first)
+                for trade in new_trades:
+                    # Get position data for this asset if available
+                    position_data = positions_by_asset.get(trade["coin"], {})
+                    await self._send_trade_alert(wallet, trade, position_data)
+            else:
+                self.db_session.commit()  # Just update the last checked time
         
         except Exception as e:
             logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
@@ -195,7 +204,7 @@ class HyperliquidWalletGrabber(commands.Cog):
             position_size = size  # Default to trade size
             entry_price = price  # Default to trade price
             unrealized_pnl = 0
-            leverage = self._calculate_leverage(trade)
+            leverage = self._calculate_leverage(trade)  # Fallback calculation
             
             if position_data and "position" in position_data:
                 pos = position_data["position"]
@@ -221,7 +230,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                     except (ValueError, TypeError):
                         pass
                 
-                # Get leverage if available
+                # Get leverage from the enhanced position data
                 if "leverage" in pos:
                     try:
                         leverage = float(pos["leverage"])
