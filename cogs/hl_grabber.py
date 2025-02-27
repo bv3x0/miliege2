@@ -51,13 +51,30 @@ class HyperliquidWalletGrabber(commands.Cog):
     async def check_wallets(self):
         """Check all tracked wallets for new trades."""
         try:
+            # Use a fresh query to get the current list of wallets
             wallets = self.db_session.query(TrackedWallet).all()
-            logging.info(f"Checking {len(wallets)} Hyperliquid wallets for new trades")
+            wallet_count = len(wallets)
+            logging.info(f"Checking {wallet_count} Hyperliquid wallets for new trades")
             
+            if wallet_count == 0:
+                logging.debug("No wallets to check, skipping wallet check cycle")
+                return
+                
             for wallet in wallets:
-                await self._check_wallet_trades(wallet)
-                # Add a small delay between wallet checks to avoid rate limiting
-                await asyncio.sleep(1)
+                try:
+                    # Verify wallet still exists before checking
+                    wallet_check = self.db_session.query(TrackedWallet).filter_by(id=wallet.id).first()
+                    if not wallet_check:
+                        logging.warning(f"Wallet {wallet.address} was deleted during check cycle, skipping")
+                        continue
+                        
+                    await self._check_wallet_trades(wallet)
+                    # Add a small delay between wallet checks to avoid rate limiting
+                    await asyncio.sleep(1)
+                except Exception as wallet_error:
+                    # Log error but continue with other wallets
+                    logging.error(f"Error checking individual wallet {wallet.address}: {wallet_error}", exc_info=True)
+                    self.monitor.record_error()
                 
         except Exception as e:
             logging.error(f"Error in Hyperliquid wallet check task: {e}", exc_info=True)
@@ -72,6 +89,12 @@ class HyperliquidWalletGrabber(commands.Cog):
     async def _check_wallet_trades(self, wallet):
         """Check a specific wallet for new trades and fetch position data."""
         try:
+            # Double-check that the wallet still exists in the database
+            wallet_exists = self.db_session.query(TrackedWallet).filter_by(id=wallet.id).first()
+            if not wallet_exists:
+                logging.warning(f"Wallet {wallet.address} no longer exists in database, skipping trade check")
+                return
+                
             # Use the SDK to fetch user fills (trades)
             trades_data = await asyncio.to_thread(
                 self.hl_info.user_fills,
@@ -103,7 +126,11 @@ class HyperliquidWalletGrabber(commands.Cog):
             # Filter out trades we've already seen
             if not trades_data:
                 logging.debug(f"No trades found for wallet {wallet.address}")
-                self.db_session.commit()  # Just update the last checked time
+                try:
+                    self.db_session.commit()  # Just update the last checked time
+                except Exception as db_error:
+                    logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
+                    self.db_session.rollback()  # Roll back on error
                 return
                 
             # For newly added wallets, don't show old trades
@@ -114,7 +141,11 @@ class HyperliquidWalletGrabber(commands.Cog):
                     sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
                     wallet.last_trade_id = str(sorted_trades[0]["tid"])
                     logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet.last_trade_id}")
-                self.db_session.commit()
+                try:
+                    self.db_session.commit()
+                except Exception as db_error:
+                    logging.error(f"Database error initializing trade ID for wallet {wallet.address}: {db_error}")
+                    self.db_session.rollback()  # Roll back on error
                 return
                 
             new_trades = self._filter_new_trades(trades_data, wallet.last_trade_id)
@@ -124,7 +155,12 @@ class HyperliquidWalletGrabber(commands.Cog):
                 
                 # Update the last seen trade ID (assuming trades are sorted by time, newest first)
                 wallet.last_trade_id = str(new_trades[0]["tid"])
-                self.db_session.commit()
+                try:
+                    self.db_session.commit()
+                except Exception as db_error:
+                    logging.error(f"Database error updating trade ID for wallet {wallet.address}: {db_error}")
+                    self.db_session.rollback()  # Roll back on error
+                    return  # Skip sending alerts if we can't update the database
                 
                 # Send alerts for new trades (newest first)
                 for trade in new_trades:
@@ -132,11 +168,20 @@ class HyperliquidWalletGrabber(commands.Cog):
                     position_data = positions_by_asset.get(trade["coin"], {})
                     await self._send_trade_alert(wallet, trade, position_data)
             else:
-                self.db_session.commit()  # Just update the last checked time
+                try:
+                    self.db_session.commit()  # Just update the last checked time
+                except Exception as db_error:
+                    logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
+                    self.db_session.rollback()  # Roll back on error
         
         except Exception as e:
             logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
             self.monitor.record_error()
+            # Make sure to rollback the session on error
+            try:
+                self.db_session.rollback()
+            except Exception as rollback_error:
+                logging.error(f"Error rolling back session: {rollback_error}")
     
     def _filter_new_trades(self, trades, last_trade_id):
         """Filter out trades we've already seen based on the last trade ID."""
@@ -321,18 +366,53 @@ class HyperliquidWalletGrabber(commands.Cog):
     async def remove_wallet(self, ctx, address: str):
         """Remove a wallet from tracking."""
         try:
+            # Temporarily pause the background task if it's running
+            was_running = False
+            if self.check_wallets.is_running():
+                was_running = True
+                self.check_wallets.cancel()
+                logging.info(f"Paused wallet checking task to remove wallet {address}")
+                await asyncio.sleep(1)  # Give it a moment to stop
+            
+            # Find the wallet in the database
             wallet = self.db_session.query(TrackedWallet).filter_by(address=address).first()
             if wallet:
+                wallet_id = wallet.id  # Store ID for verification
+                wallet_address = wallet.address  # Store address for logging
+                
+                # Delete the wallet
                 self.db_session.delete(wallet)
                 self.db_session.commit()
-                await ctx.send(f"✅ Stopped tracking Hyperliquid wallet {address}")
+                logging.info(f"Deleted wallet {wallet_address} (ID: {wallet_id}) from database")
+                
+                # Verify the wallet was actually deleted
+                verification = self.db_session.query(TrackedWallet).filter_by(address=address).first()
+                if verification:
+                    logging.error(f"Failed to delete wallet {address} - still exists in database")
+                    await ctx.send("❌ Failed to remove wallet. Please try again or restart the bot.")
+                else:
+                    logging.info(f"Successfully verified wallet {address} was removed from database")
+                    await ctx.send(f"✅ Stopped tracking Hyperliquid wallet {address}")
             else:
                 await ctx.send("❌ Wallet not found in tracking list")
+            
+            # Restart the background task if it was running
+            if was_running:
+                self.check_wallets.start()
+                logging.info("Resumed wallet checking task")
         
         except Exception as e:
             logging.error(f"Error removing wallet: {e}", exc_info=True)
             await ctx.send("❌ An error occurred while removing the wallet.")
             self.monitor.record_error()
+            
+            # Make sure the task is restarted even if there was an error
+            if 'was_running' in locals() and was_running and not self.check_wallets.is_running():
+                try:
+                    self.check_wallets.start()
+                    logging.info("Resumed wallet checking task after error")
+                except Exception as restart_error:
+                    logging.error(f"Failed to restart wallet checking task: {restart_error}")
     
     @commands.command(
         name="list_wallets",
@@ -375,8 +455,59 @@ class HyperliquidWalletGrabber(commands.Cog):
         commands_text = (
             "`!add_wallet <address> [name]` - Add a wallet to track on Hyperliquid\n"
             "`!remove_wallet <address>` - Remove a wallet from tracking\n"
-            "`!list_wallets` - List all tracked Hyperliquid wallets"
+            "`!list_wallets` - List all tracked Hyperliquid wallets\n"
+            "`!refresh_wallet_tracker` - Refresh the wallet tracker (admin only)"
         )
         
         embed.description = commands_text
         await ctx.send(embed=embed)
+
+    @commands.command(
+        name="refresh_wallet_tracker",
+        brief="Refresh the wallet tracker",
+        description="Refresh the wallet tracker by restarting the background task and refreshing the database session",
+        help="Admin command to refresh the wallet tracker if there are issues with wallet tracking."
+    )
+    async def refresh_wallet_tracker(self, ctx):
+        """Refresh the wallet tracker by restarting the background task and refreshing the database session."""
+        try:
+            # Check if user has admin permissions
+            if not ctx.author.guild_permissions.administrator:
+                await ctx.send("❌ This command requires administrator permissions.")
+                return
+                
+            # Stop the background task if it's running
+            was_running = False
+            if self.check_wallets.is_running():
+                was_running = True
+                self.check_wallets.cancel()
+                logging.info("Stopped wallet checking task for refresh")
+                await asyncio.sleep(1)  # Give it a moment to stop
+            
+            # Refresh the database session
+            try:
+                # Close the current session
+                self.db_session.close()
+                # Get a fresh session from the bot
+                self.db_session = self.bot.db.get_session()
+                logging.info("Refreshed database session for wallet tracker")
+            except Exception as db_error:
+                logging.error(f"Error refreshing database session: {db_error}", exc_info=True)
+                await ctx.send("❌ Error refreshing database session. Check logs for details.")
+                self.monitor.record_error()
+                return
+            
+            # Restart the background task
+            try:
+                self.check_wallets.start()
+                logging.info("Restarted wallet checking task after refresh")
+                await ctx.send("✅ Successfully refreshed wallet tracker")
+            except Exception as restart_error:
+                logging.error(f"Error restarting wallet checking task: {restart_error}", exc_info=True)
+                await ctx.send("❌ Error restarting wallet checking task. Check logs for details.")
+                self.monitor.record_error()
+        
+        except Exception as e:
+            logging.error(f"Error refreshing wallet tracker: {e}", exc_info=True)
+            await ctx.send("❌ An error occurred while refreshing the wallet tracker.")
+            self.monitor.record_error()
