@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 from utils import format_large_number, safe_api_call
 from db.models import Base, Token
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
 
 # Define the new database model for tracked wallets
 class TrackedWallet(Base):
@@ -78,14 +78,15 @@ class HyperliquidWalletGrabber(commands.Cog):
                     return
                 
                 trades_data = await response.json()
-                logging.debug(f"Fetched trades for wallet {wallet.address}: {trades_data}")
+                # Reduce log verbosity - only log count of trades, not all trade data
+                logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
                 
                 # Update the last checked time
                 wallet.last_checked_time = datetime.now()
                 
                 # Now fetch current positions data
                 positions_payload = {
-                    "type": "clearinghouse",
+                    "type": "userState",  # Changed from "clearinghouse" to "userState"
                     "user": wallet.address
                 }
                 
@@ -93,7 +94,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                 async with self.session.post(url, json=positions_payload) as positions_response:
                     if positions_response.status == 200:
                         positions_data = await positions_response.json()
-                        logging.debug(f"Fetched positions for wallet {wallet.address}: {positions_data}")
+                        logging.debug(f"Fetched positions for wallet {wallet.address}")
                     else:
                         logging.error(f"Error fetching positions for wallet {wallet.address}: {positions_response.status}")
                 
@@ -109,6 +110,17 @@ class HyperliquidWalletGrabber(commands.Cog):
                 if not trades_data:
                     logging.debug(f"No trades found for wallet {wallet.address}")
                     self.db_session.commit()  # Just update the last checked time
+                    return
+                    
+                # For newly added wallets, don't show old trades
+                if not wallet.last_trade_id:
+                    # Store the most recent trade ID without sending alerts
+                    if trades_data:
+                        # Sort by time in descending order (newest first)
+                        sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
+                        wallet.last_trade_id = str(sorted_trades[0]["tid"])
+                        logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet.last_trade_id}")
+                    self.db_session.commit()
                     return
                     
                 new_trades = self._filter_new_trades(trades_data, wallet.last_trade_id)
