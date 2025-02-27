@@ -10,6 +10,7 @@ import asyncio
 from sqlalchemy.exc import SQLAlchemyError # type: ignore
 from sqlalchemy import desc # type: ignore
 from db.models import Token
+import re
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
@@ -155,6 +156,12 @@ class DigestCog(commands.Cog):
                             
                         # Remove $ symbol
                         clean_str = mcap_str.replace('$', '')
+                        
+                        # Remove Discord emoji patterns (like <:wow:1149703956746997871>)
+                        clean_str = re.sub(r'<:[a-zA-Z0-9_]+:[0-9]+>', '', clean_str)
+                        
+                        # Strip any extra whitespace that might be left after removing emojis
+                        clean_str = clean_str.strip()
                         
                         # Handle suffixes properly (both uppercase and lowercase)
                         if 'M' in clean_str or 'm' in clean_str:
