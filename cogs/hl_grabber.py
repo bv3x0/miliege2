@@ -70,6 +70,8 @@ class HyperliquidWalletGrabber(commands.Cog):
             "@9": "LINK",
             "10": "AVAX",
             "@10": "AVAX",
+            "10000": "USDC",
+            "@10000": "USDC",
         }
         
         # Start the background task
@@ -101,10 +103,7 @@ class HyperliquidWalletGrabber(commands.Cog):
             
             # Fetch spot assets
             try:
-                # The correct method to get spot meta information
-                spot_meta_data = await asyncio.to_thread(
-                    lambda: self.hl_info.request("info", {"type": "spotMeta"})
-                )
+                spot_meta_data = await asyncio.to_thread(self.hl_info.spot_meta)
                 
                 if spot_meta_data and "universe" in spot_meta_data:
                     for idx, asset in enumerate(spot_meta_data["universe"]):
@@ -646,6 +645,8 @@ class HyperliquidWalletGrabber(commands.Cog):
                 # Spot IDs
                 "107": "HYPE",
                 "@107": "HYPE",
+                "10000": "USDC",
+                "@10000": "USDC",
                 
                 # Common perpetual IDs
                 "0": "BTC",
