@@ -15,6 +15,7 @@ from cogs.rick_grabber import RickGrabber
 import aiohttp
 from db.engine import Database
 from db.models import Token
+from cogs.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
 
 # Enhanced logging setup
 def setup_logging():
@@ -62,6 +63,9 @@ load_dotenv()
 token = os.getenv('DISCORD_BOT_TOKEN')
 daily_digest_channel_id = os.getenv('DAILY_DIGEST_CHANNEL_ID')
 database_url = os.getenv('DATABASE_URL')  # Optional, will use default if not set
+hyperliquid_alerts_channel_id = os.getenv('HYPERLIQUID_ALERTS_CHANNEL_ID')
+if hyperliquid_alerts_channel_id:
+    hyperliquid_alerts_channel_id = int(hyperliquid_alerts_channel_id)
 
 # Validate configuration
 if not token:
@@ -134,6 +138,8 @@ class DiscordBot(commands.Bot):
         await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
+        await self.add_cog(HyperliquidWalletGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog, daily_digest_channel_id))
+        logger.info("Hyperliquid Wallet Grabber loaded successfully")
         logger.info("Cogs loaded successfully")
 
     async def on_ready(self):
@@ -206,6 +212,78 @@ class DiscordBot(commands.Bot):
         except Exception as e:
             logger.error(f"Error in status command: {e}")
             await ctx.send("❌ **Error:** Unable to fetch bot status.")
+
+    @commands.command(name="help")
+    async def help_command(self, ctx, command_name=None):
+        """Display help information for commands"""
+        if command_name:
+            # Help for a specific command
+            command = self.get_command(command_name)
+            if command:
+                embed = discord.Embed(
+                    title=f"Help: {command.name}",
+                    description=command.help or command.description or "No description available.",
+                    color=0x5b594f
+                )
+                
+                # Add usage info if available
+                if hasattr(command, 'brief'):
+                    embed.add_field(name="Brief", value=command.brief, inline=False)
+                
+                # Add syntax
+                params = []
+                for param in command.clean_params.values():
+                    if param.default == param.empty:
+                        params.append(f"<{param.name}>")
+                    else:
+                        params.append(f"[{param.name}]")
+                
+                syntax = f"!{command.name} {' '.join(params)}"
+                embed.add_field(name="Syntax", value=f"`{syntax}`", inline=False)
+                
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send(f"Command '{command_name}' not found.")
+        else:
+            # General help - list all commands by category
+            embed = discord.Embed(
+                title="Bot Commands",
+                description="Here are the available commands. Use `!help <command>` for more details on a specific command.",
+                color=0x5b594f
+            )
+            
+            # Group commands by cog
+            cog_commands = {}
+            for command in self.commands:
+                cog_name = command.cog_name or "No Category"
+                if cog_name not in cog_commands:
+                    cog_commands[cog_name] = []
+                cog_commands[cog_name].append(command)
+            
+            # Add fields for each category
+            for cog_name, commands_list in cog_commands.items():
+                # Skip hidden commands
+                visible_commands = [cmd for cmd in commands_list if not cmd.hidden]
+                if not visible_commands:
+                    continue
+                    
+                # Format command list
+                command_text = "\n".join([
+                    f"`!{cmd.name}` - {cmd.brief or 'No description'}"
+                    for cmd in visible_commands
+                ])
+                
+                embed.add_field(name=cog_name, value=command_text, inline=False)
+            
+            # Add a special section for Hyperliquid wallet commands
+            hyperliquid_commands = [
+                "`!add_wallet <address> [name]` - Add a wallet to track on Hyperliquid",
+                "`!remove_wallet <address>` - Remove a wallet from tracking",
+                "`!list_wallets` - List all tracked Hyperliquid wallets"
+            ]
+            embed.add_field(name="Hyperliquid Wallet Commands", value="\n".join(hyperliquid_commands), inline=False)
+            
+            await ctx.send(embed=embed)
 
     async def close(self):
         # Close the database connection
