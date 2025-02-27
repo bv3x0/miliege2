@@ -341,8 +341,11 @@ Embed Count: %d
                             logging.error(f"Error formatting socials: {e}", exc_info=True)
                             socials_text = "no socials"
                         
-                        # First stats line: market cap ⋅ age ⋅ chain
-                        stats_line_1 = f"{stats_line_1} ⋅ {simplified_age} ⋅ {chain.lower()}"
+                        # First stats line: Add wow emoji to market cap if applicable
+                        if has_wow_emoji:
+                            stats_line_1 = f"<:wow:1149703956746997871> {stats_line_1} ⋅ {simplified_age} ⋅ {chain.lower()}"
+                        else:
+                            stats_line_1 = f"{stats_line_1} ⋅ {simplified_age} ⋅ {chain.lower()}"
                         
                         # Second line: just social links
                         stats_line_2 = socials_text
@@ -350,9 +353,8 @@ Embed Count: %d
                         # Add the title line and stats lines to the description
                         description_parts = [title_line, stats_line_1]
                         
-                        # Only add social links line if there are any
-                        if socials_text and socials_text != "no socials":
-                            description_parts.append(stats_line_2)
+                        # Always add social links line, even if it's "no socials"
+                        description_parts.append(stats_line_2)
                         
                         # Log the final description to help with debugging
                         final_description = "\n".join(description_parts)
@@ -369,13 +371,9 @@ Embed Count: %d
                                 logging.error(f"Error setting banner image {banner_image}: {e}", exc_info=True)
                                 # Continue without banner if there's an error
                         
-                        # Set footer with wow emoji (if applicable), buy amount emoji, and buyer
+                        # Set footer with buy amount emoji and buyer (remove wow emoji from footer)
                         try:
                             footer_parts = []
-                            
-                            # Add wow emoji if market cap is under $1M
-                            if has_wow_emoji:
-                                footer_parts.append("<:wow:1149703956746997871>")
                             
                             # Add buy amount emoji based on amount
                             if 'dollar_amount' in locals() and dollar_amount:
