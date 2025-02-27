@@ -90,13 +90,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                 wallet.address
             )
             
-            # Fetch leverage and margin data
-            leverage_data = await asyncio.to_thread(
-                self.hl_info.user_leverage_and_margin,
-                wallet.address
-            )
-            
-            logging.debug(f"Fetched positions and leverage data for wallet {wallet.address}")
+            logging.debug(f"Fetched positions for wallet {wallet.address}")
             
             # Store positions by asset for easy lookup
             positions_by_asset = {}
@@ -105,15 +99,6 @@ class HyperliquidWalletGrabber(commands.Cog):
                     if "position" in position and "coin" in position["position"]:
                         coin = position["position"]["coin"]
                         positions_by_asset[coin] = position
-                        
-                        # Add leverage information from leverage_data if available
-                        if leverage_data and "leverageByAsset" in leverage_data:
-                            for lev_asset in leverage_data["leverageByAsset"]:
-                                if lev_asset["coin"] == coin:
-                                    # Add leverage info to the position data
-                                    if "position" in positions_by_asset[coin]:
-                                        positions_by_asset[coin]["position"]["leverage"] = lev_asset["leverage"]
-                                        break
             
             # Filter out trades we've already seen
             if not trades_data:
@@ -204,7 +189,7 @@ class HyperliquidWalletGrabber(commands.Cog):
             position_size = size  # Default to trade size
             entry_price = price  # Default to trade price
             unrealized_pnl = 0
-            leverage = self._calculate_leverage(trade)  # Fallback calculation
+            leverage = self._calculate_leverage(trade)  # Use the fallback calculation
             
             if position_data and "position" in position_data:
                 pos = position_data["position"]
@@ -230,7 +215,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                     except (ValueError, TypeError):
                         pass
                 
-                # Get leverage from the enhanced position data
+                # Get leverage if available in the position data
                 if "leverage" in pos:
                     try:
                         leverage = float(pos["leverage"])
