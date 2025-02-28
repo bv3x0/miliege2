@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError # type: ignore
 from sqlalchemy import desc # type: ignore
 from db.models import Token
 import re
+from utils.colors import EMBED_BORDER  # Import the color constant
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
@@ -118,8 +119,13 @@ class DigestCog(commands.Cog):
             return None
 
         embed = discord.Embed(
-            title="Hourly Digest" if is_hourly else "Latest Alerts"
+            color=EMBED_BORDER  # Use consistent border color
         )
+        
+        # Move title to author field with icon
+        title = "Hourly Digest" if is_hourly else "Latest Alerts"
+        embed.set_author(name=title, icon_url="https://cdn.discordapp.com/emojis/1304234480742957137.webp")
+        
         recent_tokens = list(tokens.items())[-10:]  # Last 10 tokens
         
         description_lines = []

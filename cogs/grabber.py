@@ -4,6 +4,7 @@ import re
 import logging
 import asyncio
 from utils import format_large_number, get_age_string, safe_api_call, format_buy_amount
+from utils.colors import EMBED_BORDER  # Import the color constant
 
 class TokenGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
@@ -151,7 +152,10 @@ Embed Count: %d
                         logging.info(f"Found pair data: {pair.get('baseToken', {}).get('name', 'Unknown')}")
                         
                         # Create a new embed with the standard color
-                        new_embed = discord.Embed(color=0x5b594f)
+                        new_embed = discord.Embed(color=EMBED_BORDER)
+                        
+                        # Move title to author field with icon
+                        new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
                         
                         # Extract data
                         chain = pair.get('chainId', 'Unknown Chain')
@@ -294,12 +298,6 @@ Embed Count: %d
                         except Exception as e:
                             logging.error(f"Error formatting buy info: {e}", exc_info=True)
                             buy_info = ""  # Default to empty string if there's an error
-                        
-                        # Set the Buy Alert title
-                        new_embed.title = "Buy Alert"
-                        
-                        # Create a title line with token name only (no symbol)
-                        title_line = f"## [{token_name}]({dexscreener_maker_link or chart_url})"
                         
                         # Format market cap with dollar sign and "mc" suffix
                         try:
@@ -444,7 +442,7 @@ Embed Count: %d
                                 simplified_embed = discord.Embed(
                                     title="Buy Alert", 
                                     description=f"Token: {token_name}\nAddress: `{contract_address}`",
-                                    color=0x5b594f
+                                    color=EMBED_BORDER
                                 )
                                 await channel.send(embed=simplified_embed)
                             except Exception as fallback_e:
@@ -476,7 +474,7 @@ Embed Count: %d
                         logging.error(f"Empty pairs array in Dexscreener response: {dex_data}")
                     
                     # Create a completely fresh embed for the error case
-                    new_embed = discord.Embed(color=0x5b594f)
+                    new_embed = discord.Embed(color=EMBED_BORDER)
                     
                     # Extract token name from swap info if possible
                     token_name = "Unknown Token"
@@ -537,7 +535,7 @@ Embed Count: %d
                     chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                     
                     # Add "Buy Alert" title to match digest style
-                    new_embed.title = "Buy Alert"
+                    new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
                     
                     # Extract Cielo profile URL for the title
                     cielo_profile_url = None
@@ -563,7 +561,8 @@ Embed Count: %d
                             else:
                                 buy_emoji = " 🤑"
                         
-                        new_embed.title = f"Buy Alert: [{credit_user}]({cielo_profile_url}){buy_emoji}"
+                        # Set author field instead of title
+                        new_embed.set_author(name=f"Buy Alert: {credit_user}{buy_emoji}", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
                     
                     # Create multi-line description
                     

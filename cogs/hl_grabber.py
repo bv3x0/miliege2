@@ -8,6 +8,7 @@ from utils import format_large_number, safe_api_call
 from db.models import Base, Token
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
 from collections import defaultdict, OrderedDict
+from utils.colors import EMBED_BORDER  # Import the color constant
 
 # Import the Hyperliquid SDK
 from hyperliquid.info import Info
@@ -509,26 +510,14 @@ class HyperliquidWalletGrabber(commands.Cog):
                                 k.split(':')[0]  # Then by coin
                             ))
         
-        # Determine the color for the entire embed based on the first position
-        if sorted_keys:
-            first_key = sorted_keys[0]
-            first_position_type = first_key.split(':')[1]
-            
-            if "Long" in first_position_type and "Close" not in first_position_type:
-                embed_color = 0x00FF00  # Green color for embed
-            elif "Short" in first_position_type and "Close" not in first_position_type:
-                embed_color = 0xFF0000  # Red color for embed
-            else:
-                embed_color = 0x5b594f  # Default gray color
-        else:
-            embed_color = 0x5b594f  # Default gray color
-            
+        # Use consistent border color for all embeds
         embed = discord.Embed(
-            title="Hyperliquid Trades",
-            description="",
-            color=embed_color,
+            color=EMBED_BORDER,
             timestamp=datetime.now()
         )
+        
+        # Move title to author field with icon
+        embed.set_author(name="HL Digest", icon_url="https://static1.tokenterminal.com//hyperliquid/logo.png")
         
         # Group trades by coin and position type
         for digest_key in sorted_keys:
