@@ -4,6 +4,11 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 import aiohttp
 import asyncio
+from utils import EMBED_BORDER
+
+# Color constants for consistent use across the bot
+LONG_COLOR = 0x00FF00    # Green (reference only)
+SHORT_COLOR = 0xFF0000   # Red (reference only)
 
 def format_large_number(number):
     """Format a large number as a human-readable string (e.g., 32.3m, 32k)."""
