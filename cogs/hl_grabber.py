@@ -3,10 +3,11 @@ from discord.ext import commands, tasks
 import re
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils import format_large_number, safe_api_call
 from db.models import Base, Token
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
+from collections import defaultdict, OrderedDict
 
 # Import the Hyperliquid SDK
 from hyperliquid.info import Info
@@ -46,6 +47,10 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Add a dictionary to track recent alerts by wallet and asset
         self.recent_alerts = {}
         
+        # Store trades for digest
+        self.pending_trades = defaultdict(list)  # Organized by coin
+        self.last_digest_time = datetime.now()
+        
         # Asset ID to name mapping
         self.asset_id_map = {
             # Default mappings for common assets
@@ -80,8 +85,9 @@ class HyperliquidWalletGrabber(commands.Cog):
             "@10000": "USDC",
         }
         
-        # Start the background task
+        # Start the background tasks
         self.check_wallets.start()
+        self.send_digest.start()
         
         # Initialize asset mappings
         self.bot.loop.create_task(self._init_asset_mappings())
@@ -129,9 +135,10 @@ class HyperliquidWalletGrabber(commands.Cog):
             self.monitor.record_error()
     
     def cog_unload(self):
-        # Stop the background task when the cog is unloaded
+        # Stop the background tasks when the cog is unloaded
         self.check_wallets.cancel()
         self.cleanup_recent_alerts.cancel()
+        self.send_digest.cancel()
     
     @tasks.loop(seconds=60)  # Check every minute, adjust as needed
     async def check_wallets(self):
@@ -208,6 +215,8 @@ class HyperliquidWalletGrabber(commands.Cog):
                     if "position" in position and "coin" in position["position"]:
                         coin = position["position"]["coin"]
                         positions_by_asset[coin] = position
+                        
+                logging.debug(f"Found {len(positions_by_asset)} active positions for wallet {wallet.address}")
             
             # Filter out trades we've already seen
             if not trades_data:
@@ -246,13 +255,26 @@ class HyperliquidWalletGrabber(commands.Cog):
                 except Exception as db_error:
                     logging.error(f"Database error updating trade ID for wallet {wallet.address}: {db_error}")
                     self.db_session.rollback()  # Roll back on error
-                    return  # Skip sending alerts if we can't update the database
+                    return  # Skip processing trades if we can't update the database
                 
-                # Send alerts for new trades (newest first)
+                # Group trades by coin to process them together
+                trades_by_coin = {}
                 for trade in new_trades:
+                    coin = trade["coin"]
+                    if coin not in trades_by_coin:
+                        trades_by_coin[coin] = []
+                    trades_by_coin[coin].append(trade)
+                
+                # Process trades by coin
+                for coin, coin_trades in trades_by_coin.items():
                     # Get position data for this asset if available
-                    position_data = positions_by_asset.get(trade["coin"], {})
-                    await self._send_trade_alert(wallet, trade, position_data)
+                    position_data = positions_by_asset.get(coin, {})
+                    
+                    # Add each trade to the digest
+                    for trade in coin_trades:
+                        self._add_trade_to_digest(wallet, trade, position_data)
+                        
+                    logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
             else:
                 try:
                     self.db_session.commit()  # Just update the last checked time
@@ -343,12 +365,12 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Return the original coin name if no conversion needed or not found
         return coin
     
-    async def _send_trade_alert(self, wallet, trade, position_data=None):
-        """Format and send a trade alert to Discord."""
+    def _add_trade_to_digest(self, wallet, trade, position_data=None):
+        """Add a trade to the pending digest."""
         try:
-            # Skip sending alerts if the grabber is disabled
+            # Skip if the grabber is disabled
             if not self.is_enabled:
-                logging.debug("Skipping alert - Hyperliquid grabber is disabled")
+                logging.debug("Skipping digest addition - Hyperliquid grabber is disabled")
                 return
                 
             # Extract trade details
@@ -358,95 +380,239 @@ class HyperliquidWalletGrabber(commands.Cog):
             size = float(trade["sz"])
             price = float(trade["px"])
             
-            # Check if we've recently sent an alert for this wallet+coin combination
-            alert_key = f"{wallet.address}:{coin}"
-            current_time = datetime.now()
-            
-            if alert_key in self.recent_alerts:
-                last_alert_time = self.recent_alerts[alert_key]
-                # If it's been less than 1 minute since the last alert, skip this one
-                if (current_time - last_alert_time).total_seconds() < 60:
-                    logging.debug(f"Skipping alert for {alert_key} - cooldown period active")
-                    return
-            
-            # Update the last alert time for this wallet+coin
-            self.recent_alerts[alert_key] = current_time
-            
             # Extract position details if available
             position_size = size  # Default to trade size
             entry_price = price  # Default to trade price
             unrealized_pnl = 0
             
+            # Try to get the most accurate position data
             if position_data and "position" in position_data:
                 pos = position_data["position"]
                 
-                # Get position size
+                # Get position size - this is the most accurate representation of current position
                 if "szi" in pos:
                     try:
-                        position_size = float(pos["szi"])
+                        position_size = abs(float(pos["szi"]))  # Use absolute value for consistent calculations
+                        logging.debug(f"Using position size from position data: {position_size}")
                     except (ValueError, TypeError):
-                        pass
+                        logging.debug(f"Failed to parse position size, using trade size: {size}")
                 
                 # Get entry price
                 if "entryPx" in pos:
                     try:
                         entry_price = float(pos["entryPx"])
+                        logging.debug(f"Using entry price from position data: {entry_price}")
                     except (ValueError, TypeError):
-                        pass
+                        logging.debug(f"Failed to parse entry price, using trade price: {price}")
                 
                 # Get unrealized PnL
                 if "unrealizedPnl" in pos:
                     try:
                         unrealized_pnl = float(pos["unrealizedPnl"])
+                        logging.debug(f"Using unrealized PnL from position data: {unrealized_pnl}")
                     except (ValueError, TypeError):
-                        pass
+                        logging.debug("Failed to parse unrealized PnL, using 0")
+            else:
+                logging.debug(f"No position data available for {coin}, using trade data only")
             
-            # Calculate position value
+            # Calculate position value using the most accurate data
             position_value = position_size * entry_price
-            formatted_position_value = format_large_number(position_value)
             
-            # Format PnL
-            pnl_sign = "+" if unrealized_pnl >= 0 else ""
-            formatted_pnl = f"{pnl_sign}${format_large_number(abs(unrealized_pnl))}"
-            
-            # Determine position type and format direction for title
+            # Determine position type
             if "Open Long" in direction:
-                title_direction = "Buy"
-                position_type = "Long:"
+                position_type = "Long"
             elif "Close Long" in direction:
-                title_direction = "Close Long"
-                position_type = "Closed Long:"
+                position_type = "Close Long"
             elif "Open Short" in direction:
-                title_direction = "Sell"
-                position_type = "Short:"
+                position_type = "Short"
             elif "Close Short" in direction:
-                title_direction = "Close Short"
-                position_type = "Closed Short:"
+                position_type = "Close Short"
             else:
-                title_direction = direction
-                position_type = f"{direction}:"
+                position_type = direction
             
-            # Create embed with the simplified format (removed leverage) and added colon after position type
-            embed = discord.Embed(
-                title="New HL Position",
-                description=f"## {title_direction}: {coin}\nPrice: ${price}\n{position_type} ${formatted_position_value}",
-                color=0x00ff00 if "Long" in direction else 0xff0000
-            )
+            # Create a trade entry for the digest
+            trade_entry = {
+                'wallet': wallet,
+                'coin': coin,
+                'direction': direction,
+                'position_type': position_type,
+                'size': size,  # Original trade size
+                'price': price,  # Original trade price
+                'position_size': position_size,  # Current position size from position data if available
+                'position_value': position_value,
+                'unrealized_pnl': unrealized_pnl,
+                'time': datetime.now()
+            }
             
-            # Set simplified footer with wallet name and PnL
-            wallet_name = wallet.name if wallet.name else f"{wallet.address[:6]}...{wallet.address[-4:]}"
-            embed.set_footer(text=f"{wallet_name} {formatted_pnl} upnl")
+            # Add to pending trades, organized by coin and position type
+            digest_key = f"{coin}:{position_type}"
+            self.pending_trades[digest_key].append(trade_entry)
             
-            # Send to channel
-            channel = self.bot.get_channel(self.channel_id)
-            if channel:
-                await channel.send(embed=embed)
-            else:
-                logging.error(f"Could not find channel with ID {self.channel_id}")
-        
+            logging.debug(f"Added trade to digest: {coin} {position_type} for wallet {wallet.address}, size: {size}, position size: {position_size}")
+            
         except Exception as e:
-            logging.error(f"Error sending trade alert: {e}", exc_info=True)
+            logging.error(f"Error adding trade to digest: {e}", exc_info=True)
             self.monitor.record_error()
+    
+    @tasks.loop(minutes=15)
+    async def send_digest(self):
+        """Send a digest of trades every 15 minutes if there are any."""
+        try:
+            if not self.is_enabled or not self.pending_trades:
+                logging.info("No trades to report in Hyperliquid digest or alerts disabled")
+                return
+                
+            logging.info(f"Preparing Hyperliquid digest with {len(self.pending_trades)} trade groups")
+            
+            channel = self.bot.get_channel(self.channel_id)
+            if not channel:
+                logging.error(f"Could not find channel with ID {self.channel_id}")
+                return
+            
+            # Create and send the digest embed
+            embed = await self._create_digest_embed()
+            if embed:
+                await channel.send(embed=embed)
+                logging.info("Hyperliquid digest posted successfully")
+            
+            # Clear pending trades after sending digest
+            self.pending_trades.clear()
+            self.last_digest_time = datetime.now()
+            
+        except Exception as e:
+            logging.error(f"Error sending Hyperliquid digest: {e}", exc_info=True)
+            self.monitor.record_error()
+    
+    @send_digest.before_loop
+    async def before_send_digest(self):
+        """Wait until the bot is ready before starting the digest loop."""
+        await self.bot.wait_until_ready()
+        logging.info("Starting Hyperliquid digest task")
+    
+    async def _create_digest_embed(self):
+        """Create a digest embed with all pending trades."""
+        if not self.pending_trades:
+            return None
+        
+        # Define position type order for sorting
+        position_type_order = {
+            "Long": 0,
+            "Short": 1,
+            "Close Long": 2,
+            "Close Short": 3
+        }
+        
+        # Sort digest keys to group by position type first, then by coin
+        sorted_keys = sorted(self.pending_trades.keys(), 
+                            key=lambda k: (
+                                position_type_order.get(k.split(':')[1], 99),  # Position type first
+                                k.split(':')[0]  # Then by coin
+                            ))
+        
+        # Determine the color for the entire embed based on the first position
+        if sorted_keys:
+            first_key = sorted_keys[0]
+            first_position_type = first_key.split(':')[1]
+            
+            if "Long" in first_position_type and "Close" not in first_position_type:
+                embed_color = 0x00FF00  # Green color for embed
+            elif "Short" in first_position_type and "Close" not in first_position_type:
+                embed_color = 0xFF0000  # Red color for embed
+            else:
+                embed_color = 0x5b594f  # Default gray color
+        else:
+            embed_color = 0x5b594f  # Default gray color
+            
+        embed = discord.Embed(
+            title="Hyperliquid Trades",
+            description="",
+            color=embed_color,
+            timestamp=datetime.now()
+        )
+        
+        # Group trades by coin and position type
+        for digest_key in sorted_keys:
+            trades = self.pending_trades[digest_key]
+            if not trades:
+                continue
+                
+            coin, position_type = digest_key.split(":", 1)
+            
+            # Determine emoji based on position type
+            if "Long" in position_type and "Close" not in position_type:
+                position_emoji = "🟢"  # Green circle for long
+            elif "Short" in position_type and "Close" not in position_type:
+                position_emoji = "🔴"  # Red circle for short
+            else:
+                position_emoji = "⚪"  # White circle for closes
+            
+            # Get the average price (weighted by size)
+            total_size = sum(trade['size'] for trade in trades)
+            weighted_price = sum(trade['price'] * trade['size'] for trade in trades) / total_size if total_size > 0 else 0
+            
+            # Format the price with appropriate precision
+            if weighted_price >= 1000:
+                price_str = f"${weighted_price:.0f}"
+            elif weighted_price >= 100:
+                price_str = f"${weighted_price:.1f}"
+            elif weighted_price >= 1:
+                price_str = f"${weighted_price:.2f}"
+            else:
+                price_str = f"${weighted_price:.4f}"
+            
+            # Create a section for this coin and position type
+            section_title = f"### {position_type} {coin}"
+            section_content = [f"At price {price_str}"]
+            
+            # Consolidate trades by wallet (sum up all fills for each wallet)
+            wallet_positions = {}
+            for trade in trades:
+                wallet = trade['wallet']
+                wallet_name = wallet.name if wallet.name else f"{wallet.address[:6]}...{wallet.address[-4:]}"
+                
+                # Combine multiple trades from the same wallet
+                if wallet_name not in wallet_positions:
+                    wallet_positions[wallet_name] = {
+                        'position_value': 0,
+                        'unrealized_pnl': 0,
+                        'size': 0,
+                        'fills': 0
+                    }
+                
+                # Sum up the values
+                wallet_positions[wallet_name]['position_value'] += trade['position_value']
+                wallet_positions[wallet_name]['unrealized_pnl'] += trade['unrealized_pnl']
+                wallet_positions[wallet_name]['size'] += trade['size']
+                wallet_positions[wallet_name]['fills'] += 1
+            
+            # Add each wallet's consolidated position to the section
+            for wallet_name, position in wallet_positions.items():
+                # Format PnL with sign
+                if position['unrealized_pnl'] >= 0:
+                    pnl_sign = "+"
+                else:
+                    pnl_sign = ""  # Negative sign will be included in the number
+                    
+                formatted_pnl = f"{pnl_sign}${format_large_number(abs(position['unrealized_pnl']))}"
+                formatted_value = format_large_number(position['position_value'])
+                
+                section_content.append(f"{position_emoji} {wallet_name}: ${formatted_value} ({formatted_pnl} upnl)")
+            
+            # Add the section to the embed
+            embed.add_field(
+                name=section_title,
+                value="\n".join(section_content),
+                inline=False
+            )
+        
+        return embed
+    
+    async def _send_trade_alert(self, wallet, trade, position_data=None):
+        """
+        Legacy method for individual trade alerts.
+        Now redirects to add_trade_to_digest.
+        """
+        self._add_trade_to_digest(wallet, trade, position_data)
     
     @commands.command(
         name="add_wallet",
@@ -587,6 +753,7 @@ class HyperliquidWalletGrabber(commands.Cog):
             "`!remove_wallet <address>` - Remove a wallet from tracking\n"
             "`!list_wallets` - List all tracked Hyperliquid wallets\n"
             "`!toggle_hl_alerts` - Toggle Hyperliquid position alerts on/off\n"
+            "`!force_hl_digest` - Force send a Hyperliquid digest\n"
             "`!refresh_wallet_tracker` - Refresh the wallet tracker (admin only)\n"
             "`!refresh_asset_mappings` - Refresh asset name mappings (admin only)"
         )
@@ -740,3 +907,39 @@ class HyperliquidWalletGrabber(commands.Cog):
         """Wait until the bot is ready before starting the task."""
         await self.bot.wait_until_ready()
         logging.info("Starting recent alerts cleanup task")
+
+    @commands.command(
+        name="force_hl_digest",
+        brief="Force send a Hyperliquid digest",
+        description="Manually trigger a Hyperliquid digest to be sent",
+        help="Use this command to immediately send a digest of recent Hyperliquid trades without waiting for the scheduled time."
+    )
+    async def force_hl_digest(self, ctx):
+        """Manually trigger a Hyperliquid digest."""
+        try:
+            if not self.pending_trades:
+                await ctx.send("No pending Hyperliquid trades to report.")
+                return
+                
+            embed = await self._create_digest_embed()
+            if embed:
+                await ctx.send("Sending Hyperliquid digest:", embed=embed)
+                
+                # Also send to the configured channel if different from the current channel
+                if self.channel_id and ctx.channel.id != self.channel_id:
+                    channel = self.bot.get_channel(self.channel_id)
+                    if channel:
+                        await channel.send(embed=embed)
+                
+                # Clear pending trades after sending digest
+                self.pending_trades.clear()
+                self.last_digest_time = datetime.now()
+                
+                logging.info("Manual Hyperliquid digest sent successfully")
+            else:
+                await ctx.send("Failed to create digest embed.")
+        
+        except Exception as e:
+            logging.error(f"Error sending manual Hyperliquid digest: {e}", exc_info=True)
+            await ctx.send("❌ An error occurred while sending the digest.")
+            self.monitor.record_error()
