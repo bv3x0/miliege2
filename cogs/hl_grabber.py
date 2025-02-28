@@ -550,42 +550,33 @@ class HyperliquidWalletGrabber(commands.Cog):
                 price_str = f"${weighted_price:.4f}"
             
             # Create a section for this coin and position type
-            section_title = f"### {position_type} {coin}"
-            section_content = [f"At price {price_str}"]
+            section_title = f"{position_emoji} {position_type} {coin}"
             
-            # Consolidate trades by wallet (sum up all fills for each wallet)
-            wallet_positions = {}
+            # Format PnL for the header
+            # Get total unrealized PnL across all wallets for this position type and coin
+            total_unrealized_pnl = sum(trade['unrealized_pnl'] for trade in trades)
+            
+            # Format PnL with sign
+            if total_unrealized_pnl >= 0:
+                pnl_sign = "+"
+            else:
+                pnl_sign = ""  # Negative sign will be included in the number
+                
+            formatted_pnl = f"{pnl_sign}${format_large_number(abs(total_unrealized_pnl))}"
+            
+            # Create the section content with the new format
+            section_content = [f"entry: {price_str} ({formatted_pnl} upnl)"]
+            
+            # Add each wallet name on a separate line
+            wallet_names = set()
             for trade in trades:
                 wallet = trade['wallet']
                 wallet_name = wallet.name if wallet.name else f"{wallet.address[:6]}...{wallet.address[-4:]}"
-                
-                # Combine multiple trades from the same wallet
-                if wallet_name not in wallet_positions:
-                    wallet_positions[wallet_name] = {
-                        'position_value': 0,
-                        'unrealized_pnl': 0,
-                        'size': 0,
-                        'fills': 0
-                    }
-                
-                # Sum up the values
-                wallet_positions[wallet_name]['position_value'] += trade['position_value']
-                wallet_positions[wallet_name]['unrealized_pnl'] += trade['unrealized_pnl']
-                wallet_positions[wallet_name]['size'] += trade['size']
-                wallet_positions[wallet_name]['fills'] += 1
+                wallet_names.add(wallet_name)
             
-            # Add each wallet's consolidated position to the section
-            for wallet_name, position in wallet_positions.items():
-                # Format PnL with sign
-                if position['unrealized_pnl'] >= 0:
-                    pnl_sign = "+"
-                else:
-                    pnl_sign = ""  # Negative sign will be included in the number
-                    
-                formatted_pnl = f"{pnl_sign}${format_large_number(abs(position['unrealized_pnl']))}"
-                formatted_value = format_large_number(position['position_value'])
-                
-                section_content.append(f"{position_emoji} {wallet_name}: ${formatted_value} ({formatted_pnl} upnl)")
+            # Add each wallet name to the section content
+            for wallet_name in wallet_names:
+                section_content.append(wallet_name)
             
             # Add the section to the embed
             embed.add_field(
