@@ -398,6 +398,25 @@ Embed Count: %d
                                 else:
                                     footer_text = credit_user
                             
+                            # Add buy amount in USD with middle circle separator and "buy" at the end
+                            if 'dollar_amount' in locals() and dollar_amount:
+                                # Format the dollar amount - remove $ if present and any decimal part
+                                formatted_amount = dollar_amount
+                                if isinstance(formatted_amount, str):
+                                    formatted_amount = formatted_amount.replace('$', '')
+                                    # Remove decimal part if present
+                                    if '.' in formatted_amount:
+                                        formatted_amount = formatted_amount.split('.')[0]
+                                else:
+                                    # If it's a number, convert to int to remove decimals
+                                    formatted_amount = int(formatted_amount)
+                                
+                                # Add commas for thousands separator
+                                formatted_amount = f"${format(int(float(str(formatted_amount).replace(',', ''))), ',')}"
+                                
+                                # Add to footer text with middle circle separator
+                                footer_text += f" ⋅ {formatted_amount} buy"
+                            
                             if footer_text:
                                 new_embed.set_footer(text=footer_text)
                         except Exception as e:
