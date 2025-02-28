@@ -7,6 +7,7 @@ import asyncio
 from utils import EMBED_BORDER
 
 # Color constants for consistent use across the bot
+EMBED_BORDER = 0x5b594f  # Gray color used for all alert borders
 LONG_COLOR = 0x00FF00    # Green (reference only)
 SHORT_COLOR = 0xFF0000   # Red (reference only)
 
