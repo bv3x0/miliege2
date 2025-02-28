@@ -40,6 +40,9 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Initialize the Hyperliquid SDK Info client
         self.hl_info = Info(constants.MAINNET_API_URL, skip_ws=True)
         
+        # Add a dictionary to track recent alerts by wallet and asset
+        self.recent_alerts = {}
+        
         # Asset ID to name mapping
         self.asset_id_map = {
             # Default mappings for common assets
@@ -125,6 +128,7 @@ class HyperliquidWalletGrabber(commands.Cog):
     def cog_unload(self):
         # Stop the background task when the cog is unloaded
         self.check_wallets.cancel()
+        self.cleanup_recent_alerts.cancel()
     
     @tasks.loop(seconds=60)  # Check every minute, adjust as needed
     async def check_wallets(self):
@@ -346,15 +350,24 @@ class HyperliquidWalletGrabber(commands.Cog):
             size = float(trade["sz"])
             price = float(trade["px"])
             
-            # Calculate total value of this trade
-            trade_value = size * price
-            formatted_trade_value = format_large_number(trade_value)
+            # Check if we've recently sent an alert for this wallet+coin combination
+            alert_key = f"{wallet.address}:{coin}"
+            current_time = datetime.now()
+            
+            if alert_key in self.recent_alerts:
+                last_alert_time = self.recent_alerts[alert_key]
+                # If it's been less than 1 minute since the last alert, skip this one
+                if (current_time - last_alert_time).total_seconds() < 60:
+                    logging.debug(f"Skipping alert for {alert_key} - cooldown period active")
+                    return
+            
+            # Update the last alert time for this wallet+coin
+            self.recent_alerts[alert_key] = current_time
             
             # Extract position details if available
             position_size = size  # Default to trade size
             entry_price = price  # Default to trade price
             unrealized_pnl = 0
-            leverage = self._calculate_leverage(trade, position_data)  # Use the improved calculation
             
             if position_data and "position" in position_data:
                 pos = position_data["position"]
@@ -391,34 +404,30 @@ class HyperliquidWalletGrabber(commands.Cog):
             # Determine position type and format direction for title
             if "Open Long" in direction:
                 title_direction = "Buy"
-                position_type = "Long"
+                position_type = "Long:"
             elif "Close Long" in direction:
                 title_direction = "Close Long"
-                position_type = "Closed Long"
+                position_type = "Closed Long:"
             elif "Open Short" in direction:
                 title_direction = "Sell"
-                position_type = "Short"
+                position_type = "Short:"
             elif "Close Short" in direction:
                 title_direction = "Close Short"
-                position_type = "Closed Short"
+                position_type = "Closed Short:"
             else:
                 title_direction = direction
-                position_type = direction
+                position_type = f"{direction}:"
             
-            # Create embed with the new format
+            # Create embed with the simplified format (removed leverage) and added colon after position type
             embed = discord.Embed(
                 title="New HL Position",
-                description=f"## {title_direction}: {coin}\nFilled ${formatted_trade_value} at ${price}\n{position_type} ${formatted_position_value} from ${entry_price} (on {leverage}x lev)",
+                description=f"## {title_direction}: {coin}\nPrice: ${price}\n{position_type} ${formatted_position_value}",
                 color=0x00ff00 if "Long" in direction else 0xff0000
             )
             
-            # Set footer with wallet name and PnL
+            # Set simplified footer with wallet name and PnL
             wallet_name = wallet.name if wallet.name else f"{wallet.address[:6]}...{wallet.address[-4:]}"
-            embed.set_footer(text=f"{wallet_name} • unrealized PnL: {formatted_pnl}")
-            
-            # Add timestamp
-            trade_time = datetime.fromtimestamp(trade["time"] / 1000)
-            embed.timestamp = trade_time
+            embed.set_footer(text=f"{wallet_name} {formatted_pnl} upnl")
             
             # Send to channel
             channel = self.bot.get_channel(self.channel_id)
@@ -545,7 +554,7 @@ class HyperliquidWalletGrabber(commands.Cog):
             for wallet in wallets:
                 name = f"{wallet.name} " if wallet.name else ""
                 embed.add_field(
-                    name=f"{name}({wallet.address[:6]}...{wallet.address[-4:]})",
+                    name=f"{name}({wallet.address})",
                     value=f"Added by: {wallet.added_by}\nLast checked: {wallet.last_checked_time.strftime('%Y-%m-%d %H:%M:%S')}",
                     inline=False
                 )
@@ -669,3 +678,32 @@ class HyperliquidWalletGrabber(commands.Cog):
             logging.error(f"Error refreshing asset mappings: {e}", exc_info=True)
             await ctx.send("❌ An error occurred while refreshing asset mappings.")
             self.monitor.record_error()
+
+    # Add a method to clean up old alerts to prevent memory leaks
+    @tasks.loop(minutes=5)
+    async def cleanup_recent_alerts(self):
+        """Clean up old alerts from the recent_alerts dictionary."""
+        try:
+            current_time = datetime.now()
+            keys_to_remove = []
+            
+            for alert_key, alert_time in self.recent_alerts.items():
+                # If it's been more than 5 minutes, remove the entry
+                if (current_time - alert_time).total_seconds() > 300:
+                    keys_to_remove.append(alert_key)
+            
+            for key in keys_to_remove:
+                del self.recent_alerts[key]
+                
+            if keys_to_remove:
+                logging.debug(f"Cleaned up {len(keys_to_remove)} old alert entries")
+        
+        except Exception as e:
+            logging.error(f"Error cleaning up recent alerts: {e}", exc_info=True)
+            self.monitor.record_error()
+    
+    @cleanup_recent_alerts.before_loop
+    async def before_cleanup_recent_alerts(self):
+        """Wait until the bot is ready before starting the task."""
+        await self.bot.wait_until_ready()
+        logging.info("Starting recent alerts cleanup task")
