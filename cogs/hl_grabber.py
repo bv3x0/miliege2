@@ -37,6 +37,9 @@ class HyperliquidWalletGrabber(commands.Cog):
         self.db_session = bot.db_session
         self.channel_id = channel_id  # Channel to send alerts to
         
+        # Flag to enable/disable alerts
+        self.is_enabled = True
+        
         # Initialize the Hyperliquid SDK Info client
         self.hl_info = Info(constants.MAINNET_API_URL, skip_ws=True)
         
@@ -343,6 +346,11 @@ class HyperliquidWalletGrabber(commands.Cog):
     async def _send_trade_alert(self, wallet, trade, position_data=None):
         """Format and send a trade alert to Discord."""
         try:
+            # Skip sending alerts if the grabber is disabled
+            if not self.is_enabled:
+                logging.debug("Skipping alert - Hyperliquid grabber is disabled")
+                return
+                
             # Extract trade details
             raw_coin = trade["coin"]
             coin = self._get_coin_name(raw_coin)  # Convert asset ID to readable name if needed
@@ -578,6 +586,7 @@ class HyperliquidWalletGrabber(commands.Cog):
             "`!add_wallet <address> [name]` - Add a wallet to track on Hyperliquid\n"
             "`!remove_wallet <address>` - Remove a wallet from tracking\n"
             "`!list_wallets` - List all tracked Hyperliquid wallets\n"
+            "`!toggle_hl_alerts` - Toggle Hyperliquid position alerts on/off\n"
             "`!refresh_wallet_tracker` - Refresh the wallet tracker (admin only)\n"
             "`!refresh_asset_mappings` - Refresh asset name mappings (admin only)"
         )
@@ -677,6 +686,30 @@ class HyperliquidWalletGrabber(commands.Cog):
         except Exception as e:
             logging.error(f"Error refreshing asset mappings: {e}", exc_info=True)
             await ctx.send("❌ An error occurred while refreshing asset mappings.")
+            self.monitor.record_error()
+
+    @commands.command(
+        name="toggle_hl_alerts",
+        brief="Toggle Hyperliquid alerts on/off",
+        description="Toggle whether Hyperliquid position alerts are sent to the channel",
+        help="Use this command to temporarily enable or disable Hyperliquid position alerts without removing tracked wallets."
+    )
+    async def toggle_hl_alerts(self, ctx):
+        """Toggle Hyperliquid alerts on or off."""
+        try:
+            # Toggle the enabled state
+            self.is_enabled = not self.is_enabled
+            
+            # Send confirmation message
+            status = "enabled" if self.is_enabled else "disabled"
+            emoji = "✅" if self.is_enabled else "🔕"
+            
+            await ctx.send(f"{emoji} Hyperliquid position alerts are now **{status}**.")
+            logging.info(f"Hyperliquid alerts {status} by {ctx.author.name}")
+            
+        except Exception as e:
+            logging.error(f"Error toggling Hyperliquid alerts: {e}", exc_info=True)
+            await ctx.send("❌ An error occurred while toggling alerts.")
             self.monitor.record_error()
 
     # Add a method to clean up old alerts to prevent memory leaks
