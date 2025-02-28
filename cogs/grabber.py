@@ -348,6 +348,9 @@ Embed Count: %d
                         # Second line: just social links
                         stats_line_2 = socials_text
                         
+                        # Create title line with token name, symbol, and URL
+                        title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
+                        
                         # Add the title line and stats lines to the description
                         description_parts = [title_line, stats_line_1]
                         
