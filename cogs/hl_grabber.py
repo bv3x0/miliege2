@@ -564,21 +564,22 @@ class HyperliquidWalletGrabber(commands.Cog):
                     pnl_sign = ""  # Negative sign will be included in the number
                     
                 formatted_pnl = f"{pnl_sign}${format_large_number(abs(total_realized_pnl))}"
-                section_content = [f"{price_str} entry ({formatted_pnl} pnl)"]
+                price_info = f"{price_str} entry ({formatted_pnl} pnl)"
             else:
                 # For opening positions, show only entry price
-                section_content = [f"{price_str} entry"]
+                price_info = f"{price_str} entry"
             
-            # Add each wallet name on a separate line
+            # Add each wallet name on a separate line with price info
+            section_content = []
             wallet_names = set()
             for trade in trades:
                 wallet = trade['wallet']
                 wallet_name = wallet.name if wallet.name else f"{wallet.address[:6]}...{wallet.address[-4:]}"
                 wallet_names.add(wallet_name)
             
-            # Add each wallet name to the section content
+            # Add each wallet with price info to the section content
             for wallet_name in wallet_names:
-                section_content.append(wallet_name)
+                section_content.append(f"{wallet_name}: {price_info}")
             
             # Add the section to the embed
             embed.add_field(
