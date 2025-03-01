@@ -575,11 +575,13 @@ class HyperliquidWalletGrabber(commands.Cog):
             for trade in trades:
                 wallet = trade['wallet']
                 wallet_name = wallet.name if wallet.name else f"{wallet.address[:6]}...{wallet.address[-4:]}"
-                wallet_names.add(wallet_name)
+                wallet_names.add((wallet_name, wallet.address))
             
             # Add each wallet with price info to the section content
-            for wallet_name in wallet_names:
-                section_content.append(f"{wallet_name}: {price_info}")
+            for wallet_name, wallet_address in wallet_names:
+                # Create a hyperlink to the wallet's Hyperdash profile
+                wallet_link = f"[{wallet_name}](https://hyperdash.info/trader/{wallet_address})"
+                section_content.append(f"{wallet_link}: {price_info}")
             
             # Add the section to the embed
             embed.add_field(
