@@ -11,8 +11,8 @@ from collections import defaultdict, OrderedDict
 from utils.colors import EMBED_BORDER  # Import the color constant
 
 # Import the Hyperliquid SDK
-from hyperliquid.info import Info
-from hyperliquid.utils import constants
+from hyperliquid.info import Info # type: ignore
+from hyperliquid.utils import constants # type: ignore
 
 # Define the new database model for tracked wallets
 class TrackedWallet(Base):
@@ -541,13 +541,13 @@ class HyperliquidWalletGrabber(commands.Cog):
             
             # Format the price with appropriate precision
             if weighted_price >= 1000:
-                price_str = f"${weighted_price:.0f}"
+                price_str = f"${weighted_price:,.0f}"
             elif weighted_price >= 100:
-                price_str = f"${weighted_price:.1f}"
+                price_str = f"${weighted_price:,.1f}"
             elif weighted_price >= 1:
-                price_str = f"${weighted_price:.2f}"
+                price_str = f"${weighted_price:,.2f}"
             else:
-                price_str = f"${weighted_price:.4f}"
+                price_str = f"${weighted_price:,.4f}"
             
             # Create a section for this coin and position type
             section_title = f"{position_emoji} {position_type} {coin}"
@@ -560,19 +560,14 @@ class HyperliquidWalletGrabber(commands.Cog):
                 # Format PnL with sign
                 if total_realized_pnl >= 0:
                     pnl_sign = "+"
-                    pnl_emoji = "📈"  # Up trend for profit
                 else:
                     pnl_sign = ""  # Negative sign will be included in the number
-                    pnl_emoji = "📉"  # Down trend for loss
                     
                 formatted_pnl = f"{pnl_sign}${format_large_number(abs(total_realized_pnl))}"
-                section_content = [f"{pnl_emoji} {formatted_pnl} PnL at {price_str}"]
+                section_content = [f"{price_str} entry ({formatted_pnl} pnl)"]
             else:
-                # For opening positions, show entry price and size
-                total_position_size = sum(trade['position_size'] for trade in trades)
-                formatted_position_size = format_large_number(total_position_size)
-                section_content = [f"{price_str} entry (size: {formatted_position_size})"]
-                section_content = [f"entry: {price_str} (size: {formatted_position_size})"]
+                # For opening positions, show only entry price
+                section_content = [f"{price_str} entry"]
             
             # Add each wallet name on a separate line
             wallet_names = set()
