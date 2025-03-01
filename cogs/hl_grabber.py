@@ -384,7 +384,15 @@ class HyperliquidWalletGrabber(commands.Cog):
             # Extract position details if available
             position_size = size  # Default to trade size
             entry_price = price  # Default to trade price
-            unrealized_pnl = 0
+            
+            # Calculate realized PnL for closing trades if available
+            realized_pnl = 0
+            if "realizedPnl" in trade:
+                try:
+                    realized_pnl = float(trade["realizedPnl"])
+                    logging.debug(f"Using realized PnL from trade data: {realized_pnl}")
+                except (ValueError, TypeError):
+                    logging.debug("Failed to parse realized PnL, using 0")
             
             # Try to get the most accurate position data
             if position_data and "position" in position_data:
@@ -405,14 +413,6 @@ class HyperliquidWalletGrabber(commands.Cog):
                         logging.debug(f"Using entry price from position data: {entry_price}")
                     except (ValueError, TypeError):
                         logging.debug(f"Failed to parse entry price, using trade price: {price}")
-                
-                # Get unrealized PnL
-                if "unrealizedPnl" in pos:
-                    try:
-                        unrealized_pnl = float(pos["unrealizedPnl"])
-                        logging.debug(f"Using unrealized PnL from position data: {unrealized_pnl}")
-                    except (ValueError, TypeError):
-                        logging.debug("Failed to parse unrealized PnL, using 0")
             else:
                 logging.debug(f"No position data available for {coin}, using trade data only")
             
@@ -441,7 +441,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                 'price': price,  # Original trade price
                 'position_size': position_size,  # Current position size from position data if available
                 'position_value': position_value,
-                'unrealized_pnl': unrealized_pnl,
+                'realized_pnl': realized_pnl,  # Only relevant for closing trades
                 'time': datetime.now()
             }
             
@@ -552,20 +552,27 @@ class HyperliquidWalletGrabber(commands.Cog):
             # Create a section for this coin and position type
             section_title = f"{position_emoji} {position_type} {coin}"
             
-            # Format PnL for the header
-            # Get total unrealized PnL across all wallets for this position type and coin
-            total_unrealized_pnl = sum(trade['unrealized_pnl'] for trade in trades)
-            
-            # Format PnL with sign
-            if total_unrealized_pnl >= 0:
-                pnl_sign = "+"
-            else:
-                pnl_sign = ""  # Negative sign will be included in the number
+            # Format the section content differently based on position type
+            if "Close" in position_type:
+                # For closing positions, show realized PnL
+                total_realized_pnl = sum(trade['realized_pnl'] for trade in trades)
                 
-            formatted_pnl = f"{pnl_sign}${format_large_number(abs(total_unrealized_pnl))}"
-            
-            # Create the section content with the new format
-            section_content = [f"entry: {price_str} ({formatted_pnl} upnl)"]
+                # Format PnL with sign
+                if total_realized_pnl >= 0:
+                    pnl_sign = "+"
+                    pnl_emoji = "📈"  # Up trend for profit
+                else:
+                    pnl_sign = ""  # Negative sign will be included in the number
+                    pnl_emoji = "📉"  # Down trend for loss
+                    
+                formatted_pnl = f"{pnl_sign}${format_large_number(abs(total_realized_pnl))}"
+                section_content = [f"{pnl_emoji} {formatted_pnl} PnL at {price_str}"]
+            else:
+                # For opening positions, show entry price and size
+                total_position_size = sum(trade['position_size'] for trade in trades)
+                formatted_position_size = format_large_number(total_position_size)
+                section_content = [f"{price_str} entry (size: {formatted_position_size})"]
+                section_content = [f"entry: {price_str} (size: {formatted_position_size})"]
             
             # Add each wallet name on a separate line
             wallet_names = set()
