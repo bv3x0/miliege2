@@ -3,6 +3,7 @@ from discord.ext import commands
 import logging
 import random
 import os
+from utils.colors import EMBED_BORDER
 
 class FunCommands(commands.Cog):
     def __init__(self, bot):
@@ -78,6 +79,51 @@ class FunCommands(commands.Cog):
         except Exception as e:
             logging.error(f"Error in shotcaller command: {e}")
             await ctx.send("❌ Failed to post shotcaller content")
+
+    @commands.command()
+    async def zone(self, ctx):
+        """Display the trading zone mindset message"""
+        try:
+            embed = discord.Embed(
+                title="Are you trading... _in the zone_ ??",
+                color=EMBED_BORDER
+            )
+            
+            embed.add_field(
+                name="<:namaste:1150497812283408424> Prepare with intention",
+                value="- Define a valid setup, then watch without forming expectations.\n"
+                      "- Accept uncertainty. Anything can happen, and that's OK.",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="<a:sniper:1263637653249593427> Act with discipline",
+                value="- Take only trades that align with your plan.\n"
+                      "- Manage risk. Never exceed your set % per trade.\n"
+                      "- Be aware of emotions. Do not let them control you.",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="<:isee:1151138752794722405> Observe and adjust",
+                value="- Adapt based on fresh analysis, not attachment.\n"
+                      "- Review mistakes without judgment or self-criticism.\n"
+                      "- Reflect on each trade—what did it teach you?",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="<:trump:1149703968440729610> Strengthen your mindset",
+                value="- Every trade is independent and impermanent.\n"
+                      "- An edge increases your odds but doesn't guarantee results.\n"
+                      "- Wins and losses happen, then they pass. Let them go.",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+        except Exception as e:
+            logging.error(f"Error in zone command: {e}")
+            await ctx.send("❌ Failed to post zone message")
 
     # Add more fun commands here
     @commands.command()
