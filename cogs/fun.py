@@ -136,7 +136,7 @@ class FunCommands(commands.Cog):
             )
             
             embed.add_field(
-                name="<:namaste:1150497812283408424> Before: Frame decisions as bets",
+                name="Before: Frame decisions as bets",
                 value="- Focus on probabilities, not results.\n"
                       "- Watch for biases (confirmation, hindsight, self-serving).\n"
                       "- Run a premortem: What could go wrong, and how would you adjust?\n"
@@ -145,9 +145,9 @@ class FunCommands(commands.Cog):
             )
             
             embed.add_field(
-                name="<:isee:1151138752794722405> After: Update your beliefs",
-                value="- Incorporate new information. Don't cling to old assumptions.\n"
-                      "- Seek diverse perspectives around spot blind spots.\n"
+                name="After: Update your beliefs",
+                value="- Don't cling to old assumptions. Incorporate new information.\n"
+                      "- Seek diverse perspectives to prevent blind spots.\n"
                       "- A bad outcome doesn't mean a bad decision—only bad process does.\n"
                       "- Aim to be less wrong over time, not always right.",
                 inline=False
