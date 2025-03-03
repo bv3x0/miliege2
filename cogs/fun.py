@@ -125,6 +125,43 @@ class FunCommands(commands.Cog):
             logging.error(f"Error in zone command: {e}")
             await ctx.send("❌ Failed to post zone message")
 
+    @commands.command()
+    async def bet(self, ctx):
+        """Display the thinking in bets mindset message followed by betting GIF"""
+        try:
+            # First send the embed
+            embed = discord.Embed(
+                title="Are you thinking... _in bets_ ??",
+                color=EMBED_BORDER
+            )
+            
+            embed.add_field(
+                name="<:namaste:1150497812283408424> Before: Frame decisions as bets",
+                value="- Focus on probabilities, not results.\n"
+                      "- Watch for biases (confirmation, hindsight, self-serving).\n"
+                      "- Run a premortem: What could go wrong, and how would you adjust?\n"
+                      "- Use expected value: Is the upside worth the downside?",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="<:isee:1151138752794722405> After: Update your beliefs",
+                value="- Incorporate new information. Don't cling to old assumptions.\n"
+                      "- Seek diverse perspectives around spot blind spots.\n"
+                      "- A bad outcome doesn't mean a bad decision—only bad process does.\n"
+                      "- Aim to be less wrong over time, not always right.",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+            # Then send the GIF
+            await ctx.send("https://tenor.com/view/betmore-money-wasted-buy-gif-21033443")
+            
+        except Exception as e:
+            logging.error(f"Error in bet command: {e}")
+            await ctx.send("❌ Failed to post bet message")
+
     # Add more fun commands here
     @commands.command()
     async def wagmi(self, ctx):
