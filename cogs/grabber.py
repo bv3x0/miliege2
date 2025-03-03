@@ -498,125 +498,71 @@ Embed Count: %d
                     # Create a completely fresh embed for the error case
                     new_embed = discord.Embed(color=EMBED_BORDER)
                     
-                    # Extract token name from swap info if possible
+                    # Extract token name and symbol from swap info
                     token_name = "Unknown Token"
                     token_symbol = ""
-                    market_cap_value = None  # Initialize market_cap_value to avoid reference errors
-                    formatted_mcap = "N/A"  # Initialize formatted_mcap
-                    price_change_formatted = "N/A"  # Initialize price_change_formatted
-                    social_parts = []  # Initialize social_parts
                     
                     if swap_info:
-                        # Try to extract the token name from the swap info
-                        name_match = re.search(r'for\s+\*\*[\d,.]+\*\*\s+\*\*\*\*([^*]+)\*\*\*\*', swap_info)
-                        if name_match:
-                            token_name = name_match.group(1).strip()
-                            logging.info(f"Extracted token name from swap info: {token_name}")
-                            
-                        # Try to extract symbol from token name (common format is "Token Name (SYMBOL)")
-                        symbol_match = re.search(r'(.+?)\s+\((\w+)\)$', token_name)
-                        if symbol_match:
-                            token_name = symbol_match.group(1).strip()
-                            token_symbol = symbol_match.group(2).strip()
-                        else:
-                            # If no symbol in parentheses, try to extract it directly from the swap info
-                            symbol_match = re.search(r'\*\*\*\*([A-Z0-9]+)\*\*\*\*\s+@', swap_info)
-                            if symbol_match:
-                                token_symbol = symbol_match.group(1).strip()
-                                logging.info(f"Extracted token symbol from swap info: {token_symbol}")
-                        
-                        # Try to extract market cap from swap info
-                        mcap_match = re.search(r'MC:\s+\$([0-9.]+)([kmbt]?)', swap_info)
-                        if mcap_match:
-                            mcap_value = mcap_match.group(1)
-                            mcap_unit = mcap_match.group(2).lower()
-                            
-                            # Convert to numeric value
-                            try:
-                                mcap_value = float(mcap_value)
-                                if mcap_unit == 'k':
-                                    mcap_value *= 1_000
-                                elif mcap_unit == 'm':
-                                    mcap_value *= 1_000_000
-                                elif mcap_unit == 'b':
-                                    mcap_value *= 1_000_000_000
-                                elif mcap_unit == 't':
-                                    mcap_value *= 1_000_000_000_000
-                                
-                                market_cap_value = mcap_value
-                                formatted_mcap = format_large_number(market_cap_value)
-                                logging.info(f"Extracted market cap from swap info: {formatted_mcap}")
-                            except ValueError:
-                                logging.warning(f"Failed to parse market cap value: {mcap_value}")
-                    
-                    # Use the chain_info that was passed to us instead of trying to extract it again
-                    if chain_info is None or chain_info == "unknown":
-                        chain_info = "unknown"
-                    
-                    # Create a placeholder chart URL using the contract and chain
+                        # Try to extract token name and amount from the swap info
+                        swap_match = re.search(r'for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*@\s*\$([0-9.]+)', swap_info)
+                        if swap_match:
+                            token_amount = swap_match.group(1)
+                            token_name = swap_match.group(2).strip()
+                            token_price = swap_match.group(3)
+                            token_symbol = token_name  # Use token name as symbol since they're often the same in new tokens
+                            logging.info(f"Extracted from swap: amount={token_amount}, token={token_name}, price=${token_price}")
+
+                    # Create chart URL using the contract and chain
                     chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                     
-                    # Add "Buy Alert" title to match digest style
+                    # Set author with Buy Alert
                     new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
                     
-                    # Extract Cielo profile URL for the title
-                    cielo_profile_url = None
-                    if message.embeds:
-                        for embed in message.embeds:
-                            for field in embed.fields:
-                                if field.name == 'Profile':
-                                    profile_match = re.search(r'\[.+?\]\((https://app\.cielo\.finance/profile/[A-Za-z0-9]+)\)', field.value)
-                                    if profile_match:
-                                        cielo_profile_url = profile_match.group(1)
-                                        logging.info(f"Found Cielo profile URL for title: {cielo_profile_url}")
+                    # Create description parts
+                    description_parts = []
                     
-                    # Update title with buyer's name if available
-                    if credit_user and cielo_profile_url:
-                        # Determine which emoji to use based on the buy amount
-                        buy_emoji = ""
-                        if 'dollar_amount' in locals() and dollar_amount:
-                            amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
-                            if amount_float < 250:
-                                buy_emoji = " 🤏"
-                            elif amount_float < 2000:
-                                buy_emoji = " 💰"
+                    # Title line with token name and symbol
+                    description_parts.append(f"## [{token_name} ({token_symbol})]({chart_url})")
+                    
+                    # Extract buy amount and token from swap info
+                    if swap_info:
+                        buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
+                        if buy_match:
+                            amount = buy_match.group(1)
+                            buy_token = buy_match.group(2)
+                            dollar_amount = buy_match.group(3)
+                            formatted_buy = format_buy_amount(dollar_amount)
+                            
+                            # Add stats line with chain - changed "New token" to "New token, no data"
+                            description_parts.append(f"New token, no data • {chain_info}")
+                            
+                            # Add buy info line
+                            if dexscreener_maker_link:
+                                description_parts.append(f"{formatted_buy} [buy]({dexscreener_maker_link})")
                             else:
-                                buy_emoji = " 🤑"
-                        
-                        # Set author field instead of title
-                        new_embed.set_author(name=f"Buy Alert: {credit_user}{buy_emoji}", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
-                    
-                    # Create multi-line description
-                    
-                    # Title line with token name, symbol, and URL
-                    title_line = ""
-                    # Remove wow emoji from title line
-                    title_line = f"## [{token_name} ({token_symbol})]({chart_url})"
-                    
-                    # Initialize description parts array
-                    description_parts = [title_line]
-                    
-                    # Add chain info line
-                    description_parts.append(f"New token • {chain_info}")
-                    
-                    # Format buy amount if available
-                    if 'dollar_amount' in locals() and dollar_amount:
-                        formatted_buy = format_buy_amount(dollar_amount)
-                        if dexscreener_maker_link:
-                            description_parts.append(f"{formatted_buy} [buy]({dexscreener_maker_link}) • {' · '.join(social_parts)}")
-                        else:
-                            description_parts.append(f"{formatted_buy} buy • {' · '.join(social_parts)}")
+                                description_parts.append(f"{formatted_buy} buy")
                     else:
-                        description_parts.append("")  # Just one blank line
-                        description_parts.append(f"New token • {' · '.join(social_parts)}")
-                    
-                    # Log the final description to help with debugging
-                    final_description = "\n".join(description_parts)
-                    logging.info(f"Final embed description: {final_description}")
+                        # Fallback if no swap info - also changed here
+                        description_parts.append(f"New token, no data • {chain_info}")
                     
                     # Set the description
-                    new_embed.description = final_description
+                    new_embed.description = "\n".join(description_parts)
                     
+                    # Set footer with credit user if available
+                    if credit_user:
+                        # Add buy amount emoji based on dollar amount if available
+                        footer_text = credit_user
+                        if 'dollar_amount' in locals() and dollar_amount:
+                            amount_float = float(dollar_amount.replace(',', ''))
+                            if amount_float < 250:
+                                footer_text = "🤏 " + footer_text
+                            elif amount_float < 2000:
+                                footer_text = "💰 " + footer_text
+                            else:
+                                footer_text = "🤑 " + footer_text
+                            footer_text += f" ⋅ ${format(int(float(dollar_amount)), ',')} buy"
+                        new_embed.set_footer(text=footer_text)
+
                     # Send embed with available info - use the channel directly
                     await channel.send(embed=new_embed)
                     
