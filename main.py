@@ -92,12 +92,13 @@ class DiscordBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.voice_states = False  # Explicitly disable voice states
         logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
         # Instead of a single session, use a session factory
         self.db = Database(database_url)
-        self.Session = self.db.get_session_factory()
+        self.Session = self.db.session_factory
         
         self.monitor = BotMonitor()
         # Update to use session factory
