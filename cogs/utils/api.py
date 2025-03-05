@@ -1,7 +1,7 @@
 import aiohttp
 import logging
 from typing import Optional, AsyncGenerator
-from utils.constants import BotConstants
+from cogs.utils.constants import BotConstants
 
 async def safe_api_call(
     session: aiohttp.ClientSession, 
@@ -53,5 +53,19 @@ class HyperliquidAPI:
     async def get_asset_info(session: aiohttp.ClientSession) -> Optional[dict]:
         """Get asset information from Hyperliquid"""
         url = f"{HyperliquidAPI.BASE_URL}/info"
+        async with safe_api_call(session, url) as data:
+            return data
+
+    @staticmethod
+    async def get_user_fills(session: aiohttp.ClientSession, address: str) -> Optional[dict]:
+        """Get user trade fills from Hyperliquid"""
+        url = f"{HyperliquidAPI.BASE_URL}/fills/{address}"
+        async with safe_api_call(session, url) as data:
+            return data
+
+    @staticmethod
+    async def get_user_state(session: aiohttp.ClientSession, address: str) -> Optional[dict]:
+        """Get user state (positions) from Hyperliquid"""
+        url = f"{HyperliquidAPI.BASE_URL}/user/{address}"
         async with safe_api_call(session, url) as data:
             return data
