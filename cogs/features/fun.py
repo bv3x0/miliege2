@@ -3,8 +3,11 @@ from discord.ext import commands
 import logging
 import random
 import os
-from cogs.utils import UI
-from utils.api import safe_api_call, DexScreenerAPI
+from cogs.utils import (
+    UI,
+    safe_api_call,
+    DexScreenerAPI
+)
 
 class FunCommands(commands.Cog):
     def __init__(self, bot):
