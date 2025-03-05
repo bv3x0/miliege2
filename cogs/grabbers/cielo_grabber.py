@@ -3,9 +3,9 @@ from discord.ext import commands
 import re
 import logging
 import asyncio
-from utils.formatting import format_large_number, get_age_string, format_buy_amount
-from utils.api import safe_api_call, DexScreenerAPI
-from utils.constants import Colors
+from cogs.utils.formatting import format_large_number, get_age_string, format_buy_amount
+from cogs.utils.api import safe_api_call, DexScreenerAPI
+from cogs.utils.constants import Colors
 
 class CieloGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
