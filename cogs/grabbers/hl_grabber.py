@@ -43,8 +43,8 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Add wallet lock for concurrent operations
         self.wallet_locks = {}  # Dictionary to store locks per wallet
         
-        # Add session factory
-        self.session_factory = bot.db.get_session
+        # Use the correct session factory
+        self.session_factory = bot.Session
         
         # Flag to enable/disable alerts
         self.is_enabled = True
@@ -761,7 +761,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                 # Close the current session
                 self.db_session.close()
                 # Get a fresh session from the bot
-                self.db_session = self.bot.db.get_session()
+                self.db_session = self.bot.Session()
                 logging.info("Refreshed database session for wallet tracker")
             except Exception as db_error:
                 logging.error(f"Error refreshing database session: {db_error}", exc_info=True)

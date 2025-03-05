@@ -92,16 +92,16 @@ class DiscordBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        intents.voice_states = False  # Explicitly disable voice states
+        intents.voice_states = False  # Disable voice states
         logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
-        # Instead of a single session, use a session factory
+        # Initialize database
         self.db = Database(database_url)
         self.Session = self.db.session_factory
+        self.db_session = self.Session()  # Add this line
         
         self.monitor = BotMonitor()
-        # Update to use session factory
         self.token_tracker = TokenTracker(session_factory=self.Session)
         self.session = None  # Will be initialized in setup_hook
 
@@ -288,15 +288,20 @@ class DiscordBot(commands.Bot):
             await ctx.send(embed=embed)
 
     async def close(self):
+        # Close the database session
+        if hasattr(self, 'db_session'):
+            self.db_session.close()
+            logging.info("Closed database session")
+            
         # Close the database connection
         if hasattr(self, 'db'):
             self.db.close()
-            logger.info("Closed database connection")
+            logging.info("Closed database connection")
             
-        # Close the shared session when the bot shuts down
+        # Close the shared session
         if self.session:
             await self.session.close()
-            logger.info("Closed shared aiohttp session")
+            logging.info("Closed shared aiohttp session")
             
         await super().close()
 
