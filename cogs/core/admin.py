@@ -12,9 +12,6 @@ class AdminCommands(commands.Cog):
             'cielo_grabber_bot': True
         }
         
-        # Add the control group to the bot's command tree
-        self.bot.tree.add_command(self.control_group)
-        
     # Slash command for adding wallets
     @app_commands.command(name="addwallet", description="Add a wallet for Hyperliquid tracking")
     @app_commands.describe(
