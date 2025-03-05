@@ -43,7 +43,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Add wallet lock for concurrent operations
         self.wallet_locks = {}  # Dictionary to store locks per wallet
         
-        # Use the correct session factory
+        # Get the session factory
         self.session_factory = bot.Session
         
         # Flag to enable/disable alerts
@@ -175,10 +175,11 @@ class HyperliquidWalletGrabber(commands.Cog):
         
         async with self.wallet_locks[wallet.address]:
             try:
-                # Use a new session for each operation
-                async with self.session_factory() as session:
+                # Create a new session for this operation
+                session = self.session_factory()
+                try:
                     # Verify wallet still exists before checking
-                    wallet_check = await session.get(TrackedWallet, wallet.id)
+                    wallet_check = session.query(TrackedWallet).filter_by(id=wallet.id).first()
                     if not wallet_check:
                         logging.warning(f"Wallet {wallet.address} was deleted during check cycle")
                         return
@@ -210,11 +211,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                     # Filter out trades we've already seen
                     if not trades_data:
                         logging.debug(f"No trades found for wallet {wallet.address}")
-                        try:
-                            await session.commit()  # Just update the last checked time
-                        except Exception as db_error:
-                            logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
-                            await session.rollback()  # Roll back on error
+                        session.commit()  # Just update the last checked time
                         return
                         
                     # For newly added wallets, don't show old trades
@@ -225,11 +222,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                             sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
                             wallet_check.last_trade_id = str(sorted_trades[0]["tid"])
                             logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet_check.last_trade_id}")
-                        try:
-                            await session.commit()
-                        except Exception as db_error:
-                            logging.error(f"Database error initializing trade ID for wallet {wallet.address}: {db_error}")
-                            await session.rollback()  # Roll back on error
+                        session.commit()
                         return
                         
                     new_trades = self._filter_new_trades(trades_data, wallet_check.last_trade_id)
@@ -239,12 +232,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                         
                         # Update the last seen trade ID
                         wallet_check.last_trade_id = str(new_trades[0]["tid"])
-                        try:
-                            await session.commit()
-                        except Exception as db_error:
-                            logging.error(f"Database error updating trade ID for wallet {wallet.address}: {db_error}")
-                            await session.rollback()  # Roll back on error
-                            return  # Skip processing trades if we can't update the database
+                        session.commit()
                         
                         # Group trades by coin to process them together
                         trades_by_coin = {}
@@ -265,20 +253,17 @@ class HyperliquidWalletGrabber(commands.Cog):
                                 
                             logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
                     else:
-                        try:
-                            await session.commit()  # Just update the last checked time
-                        except Exception as db_error:
-                            logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
-                            await session.rollback()  # Roll back on error
-            
+                        session.commit()  # Just update the last checked time
+                except Exception as e:
+                    logging.error(f"Error processing wallet {wallet.address}: {e}", exc_info=True)
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
+                
             except Exception as e:
                 logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
                 self.monitor.record_error()
-                # Make sure to rollback the session on error
-                try:
-                    await session.rollback()
-                except Exception as rollback_error:
-                    logging.error(f"Error rolling back session: {rollback_error}")
     
     def _filter_new_trades(self, trades, last_trade_id):
         """Filter out trades we've already seen based on the last trade ID."""
