@@ -31,10 +31,10 @@ class AdminCommands(commands.Cog):
         # Remove wallet logic here
         await interaction.response.send_message(f"Removing wallet {wallet}")
         
-    # Slash command group for bot controls
-    bot_group = app_commands.Group(name="bot", description="Bot control commands")
+    # Rename bot_group to control_group or manage_group
+    control_group = app_commands.Group(name="control", description="Bot control commands")
     
-    @bot_group.command(name="pause", description="Pause a specific bot feature")
+    @control_group.command(name="pause", description="Pause a specific bot feature")
     @app_commands.describe(
         feature="The feature to pause (hourly_digest, hyperliquid_bot, or cielo_grabber_bot)"
     )
@@ -46,7 +46,7 @@ class AdminCommands(commands.Cog):
         self.feature_states[feature] = False
         await interaction.response.send_message(f"✅ {feature} has been paused")
         
-    @bot_group.command(name="unpause", description="Unpause a specific bot feature")
+    @control_group.command(name="unpause", description="Unpause a specific bot feature")
     @app_commands.describe(
         feature="The feature to unpause (hourly_digest, hyperliquid_bot, or cielo_grabber_bot)"
     )
@@ -58,7 +58,7 @@ class AdminCommands(commands.Cog):
         self.feature_states[feature] = True
         await interaction.response.send_message(f"✅ {feature} has been unpaused")
         
-    @bot_group.command(name="status", description="Show the status of all bot features")
+    @control_group.command(name="status", description="Show the status of all bot features")
     async def show_status(self, interaction: discord.Interaction):
         status_message = "**Bot Feature Status:**\n"
         for feature, is_active in self.feature_states.items():
