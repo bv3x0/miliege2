@@ -161,7 +161,7 @@ Embed Count: %d
                     new_embed = discord.Embed(color=Colors.EMBED_BORDER)
                     
                     # Move title to author field with icon
-                    new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
+                    new_embed.set_author(name="Buy Alert", icon_url="https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png")
                     
                     # Extract data
                     chain = pair.get('chainId', 'Unknown Chain')
@@ -522,7 +522,7 @@ Embed Count: %d
                 chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                 
                 # Set author with Buy Alert
-                new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
+                new_embed.set_author(name="Buy Alert", icon_url="https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png")
                 
                 # Create description parts
                 description_parts = []
