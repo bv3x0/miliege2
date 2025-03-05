@@ -3,7 +3,8 @@ from discord.ext import commands
 import logging
 import random
 import os
-from utils.colors import EMBED_BORDER
+from cogs.utils import UI
+from utils.api import safe_api_call, DexScreenerAPI
 
 class FunCommands(commands.Cog):
     def __init__(self, bot):
@@ -86,7 +87,7 @@ class FunCommands(commands.Cog):
         try:
             embed = discord.Embed(
                 title="Are you trading... _in the zone_ ??",
-                color=EMBED_BORDER
+                color=UI.EMBED_BORDER
             )
             
             embed.add_field(
@@ -132,7 +133,7 @@ class FunCommands(commands.Cog):
             # First send the embed
             embed = discord.Embed(
                 title="Are you thinking... _in bets_ ??",
-                color=EMBED_BORDER
+                color=UI.EMBED_BORDER
             )
             
             embed.add_field(

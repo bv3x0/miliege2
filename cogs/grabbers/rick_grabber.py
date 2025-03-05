@@ -2,9 +2,14 @@ import discord
 from discord.ext import commands
 import logging
 import re
-from utils import format_large_number, get_age_string, safe_api_call
+from cogs.utils import (
+    format_number as format_large_number,
+    format_age as get_age_string,
+    UI
+)
+from utils.api import safe_api_call, DexScreenerAPI
+from utils.constants import Colors
 import asyncio
-from utils.colors import EMBED_BORDER  # Import the color constant
 
 class RickGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
@@ -232,7 +237,7 @@ Embed Count: %d
                 })
             
             # Create embed with Buy Alert title
-            new_embed = discord.Embed(color=EMBED_BORDER)
+            new_embed = discord.Embed(color=Colors.EMBED_BORDER)
             new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1304234350371541012.webp")
             
             return True

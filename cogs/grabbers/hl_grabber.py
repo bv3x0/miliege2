@@ -4,8 +4,12 @@ import re
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from utils.formatting import format_large_number
-from utils.api import safe_api_call, HyperliquidAPI
+from cogs.utils import (
+    format_number as format_large_number,
+    safe_api_call,
+    UI
+)
+from utils.api import HyperliquidAPI
 from db.models import Base, Token
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
 from collections import defaultdict, OrderedDict
