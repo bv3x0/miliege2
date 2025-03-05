@@ -11,8 +11,8 @@ from cogs.core.trackers import BotMonitor, TokenTracker
 from cogs.core.health import HealthMonitor
 from functools import wraps
 from cogs.features.fun import FunCommands
-from cogs.rick_grabber import RickGrabber
-from cogs.admin_commands import AdminCommands
+from cogs.grabbers.rick_grabber import RickGrabber
+from cogs.core.admin import AdminCommands
 import aiohttp
 from db.engine import Database
 from db.models import Token
