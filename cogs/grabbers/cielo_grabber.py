@@ -4,7 +4,7 @@ import re
 import logging
 import asyncio
 from cogs.utils import (
-    format_number as format_large_number,
+    format_large_number,
     format_age as get_age_string,
     format_currency as format_buy_amount,
     safe_api_call,
