@@ -98,11 +98,16 @@ class DiscordBot(commands.Bot):
         
         # Initialize database
         self.db = Database(database_url)
+        
+        # Create tables if they don't exist
+        self.db.create_tables()
+        
+        # Initialize session factory and create a session
         self.Session = self.db.session_factory
-        self.db_session = self.Session()  # Add this line
+        self.db_session = self.Session()
         
         self.monitor = BotMonitor()
-        self.token_tracker = TokenTracker(session_factory=self.Session)
+        self.token_tracker = TokenTracker(session_factory=self.db_session)
         self.session = None  # Will be initialized in setup_hook
 
     async def on_message(self, message):

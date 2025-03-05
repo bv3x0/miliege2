@@ -61,30 +61,30 @@ class TokenTracker:
                 return
                 
             # Get the most recent tokens up to max_tokens
-            with self.update_lock:
-                tokens = self.session_factory.query(Token).order_by(desc(Token.last_updated)).limit(self.max_tokens).all()
-                
-                # Reset the in-memory cache
-                self.tokens = OrderedDict()
-                
-                # Populate cache from database records
-                for token in tokens:
-                    self.tokens[token.contract_address] = {
-                        'name': token.name,
-                        'chart_url': token.chart_url,
-                        'chain': token.chain,
-                        'initial_market_cap': token.initial_market_cap,
-                        'initial_market_cap_formatted': token.initial_market_cap_formatted,
-                        'market_cap': token.current_market_cap_formatted,
-                        'timestamp': token.last_updated,
-                        'source': token.source,
-                        'user': token.credited_user,
-                        'message_id': token.message_id,
-                        'channel_id': token.channel_id,
-                        'guild_id': token.guild_id
-                    }
-                
-                logging.info(f"Loaded {len(self.tokens)} tokens from database")
+            # Remove the lock since this is synchronous code
+            tokens = self.session_factory.query(Token).order_by(desc(Token.last_updated)).limit(self.max_tokens).all()
+            
+            # Reset the in-memory cache
+            self.tokens = OrderedDict()
+            
+            # Populate cache from database records
+            for token in tokens:
+                self.tokens[token.contract_address] = {
+                    'name': token.name,
+                    'chart_url': token.chart_url,
+                    'chain': token.chain,
+                    'initial_market_cap': token.initial_market_cap,
+                    'initial_market_cap_formatted': token.initial_market_cap_formatted,
+                    'market_cap': token.current_market_cap_formatted,
+                    'timestamp': token.last_updated,
+                    'source': token.source,
+                    'user': token.credited_user,
+                    'message_id': token.message_id,
+                    'channel_id': token.channel_id,
+                    'guild_id': token.guild_id
+                }
+            
+            logging.info(f"Loaded {len(self.tokens)} tokens from database")
         
         except Exception as e:
             logging.error(f"Error loading tokens from database: {e}")
