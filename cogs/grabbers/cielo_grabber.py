@@ -160,8 +160,19 @@ Embed Count: %d
                     # Create a new embed with the standard color
                     new_embed = discord.Embed(color=Colors.EMBED_BORDER)
                     
-                    # Move title to author field with icon
-                    new_embed.set_author(name="Buy Alert", icon_url="https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png")
+                    # Extract data first to determine icon URL
+                    market_cap = pair.get('fdv', 'N/A')
+                    market_cap_value = market_cap if isinstance(market_cap, (int, float)) else None
+                    
+                    # Set different icon URL based on market cap
+                    if market_cap_value is not None and market_cap_value < 1_000_000:
+                        # Under $1M - use the wow emoji
+                        author_icon_url = "https://cdn.discordapp.com/emojis/1149703956746997871.webp"
+                    else:
+                        # Over $1M or unknown - use the green circle
+                        author_icon_url = "https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png"
+                        
+                    new_embed.set_author(name="Buy Alert", icon_url=author_icon_url)
                     
                     # Extract data
                     chain = pair.get('chainId', 'Unknown Chain')
@@ -306,17 +317,7 @@ Embed Count: %d
                         buy_info = ""  # Default to empty string if there's an error
                     
                     # Format market cap with dollar sign and "mc" suffix
-                    try:
-                        if market_cap_value and market_cap_value < 1_000_000:
-                            stats_line_1 = f"${formatted_mcap} mc"
-                            has_wow_emoji = True  # Track if we need to add wow emoji to footer
-                        else:
-                            stats_line_1 = f"${formatted_mcap} mc"
-                            has_wow_emoji = False
-                    except Exception as e:
-                        logging.error(f"Error formatting market cap: {e}", exc_info=True)
-                        stats_line_1 = f"${formatted_mcap} mc"
-                        has_wow_emoji = False
+                    stats_line_1 = f"${formatted_mcap} mc"
                     
                     # Format age (keep "old" suffix but abbreviate time units)
                     simplified_age = ""
@@ -345,11 +346,8 @@ Embed Count: %d
                         logging.error(f"Error formatting socials: {e}", exc_info=True)
                         socials_text = "no socials"
                     
-                    # First stats line: Add wow emoji to market cap if applicable
-                    if has_wow_emoji:
-                        stats_line_1 = f"<:wow:1149703956746997871> {stats_line_1} ⋅ {simplified_age} ⋅ {chain.lower()}"
-                    else:
-                        stats_line_1 = f"{stats_line_1} ⋅ {simplified_age} ⋅ {chain.lower()}"
+                    # First stats line: No wow emoji, just market cap, age, and chain
+                    stats_line_1 = f"{stats_line_1} ⋅ {simplified_age} ⋅ {chain.lower()}"
                     
                     # Second line: just social links
                     stats_line_2 = socials_text
@@ -521,7 +519,7 @@ Embed Count: %d
                 # Create chart URL using the contract and chain
                 chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                 
-                # Set author with Buy Alert
+                # Set author with Buy Alert - keep default icon for error case
                 new_embed.set_author(name="Buy Alert", icon_url="https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png")
                 
                 # Create description parts
