@@ -10,7 +10,7 @@ from cogs.features.digest import DigestCog
 from cogs.core.trackers import BotMonitor, TokenTracker
 from cogs.core.health import HealthMonitor
 from functools import wraps
-from features.fun import FunCommands
+from cogs.features.fun import FunCommands
 from cogs.rick_grabber import RickGrabber
 from cogs.admin_commands import AdminCommands
 import aiohttp
@@ -335,12 +335,6 @@ class DiscordBot(commands.Bot):
 
 async def main():
     bot = DiscordBot()
-    
-    # Add cogs
-    await bot.add_cog(FunCommands(bot))
-    await bot.add_cog(AdminCommands(bot))
-    
-    # Run the bot
     await bot.start(token)
 
 if __name__ == "__main__":
