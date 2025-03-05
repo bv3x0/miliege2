@@ -3,21 +3,19 @@ from discord.ext import commands, tasks
 import logging
 from collections import deque, OrderedDict
 import aiohttp
-from utils import safe_api_call, format_large_number
 from datetime import datetime, timedelta
 import pytz
 import asyncio
 from sqlalchemy.exc import SQLAlchemyError # type: ignore
 from sqlalchemy import desc # type: ignore
 from db.models import Token
-from utils.formatting import format_large_number
-from utils.api import safe_api_call, DexScreenerAPI
 import re
 from cogs.utils import (
     format_large_number,
     safe_api_call,
     DexScreenerAPI,
-    Colors
+    Colors,
+    UI
 )
 
 class DigestCog(commands.Cog):
