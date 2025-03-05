@@ -1,6 +1,8 @@
 import aiohttp
 import logging
 from typing import Optional
+from hyperliquid.info import Info
+from hyperliquid.utils import constants
 from .config import settings
 
 async def safe_api_call(
@@ -40,23 +42,36 @@ class DexScreenerAPI:
         return await safe_api_call(session, url)
 
 class HyperliquidAPI:
-    """Wrapper for Hyperliquid API calls"""
-    BASE_URL = "https://api.hyperliquid.xyz"
+    """Wrapper for Hyperliquid API calls using official SDK"""
+    def __init__(self):
+        self.info = Info(constants.MAINNET_API_URL, skip_ws=True)  # Use MAINNET_API_URL or TESTNET_API_URL as needed
     
     @staticmethod
     async def get_asset_info(session: aiohttp.ClientSession) -> Optional[dict]:
         """Get asset information from Hyperliquid"""
-        url = f"{HyperliquidAPI.BASE_URL}/info"
-        return await safe_api_call(session, url)
+        try:
+            info = Info(constants.MAINNET_API_URL, skip_ws=True)
+            return info.meta()
+        except Exception as e:
+            logging.error(f"Error getting asset info: {e}")
+            return None
 
     @staticmethod
     async def get_user_fills(session: aiohttp.ClientSession, address: str) -> Optional[dict]:
         """Get user trade fills from Hyperliquid"""
-        url = f"{HyperliquidAPI.BASE_URL}/fills/{address}"
-        return await safe_api_call(session, url)
+        try:
+            info = Info(constants.MAINNET_API_URL, skip_ws=True)
+            return info.user_fills(address)
+        except Exception as e:
+            logging.error(f"Error getting user fills for {address}: {e}")
+            return None
 
     @staticmethod
     async def get_user_state(session: aiohttp.ClientSession, address: str) -> Optional[dict]:
         """Get user state (positions) from Hyperliquid"""
-        url = f"{HyperliquidAPI.BASE_URL}/user/{address}"
-        return await safe_api_call(session, url)
+        try:
+            info = Info(constants.MAINNET_API_URL, skip_ws=True)
+            return info.user_state(address)
+        except Exception as e:
+            logging.error(f"Error getting user state for {address}: {e}")
+            return None
