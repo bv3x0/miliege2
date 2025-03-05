@@ -13,12 +13,11 @@ from db.models import Token
 from utils.formatting import format_large_number
 from utils.api import safe_api_call, DexScreenerAPI
 import re
-from utils.constants import Colors
 from cogs.utils import (
     format_large_number,
     safe_api_call,
     DexScreenerAPI,
-    UI
+    Colors
 )
 
 class DigestCog(commands.Cog):
