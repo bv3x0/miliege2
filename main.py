@@ -5,17 +5,19 @@ from logging.handlers import RotatingFileHandler
 import os
 from dotenv import load_dotenv
 from datetime import datetime
-from cogs.grabber import TokenGrabber
-from cogs.digest import DigestCog
-from trackers import BotMonitor, TokenTracker
-from cogs.health import HealthMonitor
+from cogs.cielo_grabber import CieloGrabber
+from features.digest import DigestCog
+from cogs.core.trackers import BotMonitor, TokenTracker
+from cogs.core.health import HealthMonitor
 from functools import wraps
-from cogs.fun import FunCommands
+from features.fun import FunCommands
 from cogs.rick_grabber import RickGrabber
+from cogs.admin_commands import AdminCommands
 import aiohttp
 from db.engine import Database
 from db.models import Token
-from cogs.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
+from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
+from discord import app_commands
 
 # Enhanced logging setup
 def setup_logging():
@@ -93,15 +95,13 @@ class DiscordBot(commands.Bot):
         logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
-        # Initialize database
+        # Instead of a single session, use a session factory
         self.db = Database(database_url)
-        self.db.create_tables()
-        
-        # Create a session for the token tracker
-        self.db_session = self.db.get_session()
+        self.Session = self.db.get_session_factory()
         
         self.monitor = BotMonitor()
-        self.token_tracker = TokenTracker(db_session=self.db_session)
+        # Update to use session factory
+        self.token_tracker = TokenTracker(session_factory=self.Session)
         self.session = None  # Will be initialized in setup_hook
 
     async def on_message(self, message):
@@ -134,11 +134,12 @@ class DiscordBot(commands.Bot):
         await self.add_cog(digest_cog)
         
         # Add cogs with shared session and digest_cog reference
-        await self.add_cog(TokenGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
+        await self.add_cog(CieloGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
         await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
         await self.add_cog(HyperliquidWalletGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog, daily_digest_channel_id))
+        await self.add_cog(AdminCommands(self))
         logger.info("Hyperliquid Wallet Grabber loaded successfully")
         logger.info("Cogs loaded successfully")
 
@@ -201,9 +202,9 @@ class DiscordBot(commands.Bot):
             embed.add_field(name="Tracked Tokens", value=str(token_count))
             
             # Add database stats if available
-            if hasattr(self, 'db_session'):
+            if hasattr(self, 'Session'):
                 try:
-                    db_token_count = self.db_session.query(Token).count()
+                    db_token_count = self.Session().query(Token).count()
                     embed.add_field(name="Database Tokens", value=str(db_token_count))
                 except Exception as e:
                     logger.error(f"Error getting database stats: {e}")
@@ -298,15 +299,50 @@ class DiscordBot(commands.Bot):
             
         await super().close()
 
-if __name__ == "__main__":
+    @app_commands.command()
+    @app_commands.checks.has_role("Admin")  # Or use custom checks
+    @app_commands.checks.cooldown(1, 60.0)  # Once per minute
+    async def addwallet(self, interaction: discord.Interaction, wallet: str):
+        """Add a wallet to track on Hyperliquid"""
+        try:
+            # Get the HyperliquidWalletGrabber cog
+            wallet_grabber = self.get_cog('HyperliquidWalletGrabber')
+            if not wallet_grabber:
+                await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
+                return
+
+            # Add the wallet
+            tracked_wallet = await wallet_grabber.add_wallet(wallet)
+            if tracked_wallet:
+                await interaction.response.send_message(f"✅ Successfully added wallet: `{wallet}`", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Failed to add wallet. Please check the address and try again.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Error adding wallet: {e}")
+            await interaction.response.send_message("❌ An error occurred while adding the wallet.", ephemeral=True)
+
+    @app_commands.command()
+    @app_commands.checks.has_role("Admin")  # Or use custom checks
+    @app_commands.checks.cooldown(1, 60.0)  # Once per minute
+    async def removewallet(self, interaction: discord.Interaction, wallet: str):
+        @wallet.autocomplete
+        async def wallet_autocomplete(interaction: discord.Interaction, current: str):
+            # Return list of matching wallets
+            return [
+                app_commands.Choice(name=w.name, value=w.address)
+                for w in self.wallets if current.lower() in w.address.lower()
+            ][:25]  # Discord limits to 25 choices
+
+async def main():
     bot = DiscordBot()
-    try:
-        bot.run(token)
-    except discord.LoginFailure:
-        logger.critical("Failed to login. Check your token.")
-    except discord.HTTPException as e:
-        logger.critical(f"HTTP Exception: {e}")
-    except Exception as e:
-        logger.critical(f"Unexpected error: {e}")
-    finally:
-        logger.info("Bot shutdown")
+    
+    # Add cogs
+    await bot.add_cog(FunCommands(bot))
+    await bot.add_cog(AdminCommands(bot))
+    
+    # Run the bot
+    await bot.start(token)
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())

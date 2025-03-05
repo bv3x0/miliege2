@@ -10,8 +10,10 @@ import asyncio
 from sqlalchemy.exc import SQLAlchemyError # type: ignore
 from sqlalchemy import desc # type: ignore
 from db.models import Token
+from utils.formatting import format_large_number
+from utils.api import safe_api_call, DexScreenerAPI
 import re
-from utils.colors import EMBED_BORDER  # Import the color constant
+from utils.constants import Colors
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
@@ -119,7 +121,7 @@ class DigestCog(commands.Cog):
             return None
 
         embed = discord.Embed(
-            color=EMBED_BORDER  # Use consistent border color
+            color=Colors.EMBED_BORDER  # Use consistent border color
         )
         
         # Move title to author field with icon
@@ -144,13 +146,12 @@ class DigestCog(commands.Cog):
                     message_link = f"https://discord.com/channels/{token['guild_id']}/{token['channel_id']}/{token['message_id']}"
                 
                 # Fetch current market cap
-                dex_api_url = f"https://api.dexscreener.com/latest/dex/tokens/{contract}"
-                async with safe_api_call(session, dex_api_url) as dex_data:
-                    current_mcap = 'N/A'
-                    if dex_data and dex_data.get('pairs'):
-                        pair = dex_data['pairs'][0]
-                        if 'fdv' in pair:
-                            current_mcap = f"${format_large_number(float(pair['fdv']))}"
+                dex_data = await DexScreenerAPI.get_token_info(session, contract)
+                current_mcap = 'N/A'
+                if dex_data and dex_data.get('pairs'):
+                    pair = dex_data['pairs'][0]
+                    if 'fdv' in pair:
+                        current_mcap = f"${format_large_number(float(pair['fdv']))}"
 
                 # Format token information
                 # Compare market caps and add emoji based on 33% threshold
@@ -251,34 +252,31 @@ class DigestCog(commands.Cog):
                 logging.error(f"Could not find channel {self.channel_id}")
                 return
 
-            # Process tokens from the hour that just ended
-            hour_key = self.current_hour_key
-            self._update_token_hour()  # Updates to the new hour
-            
-            tokens_to_report = self.hour_tokens.get(hour_key, OrderedDict())
-            
-            if tokens_to_report:
-                logging.info(f"Found {len(tokens_to_report)} tokens for digest in hour {hour_key}")
-                embed = await self.create_digest_embed(tokens_to_report, is_hourly=True)
-                if embed:
-                    await channel.send(embed=embed)
-                    logging.info("Hourly digest posted successfully")
+            # Add retry logic for critical operations
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # Process tokens from the hour that just ended
+                    hour_key = self.current_hour_key
+                    self._update_token_hour()
+                    
+                    tokens_to_report = self.hour_tokens.get(hour_key, OrderedDict())
+                    
+                    if tokens_to_report:
+                        embed = await self.create_digest_embed(tokens_to_report, is_hourly=True)
+                        if embed:
+                            await channel.send(embed=embed)
+                            # Clear data only after successful send
+                            self._clear_hour_data(hour_key)
+                    break  # Success, exit retry loop
+                except discord.HTTPException as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        raise  # Re-raise if all retries failed
+                    await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
                 
-                # Clear the hour that just ended
-                if hour_key in self.hour_tokens:
-                    del self.hour_tokens[hour_key]
-                logging.info(f"Tokens for hour {hour_key} cleared after digest")
-                
-                # Also clear the global token tracker if there are tokens from this hour
-                if self.token_tracker.tokens:
-                    self.token_tracker.tokens.clear()
-                    logging.info("Global token tracker cleared")
-            else:
-                logging.info("No tokens to report in hourly digest")
-                await channel.send("<:fedora:1151138750768894003>")
-
         except Exception as e:
-            logging.error(f"Error in hourly digest: {e}", exc_info=True)
+            logging.error(f"Critical error in hourly digest: {e}", exc_info=True)
+            self.monitor.record_error()  # Ensure errors are tracked
 
     @hourly_digest.before_loop
     async def before_hourly_digest(self):

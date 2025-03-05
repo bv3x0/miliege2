@@ -4,15 +4,12 @@ import re
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from utils import format_large_number, safe_api_call
+from utils.formatting import format_large_number
+from utils.api import safe_api_call, HyperliquidAPI
 from db.models import Base, Token
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
 from collections import defaultdict, OrderedDict
-from utils.colors import EMBED_BORDER  # Import the color constant
-
-# Import the Hyperliquid SDK
-from hyperliquid.info import Info # type: ignore
-from hyperliquid.utils import constants # type: ignore
+from utils.constants import Colors
 
 # Define the new database model for tracked wallets
 class TrackedWallet(Base):
@@ -39,11 +36,14 @@ class HyperliquidWalletGrabber(commands.Cog):
         self.db_session = bot.db_session
         self.channel_id = channel_id  # Channel to send alerts to
         
+        # Add wallet lock for concurrent operations
+        self.wallet_locks = {}  # Dictionary to store locks per wallet
+        
+        # Add session factory
+        self.session_factory = bot.db.get_session
+        
         # Flag to enable/disable alerts
         self.is_enabled = True
-        
-        # Initialize the Hyperliquid SDK Info client
-        self.hl_info = Info(constants.MAINNET_API_URL, skip_ws=True)
         
         # Add a dictionary to track recent alerts by wallet and asset
         self.recent_alerts = {}
@@ -96,38 +96,18 @@ class HyperliquidWalletGrabber(commands.Cog):
     async def _init_asset_mappings(self):
         """Initialize asset ID to name mappings from the Hyperliquid API."""
         try:
-            # Wait for bot to be ready
             await self.bot.wait_until_ready()
-            
             logging.info("Initializing Hyperliquid asset mappings...")
             
-            # Fetch perpetual assets
-            try:
-                meta_data = await asyncio.to_thread(self.hl_info.meta)
-                if meta_data and "universe" in meta_data:
-                    for idx, asset in enumerate(meta_data["universe"]):
-                        if "name" in asset:
-                            # Add both with and without @ prefix
-                            self.asset_id_map[str(idx)] = asset["name"]
-                            self.asset_id_map[f"@{idx}"] = asset["name"]
-                            logging.debug(f"Added perpetual mapping: {idx} -> {asset['name']}")
-            except Exception as e:
-                logging.error(f"Error fetching perpetual assets: {e}")
-            
-            # Fetch spot assets
-            try:
-                spot_meta_data = await asyncio.to_thread(self.hl_info.spot_meta)
-                
-                if spot_meta_data and "universe" in spot_meta_data:
-                    for idx, asset in enumerate(spot_meta_data["universe"]):
-                        if "base" in asset:
-                            # Spot assets use 10000 + idx as their ID according to the docs
-                            spot_id = 10000 + idx
-                            self.asset_id_map[str(spot_id)] = asset["base"]
-                            self.asset_id_map[f"@{spot_id}"] = asset["base"]
-                            logging.debug(f"Added spot mapping: {spot_id} -> {asset['base']}")
-            except Exception as e:
-                logging.error(f"Error fetching spot assets: {e}")
+            # Use HyperliquidAPI wrapper for both perpetual and spot assets
+            meta_data = await HyperliquidAPI.get_asset_info(self.session)
+            if meta_data and "universe" in meta_data:
+                for idx, asset in enumerate(meta_data["universe"]):
+                    if "name" in asset:
+                        # Handle both perpetual and spot assets
+                        self.asset_id_map[str(idx)] = asset["name"]
+                        self.asset_id_map[f"@{idx}"] = asset["name"]
+                        logging.debug(f"Added asset mapping: {idx} -> {asset['name']}")
             
             logging.info(f"Initialized {len(self.asset_id_map)} Hyperliquid asset mappings")
             
@@ -140,6 +120,9 @@ class HyperliquidWalletGrabber(commands.Cog):
         self.check_wallets.cancel()
         self.cleanup_recent_alerts.cancel()
         self.send_digest.cancel()
+        
+        # Clear wallet locks
+        self.wallet_locks.clear()
     
     @tasks.loop(seconds=60)  # Check every minute, adjust as needed
     async def check_wallets(self):
@@ -182,115 +165,116 @@ class HyperliquidWalletGrabber(commands.Cog):
     
     async def _check_wallet_trades(self, wallet):
         """Check a specific wallet for new trades and fetch position data."""
-        try:
-            # Double-check that the wallet still exists in the database
-            wallet_exists = self.db_session.query(TrackedWallet).filter_by(id=wallet.id).first()
-            if not wallet_exists:
-                logging.warning(f"Wallet {wallet.address} no longer exists in database, skipping trade check")
-                return
-                
-            # Use the SDK to fetch user fills (trades)
-            trades_data = await asyncio.to_thread(
-                self.hl_info.user_fills,
-                wallet.address
-            )
-            
-            # Log the number of trades fetched
-            logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
-            
-            # Update the last checked time
-            wallet.last_checked_time = datetime.now()
-            
-            # Use the SDK to fetch user state (positions)
-            positions_data = await asyncio.to_thread(
-                self.hl_info.user_state,
-                wallet.address
-            )
-            
-            logging.debug(f"Fetched positions for wallet {wallet.address}")
-            
-            # Store positions by asset for easy lookup
-            positions_by_asset = {}
-            if positions_data and "assetPositions" in positions_data:
-                for position in positions_data["assetPositions"]:
-                    if "position" in position and "coin" in position["position"]:
-                        coin = position["position"]["coin"]
-                        positions_by_asset[coin] = position
-                        
-                logging.debug(f"Found {len(positions_by_asset)} active positions for wallet {wallet.address}")
-            
-            # Filter out trades we've already seen
-            if not trades_data:
-                logging.debug(f"No trades found for wallet {wallet.address}")
-                try:
-                    self.db_session.commit()  # Just update the last checked time
-                except Exception as db_error:
-                    logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
-                    self.db_session.rollback()  # Roll back on error
-                return
-                
-            # For newly added wallets, don't show old trades
-            if not wallet.last_trade_id:
-                # Store the most recent trade ID without sending alerts
-                if trades_data:
-                    # Sort by time in descending order (newest first)
-                    sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
-                    wallet.last_trade_id = str(sorted_trades[0]["tid"])
-                    logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet.last_trade_id}")
-                try:
-                    self.db_session.commit()
-                except Exception as db_error:
-                    logging.error(f"Database error initializing trade ID for wallet {wallet.address}: {db_error}")
-                    self.db_session.rollback()  # Roll back on error
-                return
-                
-            new_trades = self._filter_new_trades(trades_data, wallet.last_trade_id)
-            
-            if new_trades:
-                logging.info(f"Found {len(new_trades)} new trades for wallet {wallet.address}")
-                
-                # Update the last seen trade ID (assuming trades are sorted by time, newest first)
-                wallet.last_trade_id = str(new_trades[0]["tid"])
-                try:
-                    self.db_session.commit()
-                except Exception as db_error:
-                    logging.error(f"Database error updating trade ID for wallet {wallet.address}: {db_error}")
-                    self.db_session.rollback()  # Roll back on error
-                    return  # Skip processing trades if we can't update the database
-                
-                # Group trades by coin to process them together
-                trades_by_coin = {}
-                for trade in new_trades:
-                    coin = trade["coin"]
-                    if coin not in trades_by_coin:
-                        trades_by_coin[coin] = []
-                    trades_by_coin[coin].append(trade)
-                
-                # Process trades by coin
-                for coin, coin_trades in trades_by_coin.items():
-                    # Get position data for this asset if available
-                    position_data = positions_by_asset.get(coin, {})
-                    
-                    # Add each trade to the digest
-                    for trade in coin_trades:
-                        self._add_trade_to_digest(wallet, trade, position_data)
-                        
-                    logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
-            else:
-                try:
-                    self.db_session.commit()  # Just update the last checked time
-                except Exception as db_error:
-                    logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
-                    self.db_session.rollback()  # Roll back on error
+        # Get or create a lock for this wallet
+        if wallet.address not in self.wallet_locks:
+            self.wallet_locks[wallet.address] = asyncio.Lock()
         
-        except Exception as e:
-            logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
-            self.monitor.record_error()
-            # Make sure to rollback the session on error
+        async with self.wallet_locks[wallet.address]:
             try:
-                self.db_session.rollback()
-            except Exception as rollback_error:
-                logging.error(f"Error rolling back session: {rollback_error}")
+                # Use a new session for each operation
+                async with self.session_factory() as session:
+                    # Verify wallet still exists before checking
+                    wallet_check = await session.get(TrackedWallet, wallet.id)
+                    if not wallet_check:
+                        logging.warning(f"Wallet {wallet.address} was deleted during check cycle")
+                        return
+                    
+                    # Use HyperliquidAPI instead of SDK
+                    trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
+                    
+                    # Log the number of trades fetched
+                    logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
+                    
+                    # Update the last checked time
+                    wallet_check.last_checked_time = datetime.now()
+                    
+                    # Use HyperliquidAPI instead of SDK
+                    positions_data = await HyperliquidAPI.get_user_state(self.session, wallet.address)
+                    
+                    logging.debug(f"Fetched positions for wallet {wallet.address}")
+                    
+                    # Store positions by asset for easy lookup
+                    positions_by_asset = {}
+                    if positions_data and "assetPositions" in positions_data:
+                        for position in positions_data["assetPositions"]:
+                            if "position" in position and "coin" in position["position"]:
+                                coin = position["position"]["coin"]
+                                positions_by_asset[coin] = position
+                                
+                        logging.debug(f"Found {len(positions_by_asset)} active positions for wallet {wallet.address}")
+                    
+                    # Filter out trades we've already seen
+                    if not trades_data:
+                        logging.debug(f"No trades found for wallet {wallet.address}")
+                        try:
+                            await session.commit()  # Just update the last checked time
+                        except Exception as db_error:
+                            logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
+                            await session.rollback()  # Roll back on error
+                        return
+                        
+                    # For newly added wallets, don't show old trades
+                    if not wallet_check.last_trade_id:
+                        # Store the most recent trade ID without sending alerts
+                        if trades_data:
+                            # Sort by time in descending order (newest first)
+                            sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
+                            wallet_check.last_trade_id = str(sorted_trades[0]["tid"])
+                            logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet_check.last_trade_id}")
+                        try:
+                            await session.commit()
+                        except Exception as db_error:
+                            logging.error(f"Database error initializing trade ID for wallet {wallet.address}: {db_error}")
+                            await session.rollback()  # Roll back on error
+                        return
+                        
+                    new_trades = self._filter_new_trades(trades_data, wallet_check.last_trade_id)
+                    
+                    if new_trades:
+                        logging.info(f"Found {len(new_trades)} new trades for wallet {wallet.address}")
+                        
+                        # Update the last seen trade ID
+                        wallet_check.last_trade_id = str(new_trades[0]["tid"])
+                        try:
+                            await session.commit()
+                        except Exception as db_error:
+                            logging.error(f"Database error updating trade ID for wallet {wallet.address}: {db_error}")
+                            await session.rollback()  # Roll back on error
+                            return  # Skip processing trades if we can't update the database
+                        
+                        # Group trades by coin to process them together
+                        trades_by_coin = {}
+                        for trade in new_trades:
+                            coin = trade["coin"]
+                            if coin not in trades_by_coin:
+                                trades_by_coin[coin] = []
+                            trades_by_coin[coin].append(trade)
+                        
+                        # Process trades by coin
+                        for coin, coin_trades in trades_by_coin.items():
+                            # Get position data for this asset if available
+                            position_data = positions_by_asset.get(coin, {})
+                            
+                            # Add each trade to the digest
+                            for trade in coin_trades:
+                                self._add_trade_to_digest(wallet_check, trade, position_data)
+                                
+                            logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
+                    else:
+                        try:
+                            await session.commit()  # Just update the last checked time
+                        except Exception as db_error:
+                            logging.error(f"Database error updating last checked time for wallet {wallet.address}: {db_error}")
+                            await session.rollback()  # Roll back on error
+            
+            except Exception as e:
+                logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
+                self.monitor.record_error()
+                # Make sure to rollback the session on error
+                try:
+                    await session.rollback()
+                except Exception as rollback_error:
+                    logging.error(f"Error rolling back session: {rollback_error}")
     
     def _filter_new_trades(self, trades, last_trade_id):
         """Filter out trades we've already seen based on the last trade ID."""
@@ -512,7 +496,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         
         # Use consistent border color for all embeds
         embed = discord.Embed(
-            color=EMBED_BORDER,
+            color=Colors.EMBED_BORDER,
             timestamp=datetime.now()
         )
         
@@ -709,7 +693,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                 await ctx.send("No Hyperliquid wallets are currently being tracked.")
                 return
             
-            embed = discord.Embed(title="Tracked Hyperliquid Wallets", color=0x5b594f)
+            embed = discord.Embed(title="Tracked Hyperliquid Wallets", color=Colors.EMBED_BORDER)
             for wallet in wallets:
                 name = f"{wallet.name} " if wallet.name else ""
                 embed.add_field(
@@ -730,7 +714,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         """Display help information for commands"""
         embed = discord.Embed(
             title="Hyperliquid Wallet Commands",
-            color=0x5b594f
+            color=Colors.EMBED_BORDER
         )
         
         commands_text = (
