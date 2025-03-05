@@ -28,10 +28,9 @@ class DigestCog(commands.Cog):
         self.hour_tokens = OrderedDict()
         self.current_hour_key = self._get_current_hour_key()
         
-        # Load tokens from database if token_tracker has a db_session
-        self.db_session = None
-        if hasattr(token_tracker, 'db_session') and token_tracker.db_session:
-            self.db_session = token_tracker.db_session
+        # Get database session from bot
+        self.db_session = bot.db_session
+        if self.db_session:
             self._load_tokens_from_db()
         else:
             logging.warning("DigestCog: No database session available - token data will not persist across reboots")

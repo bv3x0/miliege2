@@ -293,22 +293,28 @@ class DiscordBot(commands.Bot):
             await ctx.send(embed=embed)
 
     async def close(self):
-        # Close the database session
-        if hasattr(self, 'db_session'):
-            self.db_session.close()
-            logging.info("Closed database session")
+        """Cleanup when the bot is shutting down"""
+        try:
+            # Close the database session
+            if hasattr(self, 'db_session'):
+                self.db_session.close()
+                logging.info("Closed database session")
             
-        # Close the database connection
-        if hasattr(self, 'db'):
-            self.db.close()
-            logging.info("Closed database connection")
+            # Close the database connection
+            if hasattr(self, 'db'):
+                self.db.close()
+                logging.info("Closed database connection")
             
-        # Close the shared session
-        if self.session:
-            await self.session.close()
-            logging.info("Closed shared aiohttp session")
+            # Close the aiohttp session
+            if self.session:
+                await self.session.close()
+                logging.info("Closed aiohttp session")
             
-        await super().close()
+            # Call parent's close method
+            await super().close()
+            
+        except Exception as e:
+            logging.error(f"Error during shutdown: {e}")
 
     @app_commands.command()
     @app_commands.checks.has_role("Admin")  # Or use custom checks
@@ -346,8 +352,16 @@ class DiscordBot(commands.Bot):
 
 async def main():
     bot = DiscordBot()
-    await bot.start(token)
+    try:
+        await bot.start(token)
+    except KeyboardInterrupt:
+        logging.info("Received keyboard interrupt, shutting down...")
+    finally:
+        await bot.close()
+        logging.info("Bot shutdown complete")
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Bot stopped by user")
