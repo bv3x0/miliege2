@@ -150,6 +150,14 @@ class DiscordBot(commands.Bot):
         logger.info("Hyperliquid Wallet Grabber loaded successfully")
         logger.info("Cogs loaded successfully")
 
+        # Sync slash commands with Discord
+        try:
+            logger.info("Syncing slash commands with Discord...")
+            await self.tree.sync()
+            logger.info("Successfully synced slash commands")
+        except Exception as e:
+            logger.error(f"Failed to sync slash commands: {e}")
+
     async def on_ready(self):
         logger.info(f'Bot started as {self.user}')
         
