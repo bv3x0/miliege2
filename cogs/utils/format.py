@@ -40,8 +40,8 @@ def format_large_number(number: Union[int, float, str]) -> str:
         magnitude += 1
         num /= 1000.0
 
-    decimal_places = 1 if num % 1 == 0 else 2
-    formatted = f"{num:.{decimal_places}f}".rstrip('0').rstrip('.')
+    # Always use exactly 1 decimal place
+    formatted = f"{num:.1f}".rstrip('0').rstrip('.')
     return f"{formatted}{'KMB'[magnitude-1] if magnitude > 0 else ''}"
 
 def format_currency(amount: Union[str, float]) -> str:
