@@ -5,10 +5,11 @@ import re
 from cogs.utils import (
     format_large_number,
     format_age as get_age_string,
-    UI
+    UI,
+    safe_api_call,
+    DexScreenerAPI,
+    Colors
 )
-from utils.api import safe_api_call, DexScreenerAPI
-from utils.constants import Colors
 import asyncio
 
 class RickGrabber(commands.Cog):
