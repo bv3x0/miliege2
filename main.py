@@ -137,7 +137,7 @@ class DiscordBot(commands.Bot):
         logger.info("Created shared aiohttp session")
         
         # Create DigestCog first to share reference
-        digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id)
+        digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
         
         # Add cogs with shared session and digest_cog reference

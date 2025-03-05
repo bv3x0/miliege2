@@ -19,7 +19,7 @@ from cogs.utils import (
 )
 
 class DigestCog(commands.Cog):
-    def __init__(self, bot, token_tracker, channel_id):
+    def __init__(self, bot, token_tracker, channel_id, monitor=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.channel_id = channel_id
@@ -40,6 +40,10 @@ class DigestCog(commands.Cog):
         
         # Flag to track if the hook is installed
         self.hook_installed = False
+        
+        # Use the monitor if provided, otherwise track errors locally
+        self.monitor = monitor if monitor else None
+        self.error_count = 0
 
     def _load_tokens_from_db(self):
         """Load tokens from the database into the hour buckets"""
@@ -278,7 +282,10 @@ class DigestCog(commands.Cog):
                 
         except Exception as e:
             logging.error(f"Critical error in hourly digest: {e}", exc_info=True)
-            self.monitor.record_error()  # Ensure errors are tracked
+            if self.monitor:
+                self.monitor.record_error()
+            else:
+                self.error_count += 1
 
     @hourly_digest.before_loop
     async def before_hourly_digest(self):
@@ -406,3 +413,9 @@ class DigestCog(commands.Cog):
         except Exception as e:
             logging.error(f"Error refreshing digest: {e}", exc_info=True)
             await ctx.send("❌ **Error:** Failed to refresh digest system.")
+
+    def _clear_hour_data(self, hour_key):
+        """Clear the token data for a specific hour after it has been processed"""
+        if hour_key in self.hour_tokens:
+            del self.hour_tokens[hour_key]
+            logging.info(f"Cleared token data for hour: {hour_key}")
