@@ -5,15 +5,15 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from cogs.utils import (
-    format_number as format_large_number,
+    format_large_number,
     safe_api_call,
-    UI
+    UI,
+    Colors,
+    HyperliquidAPI
 )
-from utils.api import HyperliquidAPI
 from db.models import Base, Token
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
 from collections import defaultdict, OrderedDict
-from utils.constants import Colors
 
 # Define the new database model for tracked wallets
 class TrackedWallet(Base):
