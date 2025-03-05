@@ -3,7 +3,7 @@ from discord.ext import commands
 import logging
 import re
 from cogs.utils import (
-    format_number as format_large_number,
+    format_large_number,
     format_age as get_age_string,
     UI
 )

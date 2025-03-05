@@ -15,7 +15,7 @@ from utils.api import safe_api_call, DexScreenerAPI
 import re
 from utils.constants import Colors
 from cogs.utils import (
-    format_number as format_large_number,
+    format_large_number,
     safe_api_call,
     DexScreenerAPI,
     UI

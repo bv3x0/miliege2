@@ -1,6 +1,29 @@
-from typing import Union
+from typing import Union, Final
 from datetime import datetime
 import logging
+
+# Color constants for embeds
+class Colors:
+    """Color constants for embeds"""
+    EMBED_BORDER: Final = 0x5b594f
+    LONG_COLOR: Final = 0x00ff00
+    SHORT_COLOR: Final = 0xff0000
+
+# Bot constants
+class BotConstants:
+    """General bot constants"""
+    MAX_TOKENS: Final = 1000
+    CACHE_TIMEOUT: Final = 3600
+    DEFAULT_API_TIMEOUT: Final = 30
+    DEFAULT_RATE_LIMIT: Final = 1.0
+    MAX_ERRORS: Final = 50
+    UPDATE_INTERVAL: Final = 300  # 5 minutes
+
+class Messages:
+    """Standard messages used by the bot"""
+    ERROR_GENERIC: Final = "❌ An unexpected error occurred"
+    NO_RESULTS: Final = "<:dwbb:1321571679109124126>"
+    SUCCESS: Final = "✅"
 
 def format_large_number(number: Union[int, float, str]) -> str:
     """Format large numbers with K, M, B suffixes"""

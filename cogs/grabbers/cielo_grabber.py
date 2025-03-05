@@ -11,7 +11,7 @@ from cogs.utils import (
     DexScreenerAPI,
     UI
 )
-from cogs.utils.constants import Colors, BotConstants, Messages
+from cogs.utils.format import Colors, BotConstants, Messages
 
 class CieloGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
