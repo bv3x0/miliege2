@@ -4,7 +4,7 @@ Includes configuration, formatting, and API utilities.
 """
 
 from .config import settings, UI
-from .format import format_number, format_currency, format_percent, format_age
+from .format import format_large_number, format_currency, format_percent, format_age
 from .api import safe_api_call, DexScreenerAPI, HyperliquidAPI
 
 __all__ = [
@@ -13,7 +13,7 @@ __all__ = [
     'UI',
     
     # Formatting utilities
-    'format_number',
+    'format_large_number',
     'format_currency',
     'format_percent',
     'format_age',
