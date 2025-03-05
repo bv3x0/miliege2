@@ -385,10 +385,9 @@ Embed Count: %d
                             amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
                             if amount_float < 250:
                                 footer_parts.append("🤏")
-                            elif amount_float < 2000:
-                                footer_parts.append("💰")
-                            else:
+                            elif amount_float >= 10000:
                                 footer_parts.append("🤑")
+                            # Middle range (250-10000) gets no emoji
                         
                         # Join emojis with spaces
                         footer_emojis = " ".join(footer_parts)
@@ -560,10 +559,9 @@ Embed Count: %d
                         amount_float = float(dollar_amount.replace(',', ''))
                         if amount_float < 250:
                             footer_text = "🤏 " + footer_text
-                        elif amount_float < 2000:
-                            footer_text = "💰 " + footer_text
-                        else:
+                        elif amount_float >= 10000:
                             footer_text = "🤑 " + footer_text
+                        # Middle range (250-10000) gets no emoji
                         footer_text += f" ⋅ ${format(int(float(dollar_amount)), ',')} buy"
                     new_embed.set_footer(text=footer_text)
 
