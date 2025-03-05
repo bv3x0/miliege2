@@ -5,15 +5,15 @@ from collections import OrderedDict  # For ordered token storage
 import asyncio
 
 from cogs.utils import (
-    format_number as format_large_number,
+    format_large_number,
     safe_api_call,
     DexScreenerAPI,
-    UI
+    UI,
+    Colors
 )
 from db.models import Token, MarketCapUpdate
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import desc
-from utils.constants import Colors
 
 class BotMonitor:
     def __init__(self):
