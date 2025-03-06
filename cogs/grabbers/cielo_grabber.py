@@ -24,7 +24,7 @@ class CieloGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
-            # Only do detailed logging for Cielo messages
+            # Only do detailed logging for Cielo
             if message.author.bot and message.author.name == "Cielo":
                 logging.info("""
 === Cielo Message Detected ===
@@ -167,7 +167,7 @@ Embed Count: %d
                     # Set different icon URL based on market cap
                     if market_cap_value is not None and market_cap_value < 1_000_000:
                         # Under $1M - use the wow emoji
-                        author_icon_url = "https://cdn.discordapp.com/emojis/1149703956746997871.webp"
+                        author_icon_url = "https://cdn.discordapp.com/emojis/1323480997873848371.web"
                     else:
                         # Over $1M or unknown - use the green circle
                         author_icon_url = "https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png"
