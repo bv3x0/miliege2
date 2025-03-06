@@ -14,12 +14,13 @@ from cogs.utils import (
 from cogs.utils.format import Colors, BotConstants, Messages
 
 class CieloGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None):
+    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, output_channel_id=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
         self.session = session
         self.digest_cog = digest_cog
+        self.output_channel_id = output_channel_id  # New parameter for output channel
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -49,6 +50,23 @@ Embed Count: %d
                             logging.info(f"  Name: '{field.name}'")
                             logging.info(f"  Value: '{field.value}'")
                             logging.info(f"  Inline: {field.inline}")
+                
+                # Check if this message contains a star emoji in any field
+                has_star = False
+                if message.embeds:
+                    for embed in message.embeds:
+                        for field in embed.fields:
+                            if field.value and '⭐️' in field.value:
+                                has_star = True
+                                logging.info("Found star emoji in message field")
+                                break
+                        if has_star:
+                            break
+                
+                # Skip processing if no star emoji found
+                if not has_star:
+                    logging.info("No star emoji found in message, skipping processing")
+                    return
                 
                 # Extract credit from embed title
                 credit_user = None
@@ -110,25 +128,31 @@ Embed Count: %d
                         
                         # If we found a token, process it
                         if token_address:
-                            # Create a new clean message without embed for processing
-                            clean_message = await message.channel.send("Processing token...")
-                            await self._process_token(token_address, clean_message, credit_user, swap_info, dexscreener_maker_link, tx_link, chain_info)
+                            # Determine which channel to use for output
+                            output_channel = None
+                            if self.output_channel_id:
+                                output_channel = self.bot.get_channel(self.output_channel_id)
+                                logging.info(f"Using configured output channel: {self.output_channel_id}")
+                            
+                            if not output_channel:
+                                # Fallback to the same channel as the input
+                                output_channel = message.channel
+                                logging.info("Using input channel for output (no output channel configured)")
+                            
+                            # Create a temporary message in the output channel
+                            temp_message = await output_channel.send("Processing token...")
+                            
+                            # Process the token and send results to the output channel
+                            await self._process_token(token_address, temp_message, credit_user, swap_info, dexscreener_maker_link, tx_link, chain_info)
                             
                             # Delete our temporary message
                             try:
-                                await clean_message.delete()
+                                await temp_message.delete()
                             except Exception as e:
                                 logging.error(f"Error deleting temporary message: {e}")
                             
-                            # Now try to delete the original message
-                            try:
-                                await message.delete()
-                                logging.info(f"Deleted original Cielo message: {message.id}")
-                            except discord.Forbidden:
-                                logging.warning("Bot doesn't have permission to delete messages")
-                            except Exception as e:
-                                logging.error(f"Error deleting message: {e}")
-                            
+                            # Don't delete the original Cielo message
+                            logging.info(f"Keeping original Cielo message: {message.id}")
                             return
                 else:
                     logging.warning("Cielo message had no embeds")
