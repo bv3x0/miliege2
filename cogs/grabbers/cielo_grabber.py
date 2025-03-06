@@ -14,17 +14,44 @@ from cogs.utils import (
 from cogs.utils.format import Colors, BotConstants, Messages
 
 class CieloGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, output_channel_id=None):
+    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, input_channel_id=None, output_channel_id=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
         self.session = session
         self.digest_cog = digest_cog
-        self.output_channel_id = output_channel_id  # New parameter for output channel
+        
+        # Convert channel IDs to int if they're strings
+        if input_channel_id and isinstance(input_channel_id, str):
+            try:
+                self.input_channel_id = int(input_channel_id)
+                logging.info(f"Initialized CieloGrabber with input channel ID: {self.input_channel_id}")
+            except ValueError:
+                logging.error(f"Invalid input channel ID: {input_channel_id}")
+                self.input_channel_id = None
+        else:
+            self.input_channel_id = input_channel_id
+            logging.info(f"Initialized CieloGrabber with input channel ID: {self.input_channel_id}")
+        
+        if output_channel_id and isinstance(output_channel_id, str):
+            try:
+                self.output_channel_id = int(output_channel_id)
+                logging.info(f"Initialized CieloGrabber with output channel ID: {self.output_channel_id}")
+            except ValueError:
+                logging.error(f"Invalid output channel ID: {output_channel_id}")
+                self.output_channel_id = None
+        else:
+            self.output_channel_id = output_channel_id
+            logging.info(f"Initialized CieloGrabber with output channel ID: {self.output_channel_id}")
 
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
+            # Check if this message is in the input channel (if specified)
+            if self.input_channel_id and message.channel.id != self.input_channel_id:
+                # Skip messages not in the input channel
+                return
+            
             # Only do detailed logging for Cielo or Cielo Alerts
             if message.author.bot and (message.author.name == "Cielo" or message.author.name == "Cielo Alerts"):
                 logging.info("""

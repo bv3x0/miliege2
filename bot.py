@@ -36,6 +36,7 @@ cielo_grabber = CieloGrabber(
     token_tracker, 
     monitor, 
     session, 
-    digest_cog=digest_cog,
-    output_channel_id=cielo_output_channel_id
+    digest_cog, 
+    os.getenv('CIELO_OUTPUT_CHANNEL_ID'),  # This is the input channel where Cielo posts
+    os.getenv('DAILY_DIGEST_CHANNEL_ID')   # This is the output channel where you want the processed messages
 )
