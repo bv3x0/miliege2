@@ -19,6 +19,7 @@ from db.engine import Database
 from db.models import Token
 from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
 from discord import app_commands
+from cogs.utils.config import settings
 
 # Enhanced logging setup
 def setup_logging():
@@ -141,7 +142,19 @@ class DiscordBot(commands.Bot):
         await self.add_cog(digest_cog)
         
         # Add cogs with shared session and digest_cog reference
-        await self.add_cog(CieloGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
+        cielo_output_channel_id = None
+        if hasattr(settings, 'CIELO_OUTPUT_CHANNEL_ID') and settings.CIELO_OUTPUT_CHANNEL_ID:
+            cielo_output_channel_id = settings.CIELO_OUTPUT_CHANNEL_ID
+            logging.info(f"Using Cielo output channel: {cielo_output_channel_id}")
+
+        await self.add_cog(CieloGrabber(
+            self, 
+            self.token_tracker, 
+            self.monitor, 
+            self.session, 
+            digest_cog,
+            output_channel_id=cielo_output_channel_id
+        ))
         await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))

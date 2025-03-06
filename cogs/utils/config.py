@@ -1,5 +1,5 @@
-from pydantic_settings import BaseSettings
-from typing import Final
+from pydantic_settings import BaseSettings # type: ignore
+from typing import Final, Optional
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Bot Settings
     MAX_ERRORS: int = 50
     UPDATE_INTERVAL: int = 300  # 5 minutes
+    
+    # Channel Settings
+    CIELO_OUTPUT_CHANNEL_ID: Optional[int] = None  # New field for Cielo output channel
     
     class Config:
         env_file = ".env"
