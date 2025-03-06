@@ -162,15 +162,31 @@ Embed Count: %d
                     
                     # Extract data first to determine icon URL
                     market_cap = pair.get('fdv', 'N/A')
-                    market_cap_value = market_cap if isinstance(market_cap, (int, float)) else None
-                    
+
+                    # More robust market cap parsing
+                    market_cap_value = None
+                    if isinstance(market_cap, (int, float)):
+                        market_cap_value = market_cap
+                    elif isinstance(market_cap, str):
+                        try:
+                            # Try to convert string to float, removing any non-numeric characters
+                            cleaned_str = ''.join(c for c in market_cap if c.isdigit() or c == '.')
+                            market_cap_value = float(cleaned_str)
+                        except (ValueError, TypeError):
+                            market_cap_value = None
+
+                    # Log the parsed market cap for debugging
+                    logging.info(f"Parsed market cap value: {market_cap_value}")
+
                     # Set different icon URL based on market cap
                     if market_cap_value is not None and market_cap_value < 1_000_000:
                         # Under $1M - use the wow emoji
-                        author_icon_url = "https://cdn.discordapp.com/emojis/1323480997873848371.web"
+                        author_icon_url = "https://cdn.discordapp.com/emojis/1149703956746997871.webp"
+                        logging.info(f"Using wow emoji for market cap: {market_cap_value}")
                     else:
                         # Over $1M or unknown - use the green circle
-                        author_icon_url = "https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png"
+                        author_icon_url = "https://cdn.discordapp.com/emojis/1323480997873848371.webp"
+                        logging.info(f"Using green circle for market cap: {market_cap_value}")
                         
                     new_embed.set_author(name="Buy Alert", icon_url=author_icon_url)
                     
@@ -519,7 +535,7 @@ Embed Count: %d
                 chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
                 
                 # Set author with Buy Alert - keep default icon for error case
-                new_embed.set_author(name="Buy Alert", icon_url="https://em-content.zobj.net/thumbs/120/apple/354/large-green-circle_1f7e2.png")
+                new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1323480997873848371.webp")
                 
                 # Create description parts
                 description_parts = []
