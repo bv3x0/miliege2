@@ -25,14 +25,15 @@ class CieloGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
-            # Only do detailed logging for Cielo
-            if message.author.bot and message.author.name == "Cielo":
+            # Only do detailed logging for Cielo or Cielo Alerts
+            if message.author.bot and (message.author.name == "Cielo" or message.author.name == "Cielo Alerts"):
                 logging.info("""
 === Cielo Message Detected ===
+From: %s
 Content: %s
 Has Embeds: %s
 Embed Count: %d
-""", message.content, bool(message.embeds), len(message.embeds) if message.embeds else 0)
+""", message.author.name, message.content, bool(message.embeds), len(message.embeds) if message.embeds else 0)
                 
                 # Detailed embed field logging
                 if message.embeds:
@@ -51,16 +52,39 @@ Embed Count: %d
                             logging.info(f"  Value: '{field.value}'")
                             logging.info(f"  Inline: {field.inline}")
                 
-                # Check if this message contains a star emoji in any field
+                # Check if this message contains a star emoji in the content or any field
                 has_star = False
-                if message.embeds:
+                
+                # First check the message content
+                if message.content and '⭐' in message.content:
+                    has_star = True
+                    logging.info("Found star emoji in message content")
+                
+                # Then check embeds if no star in content
+                if not has_star and message.embeds:
                     for embed in message.embeds:
+                        # Check description
+                        if embed.description and '⭐' in embed.description:
+                            has_star = True
+                            logging.info("Found star emoji in embed description")
+                            break
+                            
+                        # Check fields
                         for field in embed.fields:
-                            if field.value and '⭐️' in field.value:
+                            if field.value and ('⭐' in field.value or '⭐️' in field.value):
                                 has_star = True
                                 logging.info("Found star emoji in message field")
                                 break
                         if has_star:
+                            break
+                
+                # For Cielo Alerts, also check for star in the message content directly
+                if not has_star and message.author.name == "Cielo Alerts" and message.content:
+                    lines = message.content.split('\n')
+                    for line in lines:
+                        if '⭐' in line or '★' in line:
+                            has_star = True
+                            logging.info(f"Found star emoji in Cielo Alerts content line: {line}")
                             break
                 
                 # Skip processing if no star emoji found
@@ -68,8 +92,10 @@ Embed Count: %d
                     logging.info("No star emoji found in message, skipping processing")
                     return
                 
-                # Extract credit from embed title
+                # Extract credit from embed title or message content
                 credit_user = None
+                
+                # First try to get from embed title (original method)
                 if message.embeds:
                     for embed in message.embeds:
                         if embed.title and '🏷' in embed.title:
@@ -78,23 +104,70 @@ Embed Count: %d
                             logging.info(f"Found credit user in embed title: {credit_user}")
                             break
                 
+                # For Cielo Alerts, try to get from the first line with a tag emoji
+                if not credit_user and message.author.name == "Cielo Alerts" and message.content:
+                    lines = message.content.split('\n')
+                    for line in lines:
+                        if '🏷' in line or '📝' in line:
+                            # Remove the tag emoji and strip whitespace
+                            credit_user = line.replace('🏷', '').replace('📝', '').strip()
+                            logging.info(f"Found credit user in message content: {credit_user}")
+                            break
+                
                 if not credit_user:
-                    logging.warning("Could not find credit user in embed title")
+                    logging.warning("Could not find credit user in embed title or message content")
 
-                # Extract swap information and dexscreener maker link
+                # Extract swap information and token address
                 swap_info = None
                 token_address = None
                 dexscreener_maker_link = None
                 tx_link = None
                 chain_info = "unknown"
                 
-                if message.embeds:
+                # For Cielo Alerts format (from the screenshot)
+                if message.author.name == "Cielo Alerts" and message.content:
+                    lines = message.content.split('\n')
+                    
+                    # Process each line to extract information
+                    for line in lines:
+                        # Look for swap information in a line with star emoji
+                        if ('⭐' in line or '★' in line) and 'Swapped' in line:
+                            # Remove the star emoji
+                            swap_info = line.replace('⭐', '').replace('★', '').strip()
+                            logging.info(f"Found swap info in content: {swap_info}")
+                        
+                        # Look for token address in a line starting with "Token:"
+                        if line.startswith('Token:'):
+                            # Extract the token address
+                            token_match = re.search(r'Token:\s*([a-zA-Z0-9]+)', line)
+                            if token_match:
+                                token_address = token_match.group(1)
+                                logging.info(f"Processing token from content: {token_address}")
+                        
+                        # Look for chain information
+                        if line.startswith('Chain'):
+                            chain_parts = line.split()
+                            if len(chain_parts) > 1:
+                                chain_info = chain_parts[1].lower()
+                                logging.info(f"Found chain info: {chain_info}")
+                        
+                        # Look for transaction link
+                        if 'Transaction' in line and 'Details' in line:
+                            tx_link = "Details"  # Just a placeholder, we'll need to extract the actual link
+                        
+                        # Look for chart link
+                        if 'Chart' in line and 'Link' in line:
+                            # We'll construct the dexscreener link later using the token address and chain
+                            pass
+                
+                # Original embed processing for Cielo
+                elif message.embeds:
                     for embed in message.embeds:
                         for j, field in enumerate(embed.fields):
                             # Look for swap information in field 0
-                            if j == 0 and field.value and '⭐️ Swapped' in field.value:
+                            if j == 0 and field.value and ('⭐️ Swapped' in field.value or '⭐ Swapped' in field.value):
                                 # Remove the star emoji and the market cap part
-                                swap_info = field.value.replace('⭐️ ', '')
+                                swap_info = field.value.replace('⭐️ ', '').replace('⭐ ', '')
                                 # Remove the market cap part if it exists
                                 if ' | MC:' in swap_info:
                                     swap_info = swap_info.split(' | MC:')[0]
@@ -125,37 +198,37 @@ Embed Count: %d
                             # Extract chain info
                             if field.name == 'Chain':
                                 chain_info = field.value.lower()
-                        
-                        # If we found a token, process it
-                        if token_address:
-                            # Determine which channel to use for output
-                            output_channel = None
-                            if self.output_channel_id:
-                                output_channel = self.bot.get_channel(self.output_channel_id)
-                                logging.info(f"Using configured output channel: {self.output_channel_id}")
-                            
-                            if not output_channel:
-                                # Fallback to the same channel as the input
-                                output_channel = message.channel
-                                logging.info("Using input channel for output (no output channel configured)")
-                            
-                            # Create a temporary message in the output channel
-                            temp_message = await output_channel.send("Processing token...")
-                            
-                            # Process the token and send results to the output channel
-                            await self._process_token(token_address, temp_message, credit_user, swap_info, dexscreener_maker_link, tx_link, chain_info)
-                            
-                            # Delete our temporary message
-                            try:
-                                await temp_message.delete()
-                            except Exception as e:
-                                logging.error(f"Error deleting temporary message: {e}")
-                            
-                            # Don't delete the original Cielo message
-                            logging.info(f"Keeping original Cielo message: {message.id}")
-                            return
+                
+                # If we found a token, process it
+                if token_address:
+                    # Determine which channel to use for output
+                    output_channel = None
+                    if self.output_channel_id:
+                        output_channel = self.bot.get_channel(self.output_channel_id)
+                        logging.info(f"Using configured output channel: {self.output_channel_id}")
+                    
+                    if not output_channel:
+                        # Fallback to the same channel as the input
+                        output_channel = message.channel
+                        logging.info("Using input channel for output (no output channel configured)")
+                    
+                    # Create a temporary message in the output channel
+                    temp_message = await output_channel.send("Processing token...")
+                    
+                    # Process the token and send results to the output channel
+                    await self._process_token(token_address, temp_message, credit_user, swap_info, dexscreener_maker_link, tx_link, chain_info)
+                    
+                    # Delete our temporary message
+                    try:
+                        await temp_message.delete()
+                    except Exception as e:
+                        logging.error(f"Error deleting temporary message: {e}")
+                    
+                    # Don't delete the original Cielo message
+                    logging.info(f"Keeping original message from {message.author.name}: {message.id}")
+                    return
                 else:
-                    logging.warning("Cielo message had no embeds")
+                    logging.warning(f"No token address found in message from {message.author.name}")
             else:
                 # Basic debug level logging for non-Cielo messages
                 logging.debug(f"Message from {message.author.name}")
