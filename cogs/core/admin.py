@@ -1,6 +1,9 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from cogs.utils.config import settings
+import json
+import os
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot):
@@ -118,3 +121,119 @@ class AdminCommands(commands.Cog):
             status_message += f"{feature}: {status}\n"
             
         await interaction.response.send_message(status_message)
+
+    @app_commands.command(name="watch", description="Set which channel to monitor for Cielo messages")
+    @app_commands.default_permissions(administrator=True)
+    async def watch(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Set which channel to monitor for Cielo messages"""
+        # Update the channel in memory
+        cielo_grabber = self.bot.get_cog("CieloGrabber")
+        if cielo_grabber:
+            cielo_grabber.input_channel_id = channel.id
+            
+            # Save to persistent storage
+            config_path = "config.json"
+            config = {}
+            
+            # Load existing config if it exists
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r") as f:
+                        config = json.load(f)
+                except Exception as e:
+                    await interaction.response.send_message(f"⚠️ Warning: Could not load existing config: {e}")
+            
+            # Update config
+            config["CIELO_INPUT_CHANNEL_ID"] = channel.id
+            
+            # Save config
+            try:
+                with open(config_path, "w") as f:
+                    json.dump(config, f, indent=4)
+                
+                await interaction.response.send_message(f"✅ Now watching for Cielo messages in {channel.mention}")
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Error saving config: {e}")
+        else:
+            await interaction.response.send_message("❌ CieloGrabber cog not found")
+
+    @app_commands.command(name="post", description="Set which channel to post processed messages to")
+    @app_commands.default_permissions(administrator=True)
+    async def post(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Set which channel to post processed messages to"""
+        # Update the channel in memory
+        cielo_grabber = self.bot.get_cog("CieloGrabber")
+        if cielo_grabber:
+            cielo_grabber.output_channel_id = channel.id
+            
+            # Save to persistent storage
+            config_path = "config.json"
+            config = {}
+            
+            # Load existing config if it exists
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r") as f:
+                        config = json.load(f)
+                except Exception as e:
+                    await interaction.response.send_message(f"⚠️ Warning: Could not load existing config: {e}")
+            
+            # Update config
+            config["OUTPUT_CHANNEL_ID"] = channel.id
+            
+            # Save config
+            try:
+                with open(config_path, "w") as f:
+                    json.dump(config, f, indent=4)
+                
+                await interaction.response.send_message(f"✅ Now posting processed messages to {channel.mention}")
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Error saving config: {e}")
+        else:
+            await interaction.response.send_message("❌ CieloGrabber cog not found")
+
+    @app_commands.command(name="channels", description="Show current channel configuration")
+    async def channels(self, interaction: discord.Interaction):
+        """Show current channel configuration"""
+        cielo_grabber = self.bot.get_cog("CieloGrabber")
+        if cielo_grabber:
+            input_channel = None
+            output_channel = None
+            
+            if cielo_grabber.input_channel_id:
+                input_channel = self.bot.get_channel(cielo_grabber.input_channel_id)
+            
+            if cielo_grabber.output_channel_id:
+                output_channel = self.bot.get_channel(cielo_grabber.output_channel_id)
+            
+            embed = discord.Embed(title="Channel Configuration", color=0x5b594f)
+            
+            if input_channel:
+                embed.add_field(
+                    name="Watching",
+                    value=f"{input_channel.mention}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="Watching",
+                    value="No channel set (use `/watch` to set)",
+                    inline=False
+                )
+            
+            if output_channel:
+                embed.add_field(
+                    name="Posting to",
+                    value=f"{output_channel.mention}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="Posting to",
+                    value="No channel set (use `/post` to set)",
+                    inline=False
+                )
+            
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message("❌ CieloGrabber cog not found")

@@ -20,6 +20,7 @@ from db.models import Token
 from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
 from discord import app_commands
 from cogs.utils.config import settings
+import json
 
 # Enhanced logging setup
 def setup_logging():
@@ -141,11 +142,35 @@ class DiscordBot(commands.Bot):
         digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
         
-        # Add cogs with shared session and digest_cog reference
+        # Load channel IDs from config
+        config_path = "config.json"
+        cielo_input_channel_id = None
         cielo_output_channel_id = None
-        if hasattr(settings, 'CIELO_OUTPUT_CHANNEL_ID') and settings.CIELO_OUTPUT_CHANNEL_ID:
-            cielo_output_channel_id = settings.CIELO_OUTPUT_CHANNEL_ID
-            logging.info(f"Using Cielo output channel: {cielo_output_channel_id}")
+
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                
+                # Load channel IDs from config
+                if "CIELO_INPUT_CHANNEL_ID" in config:
+                    cielo_input_channel_id = config["CIELO_INPUT_CHANNEL_ID"]
+                    logging.info(f"Loaded Cielo input channel from config: {cielo_input_channel_id}")
+                
+                if "OUTPUT_CHANNEL_ID" in config:
+                    cielo_output_channel_id = config["OUTPUT_CHANNEL_ID"]
+                    logging.info(f"Loaded output channel from config: {cielo_output_channel_id}")
+            except Exception as e:
+                logging.error(f"Error loading config: {e}")
+
+        # Fall back to environment variables if not in config
+        if cielo_input_channel_id is None and hasattr(settings, 'CIELO_OUTPUT_CHANNEL_ID') and settings.CIELO_OUTPUT_CHANNEL_ID:
+            cielo_input_channel_id = settings.CIELO_OUTPUT_CHANNEL_ID
+            logging.info(f"Using Cielo input channel from env: {cielo_input_channel_id}")
+
+        if cielo_output_channel_id is None and hasattr(settings, 'DAILY_DIGEST_CHANNEL_ID') and settings.DAILY_DIGEST_CHANNEL_ID:
+            cielo_output_channel_id = daily_digest_channel_id
+            logging.info(f"Using output channel from env: {cielo_output_channel_id}")
 
         await self.add_cog(CieloGrabber(
             self, 
@@ -153,6 +178,7 @@ class DiscordBot(commands.Bot):
             self.monitor, 
             self.session, 
             digest_cog,
+            input_channel_id=cielo_input_channel_id,
             output_channel_id=cielo_output_channel_id
         ))
         await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
