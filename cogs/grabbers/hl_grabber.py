@@ -554,7 +554,9 @@ class HyperliquidWalletGrabber(commands.Cog):
             for wallet_name, wallet_address in wallet_names:
                 # Create a hyperlink to the wallet's Hyperdash profile
                 wallet_link = f"[{wallet_name}](https://hyperdash.info/trader/{wallet_address})"
-                section_content.append(f"{wallet_link}: {price_info}")
+                
+                # Simplified format without PnL information
+                section_content.append(f"{wallet_link} @ {price_str}")
             
             # Add the section to the embed
             embed.add_field(
