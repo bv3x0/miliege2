@@ -243,7 +243,18 @@ Embed Count: %d
                     temp_message = await output_channel.send("Processing token...")
                     
                     # Process the token and send results to the output channel
-                    await self._process_token(token_address, temp_message, credit_user, swap_info, dexscreener_maker_link, tx_link, chain_info)
+                    await self._process_token(
+                        token_address, 
+                        temp_message, 
+                        credit_user, 
+                        swap_info, 
+                        dexscreener_maker_link, 
+                        tx_link, 
+                        chain_info,
+                        original_message_id=message.id,  # Pass the original Cielo message ID
+                        original_channel_id=message.channel.id,  # Pass the original Cielo channel ID
+                        original_guild_id=message.guild.id if message.guild else None  # Pass the original Cielo guild ID
+                    )
                     
                     # Delete our temporary message
                     try:
@@ -264,7 +275,7 @@ Embed Count: %d
             logging.error(f"Error in message processing: {e}", exc_info=True)
             self.monitor.record_error()
 
-    async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None, tx_link=None, chain_info=None):
+    async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None, tx_link=None, chain_info=None, original_message_id=None, original_channel_id=None, original_guild_id=None):
         try:
             logging.info(f"Querying Dexscreener API for token: {contract_address}")
             
@@ -575,7 +586,10 @@ Embed Count: %d
                         'chain': chain,
                         'message_id': message.id,
                         'channel_id': message.channel.id,
-                        'guild_id': message.guild.id if message.guild else None
+                        'guild_id': message.guild.id if message.guild else None,
+                        'original_message_id': original_message_id,
+                        'original_channel_id': original_channel_id,
+                        'original_guild_id': original_guild_id
                     }
                     
                     try:

@@ -148,9 +148,16 @@ class DigestCog(commands.Cog):
                 
                 # Create Discord message link if we have the necessary info
                 message_link = None
-                if token.get('message_id') and token.get('channel_id') and token.get('guild_id'):
+                original_message_link = None
+
+                # Check for original message link first (Cielo message)
+                if token.get('original_message_id') and token.get('original_channel_id') and token.get('original_guild_id'):
+                    original_message_link = f"https://discord.com/channels/{token['original_guild_id']}/{token['original_channel_id']}/{token['original_message_id']}"
+
+                # Fall back to grabber message link if original not available
+                if not original_message_link and token.get('message_id') and token.get('channel_id') and token.get('guild_id'):
                     message_link = f"https://discord.com/channels/{token['guild_id']}/{token['channel_id']}/{token['message_id']}"
-                
+
                 # Fetch current market cap
                 dex_data = await DexScreenerAPI.get_token_info(session, contract)
                 current_mcap = 'N/A'
@@ -222,7 +229,7 @@ class DigestCog(commands.Cog):
                 
                 token_line = f"### [{name}]({token['chart_url']})"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
-                source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
+                source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                 
                 description_lines.extend([token_line, stats_line, source_line])
         
