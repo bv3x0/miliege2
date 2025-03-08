@@ -485,8 +485,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         
         # Use consistent border color for all embeds
         embed = discord.Embed(
-            color=Colors.EMBED_BORDER,
-            timestamp=datetime.now()
+            color=Colors.EMBED_BORDER
         )
         
         # Move title to author field with icon

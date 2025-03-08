@@ -226,24 +226,10 @@ class DigestCog(commands.Cog):
                 
                 description_lines.extend([token_line, stats_line, source_line])
         
-        # Get current NY time for the footer
+        # Get current NY time for the footer - keeping variable for potential future use
         ny_time = datetime.now(self.ny_tz)
-        if is_hourly:
-            # Get timestamps for current and previous hour, ensuring minutes/seconds are 0
-            current_hour = ny_time.replace(minute=0, second=0, microsecond=0)
-            previous_hour = current_hour - timedelta(hours=1)
-            current_hour_ts = int(current_hour.timestamp())
-            previous_hour_ts = int(previous_hour.timestamp())
-            
-            # Use Discord timestamps for both times
-            time_text = f"<t:{previous_hour_ts}:t>-<t:{current_hour_ts}:t> <:fedora:1151138750768894003> "
-        else:
-            # For manual digests, just show "since X time"
-            last_hour = ny_time.replace(minute=0, second=0, microsecond=0)
-            unix_time = int(last_hour.timestamp())
-            time_text = f"since <t:{unix_time}:t> <:fedora:1151138750768894003> "
         
-        description_lines.extend(["", "", time_text])  # Add two empty strings for double spacing
+        # No longer adding timestamp, emoji, or extra spacing
         
         embed.description = "\n".join(description_lines)
         return embed
