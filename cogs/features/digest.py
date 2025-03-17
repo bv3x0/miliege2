@@ -17,17 +17,6 @@ from cogs.utils import (
     Colors,
     UI
 )
-# For DexScreenerDigest
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from bs4 import BeautifulSoup
-import requests
-import time
 import json
 
 class DigestCog(commands.Cog):
@@ -435,7 +424,9 @@ class DexScreenerDigestCog(commands.Cog):
         self.monitor = monitor if monitor else None
         self.error_count = 0
         self.ny_tz = pytz.timezone('America/New_York')
-        self.target_url = "https://dexscreener.com/?rankBy=trendingScoreH1&order=desc&chainIds=solana,ethereum,base&minLiq=15000&minAge=3&maxAge=240&min1HVol=50000"
+        
+        # Define chains we want to check
+        self.chains_to_check = ["ethereum", "base", "solana"]
         
         # Start the scheduled task to post digest
         self.dex_digest_task.start()
@@ -444,101 +435,80 @@ class DexScreenerDigestCog(commands.Cog):
         """Clean up when cog is unloaded"""
         self.dex_digest_task.cancel()
     
-    async def setup_webdriver(self):
-        """Initialize and configure Selenium webdriver"""
+    async def get_trending_pairs(self, max_pairs=10):
+        """Get recently active pairs using direct API calls"""
         try:
-            # Configure Chrome options for headless operation
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--window-size=1920,1080")
+            logging.info("Fetching recently active pairs using API approach")
+            all_pairs = []
             
-            # Set up the Chrome driver with the configured options
-            service = ChromeService(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
+            # Make API requests for each chain
+            async with aiohttp.ClientSession() as session:
+                for chain in self.chains_to_check:
+                    try:
+                        # Use high volume and recent activity as proxy for "trending"
+                        # This matches pairs with:
+                        # - Min 1h volume of $50,000
+                        # - Min liquidity of $15,000
+                        # - Created in last 24 hours
+                        url = f"https://api.dexscreener.com/latest/dex/pairs/{chain}?min1hVolume=50000&minLiquidity=15000&maxAge=1440"
+                        logging.info(f"Requesting active pairs for {chain}: {url}")
+                        
+                        # Make API request
+                        response = await safe_api_call(session, url)
+                        
+                        if response and 'pairs' in response and response['pairs']:
+                            # Sort by volume (high to low) to find the most active pairs
+                            sorted_pairs = sorted(
+                                response['pairs'], 
+                                key=lambda p: float(p.get('volume', {}).get('h24', 0)), 
+                                reverse=True
+                            )
+                            
+                            # Take top 5 from each chain
+                            for pair in sorted_pairs[:5]:
+                                # Only include pairs with sufficient information
+                                if 'baseToken' in pair and 'address' in pair.get('baseToken', {}):
+                                    # Create a tuple of (chain_id, pair_address)
+                                    chain_id = chain
+                                    pair_address = pair.get('pairAddress', '')
+                                    volume_24h = pair.get('volume', {}).get('h24', 'Unknown')
+                                    all_pairs.append((chain_id, pair_address))
+                                    logging.info(f"Found pair on {chain}: {pair.get('baseToken', {}).get('symbol', 'Unknown')} - 24h Volume: ${volume_24h}")
+                        
+                        # Add delay between API calls to avoid rate limiting
+                        await asyncio.sleep(1)
+                    
+                    except Exception as e:
+                        logging.error(f"Error fetching active pairs for {chain}: {e}", exc_info=True)
+                        if self.monitor:
+                            self.monitor.record_error()
+                        else:
+                            self.error_count += 1
             
-            logging.info("Webdriver setup completed successfully")
-            return driver
+            # Deduplicate and limit to max_pairs
+            unique_pairs = []
+            seen_addresses = set()
+            
+            for chain_id, pair_address in all_pairs:
+                # Skip if we've already seen this base token
+                if pair_address not in seen_addresses:
+                    seen_addresses.add(pair_address)
+                    unique_pairs.append((chain_id, pair_address))
+                    
+                    # Break if we've reached the desired number of pairs
+                    if len(unique_pairs) >= max_pairs:
+                        break
+            
+            logging.info(f"Found {len(unique_pairs)} unique active pairs across all chains")
+            return unique_pairs
+            
         except Exception as e:
-            logging.error(f"Error setting up webdriver: {e}", exc_info=True)
+            logging.error(f"Error getting active pairs: {e}", exc_info=True)
             if self.monitor:
                 self.monitor.record_error()
             else:
                 self.error_count += 1
-            return None
-    
-    async def scrape_trending_pairs(self, max_pairs=10):
-        """Scrape top trending pairs from Dexscreener"""
-        driver = None
-        try:
-            # Setup webdriver in async context
-            driver = await self.setup_webdriver()
-            if not driver:
-                logging.error("Failed to set up webdriver")
-                return []
-            
-            # Navigate to the target URL
-            logging.info(f"Navigating to: {self.target_url}")
-            driver.get(self.target_url)
-            
-            # Wait for the table to load (adjust timeout as needed)
-            try:
-                WebDriverWait(driver, 20).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "ds-dex-table-row-top"))
-                )
-                logging.info("Page loaded successfully")
-            except Exception as e:
-                logging.error(f"Timeout waiting for page to load: {e}")
-                return []
-            
-            # Allow extra time for dynamic content to load
-            time.sleep(3)
-            
-            # Get page source and parse with BeautifulSoup
-            html = driver.page_source
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            # Find all table rows with the target class
-            pair_rows = soup.find_all(class_="ds-dex-table-row ds-dex-table-row-top")
-            logging.info(f"Found {len(pair_rows)} pair rows")
-            
-            # Extract pair links (limited to max_pairs)
-            pairs = []
-            for i, row in enumerate(pair_rows[:max_pairs]):
-                try:
-                    # Find the link element containing pair info
-                    link_element = row.find('a')
-                    
-                    if link_element and 'href' in link_element.attrs:
-                        href = link_element['href']
-                        
-                        # Parse the href to extract chain ID and pair address
-                        # Format is typically /chainId/pairAddress
-                        parts = href.strip('/').split('/')
-                        if len(parts) >= 2:
-                            chain_id = parts[0]
-                            pair_address = parts[1]
-                            pairs.append((chain_id, pair_address))
-                            logging.info(f"Found pair: {chain_id}/{pair_address}")
-                except Exception as e:
-                    logging.error(f"Error parsing row {i}: {e}")
-                    continue
-            
-            return pairs
-            
-        except Exception as e:
-            logging.error(f"Error scraping trending pairs: {e}", exc_info=True)
             return []
-        finally:
-            # Clean up the driver
-            if driver:
-                try:
-                    driver.quit()
-                    logging.info("Webdriver closed successfully")
-                except Exception as e:
-                    logging.error(f"Error closing webdriver: {e}")
     
     async def get_pair_details(self, session, chain_id, pair_address):
         """Get detailed information about a pair from the Dexscreener API"""
@@ -678,8 +648,8 @@ class DexScreenerDigestCog(commands.Cog):
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    # Step 1: Scrape the trending pairs
-                    trending_pairs = await self.scrape_trending_pairs(max_pairs=10)
+                    # Step 1: Get the trending pairs using API approach
+                    trending_pairs = await self.get_trending_pairs(max_pairs=10)
                     
                     if not trending_pairs:
                         logging.warning("No trending pairs found")
@@ -735,8 +705,8 @@ class DexScreenerDigestCog(commands.Cog):
         try:
             await ctx.send("⏳ Generating Dexscreener Digest... This may take a moment.")
             
-            # Step 1: Scrape the trending pairs
-            trending_pairs = await self.scrape_trending_pairs(max_pairs=10)
+            # Step 1: Get the trending pairs using API approach
+            trending_pairs = await self.get_trending_pairs(max_pairs=10)
             
             if not trending_pairs:
                 await ctx.send("❌ No trending pairs found. Please try again later.")
