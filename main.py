@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import asyncio
 from cogs.grabbers.cielo_grabber import CieloGrabber
-from cogs.features.digest import DigestCog
+from cogs.features.digest import DigestCog, DexScreenerDigestCog
 from cogs.core.trackers import BotMonitor, TokenTracker
 from cogs.core.health import HealthMonitor
 from functools import wraps
@@ -141,6 +141,10 @@ class DiscordBot(commands.Bot):
         # Create DigestCog first to share reference
         digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
+        
+        # Add the DexScreenerDigestCog (using the same channel as regular digest)
+        dex_digest_cog = DexScreenerDigestCog(self, daily_digest_channel_id, self.monitor)
+        await self.add_cog(dex_digest_cog)
         
         # Load channel IDs from config
         config_path = "config.json"
@@ -337,6 +341,12 @@ class DiscordBot(commands.Bot):
                 "`!list_wallets` - List all tracked Hyperliquid wallets"
             ]
             embed.add_field(name="Hyperliquid Wallet Commands", value="\n".join(hyperliquid_commands), inline=False)
+            
+            # Add Dexscreener commands
+            dexscreener_commands = [
+                "`!dex` - Generate a Dexscreener Digest with trending tokens"
+            ]
+            embed.add_field(name="Dexscreener Commands", value="\n".join(dexscreener_commands), inline=False)
             
             await ctx.send(embed=embed)
 

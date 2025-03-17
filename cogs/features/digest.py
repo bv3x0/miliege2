@@ -17,6 +17,18 @@ from cogs.utils import (
     Colors,
     UI
 )
+# For DexScreenerDigest
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+import requests
+import time
+import json
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id, monitor=None):
@@ -412,3 +424,345 @@ class DigestCog(commands.Cog):
         if hour_key in self.hour_tokens:
             del self.hour_tokens[hour_key]
             logging.info(f"Cleared token data for hour: {hour_key}")
+
+
+class DexScreenerDigestCog(commands.Cog):
+    """Cog for generating a Dexscreener Digest with trending tokens"""
+    
+    def __init__(self, bot, channel_id, monitor=None):
+        self.bot = bot
+        self.channel_id = channel_id
+        self.monitor = monitor if monitor else None
+        self.error_count = 0
+        self.ny_tz = pytz.timezone('America/New_York')
+        self.target_url = "https://dexscreener.com/?rankBy=trendingScoreH1&order=desc&chainIds=solana,ethereum,base&minLiq=15000&minAge=3&maxAge=240&min1HVol=50000"
+        
+        # Start the scheduled task to post digest
+        self.dex_digest_task.start()
+    
+    def cog_unload(self):
+        """Clean up when cog is unloaded"""
+        self.dex_digest_task.cancel()
+    
+    async def setup_webdriver(self):
+        """Initialize and configure Selenium webdriver"""
+        try:
+            # Configure Chrome options for headless operation
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            
+            # Set up the Chrome driver with the configured options
+            service = ChromeService(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            
+            logging.info("Webdriver setup completed successfully")
+            return driver
+        except Exception as e:
+            logging.error(f"Error setting up webdriver: {e}", exc_info=True)
+            if self.monitor:
+                self.monitor.record_error()
+            else:
+                self.error_count += 1
+            return None
+    
+    async def scrape_trending_pairs(self, max_pairs=10):
+        """Scrape top trending pairs from Dexscreener"""
+        driver = None
+        try:
+            # Setup webdriver in async context
+            driver = await self.setup_webdriver()
+            if not driver:
+                logging.error("Failed to set up webdriver")
+                return []
+            
+            # Navigate to the target URL
+            logging.info(f"Navigating to: {self.target_url}")
+            driver.get(self.target_url)
+            
+            # Wait for the table to load (adjust timeout as needed)
+            try:
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "ds-dex-table-row-top"))
+                )
+                logging.info("Page loaded successfully")
+            except Exception as e:
+                logging.error(f"Timeout waiting for page to load: {e}")
+                return []
+            
+            # Allow extra time for dynamic content to load
+            time.sleep(3)
+            
+            # Get page source and parse with BeautifulSoup
+            html = driver.page_source
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Find all table rows with the target class
+            pair_rows = soup.find_all(class_="ds-dex-table-row ds-dex-table-row-top")
+            logging.info(f"Found {len(pair_rows)} pair rows")
+            
+            # Extract pair links (limited to max_pairs)
+            pairs = []
+            for i, row in enumerate(pair_rows[:max_pairs]):
+                try:
+                    # Find the link element containing pair info
+                    link_element = row.find('a')
+                    
+                    if link_element and 'href' in link_element.attrs:
+                        href = link_element['href']
+                        
+                        # Parse the href to extract chain ID and pair address
+                        # Format is typically /chainId/pairAddress
+                        parts = href.strip('/').split('/')
+                        if len(parts) >= 2:
+                            chain_id = parts[0]
+                            pair_address = parts[1]
+                            pairs.append((chain_id, pair_address))
+                            logging.info(f"Found pair: {chain_id}/{pair_address}")
+                except Exception as e:
+                    logging.error(f"Error parsing row {i}: {e}")
+                    continue
+            
+            return pairs
+            
+        except Exception as e:
+            logging.error(f"Error scraping trending pairs: {e}", exc_info=True)
+            return []
+        finally:
+            # Clean up the driver
+            if driver:
+                try:
+                    driver.quit()
+                    logging.info("Webdriver closed successfully")
+                except Exception as e:
+                    logging.error(f"Error closing webdriver: {e}")
+    
+    async def get_pair_details(self, session, chain_id, pair_address):
+        """Get detailed information about a pair from the Dexscreener API"""
+        try:
+            url = f"https://api.dexscreener.com/latest/dex/pairs/{chain_id}/{pair_address}"
+            logging.info(f"Fetching pair details from: {url}")
+            
+            # Make API request
+            response = await safe_api_call(session, url)
+            
+            if not response or 'pairs' not in response or not response['pairs']:
+                logging.warning(f"No data found for pair {chain_id}/{pair_address}")
+                return None
+            
+            # Extract the first (primary) pair data
+            pair_data = response['pairs'][0]
+            
+            # Extract relevant information
+            token_info = {
+                'name': pair_data.get('baseToken', {}).get('symbol', 'Unknown'),
+                'address': pair_data.get('baseToken', {}).get('address', ''),
+                'chain': chain_id,
+                'market_cap': pair_data.get('fdv', 0),
+                'market_cap_formatted': f"${format_large_number(float(pair_data.get('fdv', 0)))}",
+                'dexscreener_url': f"https://dexscreener.com/{chain_id}/{pair_address}",
+                'age': pair_data.get('pairCreatedAt', None),  # This is a timestamp
+                'liquidity': pair_data.get('liquidity', {}).get('usd', 0),
+                'price_usd': pair_data.get('priceUsd', 0),
+                'volume_24h': pair_data.get('volume', {}).get('h24', 0)
+            }
+            
+            # Add social links if available
+            socials = {}
+            if 'links' in pair_data:
+                links = pair_data['links']
+                if 'website' in links:
+                    socials['website'] = links['website']
+                if 'telegram' in links:
+                    socials['telegram'] = links['telegram']
+                if 'twitter' in links:
+                    socials['twitter'] = links['twitter']
+            
+            token_info['socials'] = socials
+            
+            return token_info
+            
+        except Exception as e:
+            logging.error(f"Error fetching pair details for {chain_id}/{pair_address}: {e}", exc_info=True)
+            return None
+    
+    async def create_dex_digest_embed(self, token_list):
+        """Create a formatted embed for the Dexscreener Digest"""
+        if not token_list:
+            return None
+        
+        embed = discord.Embed(
+            color=Colors.EMBED_BORDER
+        )
+        
+        # Set author with icon
+        embed.set_author(
+            name="Dexscreener New Coins", 
+            icon_url="https://dexscreener.com/favicon/android-chrome-192x192.png"
+        )
+        
+        description_lines = []
+        
+        for token in token_list:
+            name = token.get('name', 'Unknown')
+            url = token.get('dexscreener_url', '')
+            mcap = token.get('market_cap_formatted', '$0')
+            chain = token.get('chain', 'unknown').capitalize()
+            
+            # Format age
+            age_str = "N/A"
+            if token.get('age'):
+                try:
+                    # Convert timestamp to datetime
+                    age_ts = datetime.fromtimestamp(int(token['age']) / 1000)
+                    age_diff = datetime.now() - age_ts
+                    
+                    if age_diff.days > 0:
+                        age_str = f"{age_diff.days}d"
+                    else:
+                        age_hours = age_diff.seconds // 3600
+                        if age_hours > 0:
+                            age_str = f"{age_hours}h"
+                        else:
+                            age_str = f"{(age_diff.seconds % 3600) // 60}m"
+                except Exception as e:
+                    logging.error(f"Error formatting age: {e}")
+            
+            # Format social links
+            social_links = []
+            socials = token.get('socials', {})
+            
+            if 'website' in socials:
+                social_links.append(f"[Website]({socials['website']})")
+            if 'telegram' in socials:
+                social_links.append(f"[TG]({socials['telegram']})")
+            if 'twitter' in socials:
+                social_links.append(f"[X]({socials['twitter']})")
+            
+            # Join social links with dot separator
+            social_links_str = " ⋅ ".join(social_links) if social_links else "No links"
+            
+            # Create formatted token entry
+            token_line = f"### [{name}]({url})"
+            stats_line = f"{mcap} ⋅ {age_str} ⋅ {chain}"
+            
+            if social_links:
+                social_line = f"{social_links_str}"
+                description_lines.extend([token_line, stats_line, social_line, ""])
+            else:
+                description_lines.extend([token_line, stats_line, ""])
+        
+        # Set the description with all token entries
+        embed.description = "\n".join(description_lines)
+        
+        # Set footer with timestamp
+        ny_time = datetime.now(self.ny_tz)
+        embed.set_footer(text=f"Generated at {ny_time.strftime('%Y-%m-%d %H:%M')} ET")
+        
+        return embed
+    
+    @tasks.loop(hours=6)
+    async def dex_digest_task(self):
+        """Scheduled task to post the Dexscreener Digest every 6 hours"""
+        try:
+            logging.info("Starting Dexscreener Digest task")
+            channel = self.bot.get_channel(self.channel_id)
+            if not channel:
+                logging.error(f"Could not find channel {self.channel_id}")
+                return
+            
+            # Add retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # Step 1: Scrape the trending pairs
+                    trending_pairs = await self.scrape_trending_pairs(max_pairs=10)
+                    
+                    if not trending_pairs:
+                        logging.warning("No trending pairs found")
+                        if attempt == max_retries - 1:
+                            await channel.send("❌ **Error:** Could not fetch trending pairs for Dexscreener Digest.")
+                        await asyncio.sleep(2 * (attempt + 1))
+                        continue
+                    
+                    # Step 2: Get details for each pair
+                    token_details = []
+                    async with aiohttp.ClientSession() as session:
+                        for chain_id, pair_address in trending_pairs:
+                            # Add delay between API calls to avoid rate limiting
+                            await asyncio.sleep(1)
+                            pair_info = await self.get_pair_details(session, chain_id, pair_address)
+                            if pair_info:
+                                token_details.append(pair_info)
+                    
+                    # Step 3: Create and send the digest
+                    if token_details:
+                        embed = await self.create_dex_digest_embed(token_details)
+                        if embed:
+                            await channel.send(embed=embed)
+                            logging.info(f"Successfully sent Dexscreener Digest with {len(token_details)} tokens")
+                            break  # Success, exit retry loop
+                        else:
+                            logging.error("Failed to create digest embed")
+                    else:
+                        logging.warning("No token details could be fetched")
+                
+                except Exception as e:
+                    if attempt == max_retries - 1:  # Last attempt
+                        logging.error(f"Failed to create Dexscreener Digest after {max_retries} attempts: {e}", exc_info=True)
+                        await channel.send("❌ **Error:** Unable to generate the Dexscreener Digest.")
+                    await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
+        
+        except Exception as e:
+            logging.error(f"Critical error in Dexscreener Digest task: {e}", exc_info=True)
+            if self.monitor:
+                self.monitor.record_error()
+            else:
+                self.error_count += 1
+    
+    @dex_digest_task.before_loop
+    async def before_dex_digest_task(self):
+        """Wait until bot is ready before starting the scheduled task"""
+        await self.bot.wait_until_ready()
+        logging.info("Waiting for bot to be ready before starting Dexscreener Digest task")
+    
+    @commands.command(name="dex")
+    async def dex_command(self, ctx):
+        """On-demand command to generate and post the Dexscreener Digest"""
+        try:
+            await ctx.send("⏳ Generating Dexscreener Digest... This may take a moment.")
+            
+            # Step 1: Scrape the trending pairs
+            trending_pairs = await self.scrape_trending_pairs(max_pairs=10)
+            
+            if not trending_pairs:
+                await ctx.send("❌ No trending pairs found. Please try again later.")
+                return
+            
+            # Step 2: Get details for each pair
+            token_details = []
+            async with aiohttp.ClientSession() as session:
+                for chain_id, pair_address in trending_pairs:
+                    # Add delay between API calls to avoid rate limiting
+                    await asyncio.sleep(1)
+                    pair_info = await self.get_pair_details(session, chain_id, pair_address)
+                    if pair_info:
+                        token_details.append(pair_info)
+            
+            # Step 3: Create and send the digest
+            if token_details:
+                embed = await self.create_dex_digest_embed(token_details)
+                if embed:
+                    await ctx.send(embed=embed)
+                    logging.info(f"Successfully sent on-demand Dexscreener Digest with {len(token_details)} tokens")
+                else:
+                    await ctx.send("❌ Failed to create digest embed")
+            else:
+                await ctx.send("❌ No token details could be fetched. Please try again later.")
+                
+        except Exception as e:
+            logging.error(f"Error generating on-demand Dexscreener Digest: {e}", exc_info=True)
+            await ctx.send("❌ **Error:** Unable to generate the Dexscreener Digest.")
