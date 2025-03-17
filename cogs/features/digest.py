@@ -443,19 +443,34 @@ class DexScreenerDigestCog(commands.Cog):
         self.dex_digest_task.cancel()
     
     async def get_trending_pairs(self, max_pairs=10):
-        """Get recently active pairs using direct API calls"""
+        """Get trending pairs directly from DexScreener top pairs"""
         try:
-            logging.info("Fetching recently active pairs using API approach")
+            logging.info("Fetching trending pairs from DexScreener")
             all_pairs = []
             
-            # Make API requests for each chain
+            # Target specific DEXes on specific chains
+            targets = [
+                # Ethereum targets
+                {"chain": "ethereum", "dex": "uniswap-v3"},
+                {"chain": "ethereum", "dex": "uniswap-v2"},
+                # Base targets  
+                {"chain": "base", "dex": "baseswap"},
+                {"chain": "base", "dex": "aerodrome"},
+                # Solana targets
+                {"chain": "solana", "dex": "raydium"},
+                {"chain": "solana", "dex": "orca"}
+            ]
+            
+            # Make API requests for each target
             async with aiohttp.ClientSession() as session:
-                for chain in self.chains_to_check:
+                for target in targets:
                     try:
-                        # Use the correct API endpoint format
-                        # We'll use the search endpoint which returns most active pairs by default
-                        url = f"https://api.dexscreener.com/latest/dex/search?q={chain}"
-                        logging.info(f"Requesting active pairs for {chain}: {url}")
+                        chain = target["chain"]
+                        dex = target["dex"]
+                        
+                        # Use the top pairs endpoint - most reliable source of data
+                        url = f"https://api.dexscreener.com/latest/dex/pairs/{chain}/{dex}"
+                        logging.info(f"Requesting top pairs for {chain}/{dex}: {url}")
                         
                         # Make API request
                         response = await safe_api_call(session, url)
@@ -470,40 +485,55 @@ class DexScreenerDigestCog(commands.Cog):
                             
                             for pair in response['pairs']:
                                 try:
+                                    # Skip pairs without required info
+                                    if 'pairCreatedAt' not in pair or 'volume' not in pair or 'liquidity' not in pair:
+                                        continue
+                                        
                                     # Filter by age
-                                    if 'pairCreatedAt' in pair:
-                                        # Convert timestamp to datetime
-                                        created_time = datetime.fromtimestamp(int(pair['pairCreatedAt']) / 1000)
-                                        # Check if created within the last 24 hours
-                                        age_minutes = (now - created_time).total_seconds() / 60
-                                        if age_minutes > 1440:  # More than 24 hours old
-                                            continue
+                                    created_time = datetime.fromtimestamp(int(pair['pairCreatedAt']) / 1000)
+                                    age_minutes = (now - created_time).total_seconds() / 60
+                                    if age_minutes > 1440:  # More than 24 hours old
+                                        continue
                                     
-                                    # Filter by volume
-                                    volume_1h = float(pair.get('volume', {}).get('h1', 0))
+                                    # Convert volume and liquidity values safely
+                                    try:
+                                        volume_1h = float(pair.get('volume', {}).get('h1', 0))
+                                    except (ValueError, TypeError):
+                                        volume_1h = 0
+                                        
+                                    try:
+                                        liquidity = float(pair.get('liquidity', {}).get('usd', 0))
+                                    except (ValueError, TypeError):
+                                        liquidity = 0
+                                    
+                                    # Apply filters
                                     if volume_1h < 50000:  # Less than $50,000 in 1h volume
                                         continue
                                         
-                                    # Filter by liquidity
-                                    liquidity = float(pair.get('liquidity', {}).get('usd', 0))
                                     if liquidity < 15000:  # Less than $15,000 in liquidity
                                         continue
-                                        
+                                    
+                                    # Log basic stats for debugging
+                                    symbol = pair.get('baseToken', {}).get('symbol', 'Unknown')
+                                    chain_id = pair.get('chainId', '').lower()
+                                    hours_old = age_minutes / 60
+                                    logging.info(f"Found eligible pair: {symbol} on {chain_id}, {hours_old:.1f} hours old, 1h vol: ${volume_1h:,.0f}, liq: ${liquidity:,.0f}")
+                                    
                                     # If it passed all filters, add to our list
                                     filtered_pairs.append(pair)
                                 except Exception as e:
                                     logging.debug(f"Error filtering pair: {e}")
                                     continue
                             
-                            # Sort by volume (high to low) to find the most active pairs
+                            # Sort by 1h volume (high to low) to find the most active pairs
                             sorted_pairs = sorted(
                                 filtered_pairs, 
-                                key=lambda p: float(p.get('volume', {}).get('h24', 0)), 
+                                key=lambda p: float(p.get('volume', {}).get('h1', 0)), 
                                 reverse=True
                             )
                             
-                            # Take top 5 from each chain
-                            for pair in sorted_pairs[:5]:
+                            # Take top pairs from each target
+                            for pair in sorted_pairs[:3]:  # Limit to 3 from each target to avoid overrepresentation
                                 # Only include pairs with sufficient information
                                 if 'baseToken' in pair and 'address' in pair.get('baseToken', {}):
                                     # Extract the pair address and chain ID correctly
@@ -512,16 +542,18 @@ class DexScreenerDigestCog(commands.Cog):
                                     
                                     # Only add pairs with valid data
                                     if pair_address and chain_id:
-                                        volume_24h = pair.get('volume', {}).get('h24', 'Unknown')
+                                        volume_1h = pair.get('volume', {}).get('h1', 0)
                                         symbol = pair.get('baseToken', {}).get('symbol', 'Unknown')
-                                        logging.info(f"Adding valid pair: {chain_id}/{pair_address} - {symbol} with 24h volume: ${volume_24h}")
+                                        logging.info(f"Adding valid pair: {chain_id}/{pair_address} - {symbol} with 1h volume: ${volume_1h:,.0f}")
                                         all_pairs.append((chain_id, pair_address))
-                        
+                        else:
+                            logging.warning(f"No valid response for {chain}/{dex}")
+                            
                         # Add delay between API calls to avoid rate limiting
                         await asyncio.sleep(1)
                     
                     except Exception as e:
-                        logging.error(f"Error fetching active pairs for {chain}: {e}", exc_info=True)
+                        logging.error(f"Error fetching top pairs for {target}: {e}", exc_info=True)
                         if self.monitor:
                             self.monitor.record_error()
                         else:
@@ -529,28 +561,56 @@ class DexScreenerDigestCog(commands.Cog):
             
             # Deduplicate and limit to max_pairs
             unique_pairs = []
-            seen_addresses = set()
+            seen_token_addresses = set()
             
             for chain_id, pair_address in all_pairs:
-                # Skip if we've already seen this base token
-                if pair_address not in seen_addresses:
-                    seen_addresses.add(pair_address)
-                    unique_pairs.append((chain_id, pair_address))
-                    
-                    # Break if we've reached the desired number of pairs
-                    if len(unique_pairs) >= max_pairs:
-                        break
+                for target_chain in self.chains_to_check:
+                    if target_chain in chain_id.lower():  # Match the target chain
+                        # Get token details to deduplicate by token address, not pair address
+                        try:
+                            pair_info = await self.get_pair_basic_info(session, chain_id, pair_address)
+                            if pair_info:
+                                token_address = pair_info.get('baseToken', {}).get('address', '')
+                                
+                                # Only add if we haven't seen this token before
+                                if token_address and token_address not in seen_token_addresses:
+                                    seen_token_addresses.add(token_address)
+                                    unique_pairs.append((chain_id, pair_address))
+                                    
+                                    # Break if we've reached the desired number of pairs
+                                    if len(unique_pairs) >= max_pairs:
+                                        break
+                        except Exception as e:
+                            logging.debug(f"Error processing pair {chain_id}/{pair_address}: {e}")
+                            continue
+                
+                # Break outer loop if we have enough pairs
+                if len(unique_pairs) >= max_pairs:
+                    break
             
             logging.info(f"Found {len(unique_pairs)} unique active pairs across all chains")
             return unique_pairs
             
         except Exception as e:
-            logging.error(f"Error getting active pairs: {e}", exc_info=True)
+            logging.error(f"Error getting trending pairs: {e}", exc_info=True)
             if self.monitor:
                 self.monitor.record_error()
             else:
                 self.error_count += 1
             return []
+            
+    async def get_pair_basic_info(self, session, chain_id, pair_address):
+        """Get basic information about a pair without all the details"""
+        try:
+            url = f"https://api.dexscreener.com/latest/dex/pairs/{chain_id}/{pair_address}"
+            response = await safe_api_call(session, url)
+            
+            if response and 'pairs' in response and response['pairs']:
+                return response['pairs'][0]
+            return None
+        except Exception as e:
+            logging.debug(f"Error getting basic pair info: {e}")
+            return None
     
     async def get_pair_details(self, session, chain_id, pair_address):
         """Get detailed information about a pair from the Dexscreener API"""
