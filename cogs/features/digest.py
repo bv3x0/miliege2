@@ -506,12 +506,16 @@ class DexScreenerDigestCog(commands.Cog):
                             for pair in sorted_pairs[:5]:
                                 # Only include pairs with sufficient information
                                 if 'baseToken' in pair and 'address' in pair.get('baseToken', {}):
-                                    # Create a tuple of (chain_id, pair_address)
-                                    chain_id = chain
+                                    # Extract the pair address and chain ID correctly
                                     pair_address = pair.get('pairAddress', '')
-                                    volume_24h = pair.get('volume', {}).get('h24', 'Unknown')
-                                    all_pairs.append((chain_id, pair_address))
-                                    logging.info(f"Found pair on {chain}: {pair.get('baseToken', {}).get('symbol', 'Unknown')} - 24h Volume: ${volume_24h}")
+                                    chain_id = pair.get('chainId', '').lower()
+                                    
+                                    # Only add pairs with valid data
+                                    if pair_address and chain_id:
+                                        volume_24h = pair.get('volume', {}).get('h24', 'Unknown')
+                                        symbol = pair.get('baseToken', {}).get('symbol', 'Unknown')
+                                        logging.info(f"Adding valid pair: {chain_id}/{pair_address} - {symbol} with 24h volume: ${volume_24h}")
+                                        all_pairs.append((chain_id, pair_address))
                         
                         # Add delay between API calls to avoid rate limiting
                         await asyncio.sleep(1)
@@ -551,6 +555,8 @@ class DexScreenerDigestCog(commands.Cog):
     async def get_pair_details(self, session, chain_id, pair_address):
         """Get detailed information about a pair from the Dexscreener API"""
         try:
+            # Make sure we have the correct format for the API call
+            # The API expects: /pairs/{chainId}/{pairAddress}
             url = f"https://api.dexscreener.com/latest/dex/pairs/{chain_id}/{pair_address}"
             logging.info(f"Fetching pair details from: {url}")
             
