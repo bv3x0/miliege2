@@ -425,8 +425,15 @@ class DexScreenerDigestCog(commands.Cog):
         self.error_count = 0
         self.ny_tz = pytz.timezone('America/New_York')
         
-        # Define chains we want to check
+        # Define chains we want to check with their proper IDs
         self.chains_to_check = ["ethereum", "base", "solana"]
+        
+        # Map chain names to their proper formats for API calls
+        self.chain_mapping = {
+            "ethereum": "ethereum",
+            "base": "base", 
+            "solana": "solana"
+        }
         
         # Start the scheduled task to post digest
         self.dex_digest_task.start()
@@ -445,21 +452,52 @@ class DexScreenerDigestCog(commands.Cog):
             async with aiohttp.ClientSession() as session:
                 for chain in self.chains_to_check:
                     try:
-                        # Use high volume and recent activity as proxy for "trending"
-                        # This matches pairs with:
-                        # - Min 1h volume of $50,000
-                        # - Min liquidity of $15,000
-                        # - Created in last 24 hours
-                        url = f"https://api.dexscreener.com/latest/dex/pairs/{chain}?min1hVolume=50000&minLiquidity=15000&maxAge=1440"
+                        # Use the correct API endpoint format
+                        # We'll use the search endpoint which returns most active pairs by default
+                        url = f"https://api.dexscreener.com/latest/dex/search?q={chain}"
                         logging.info(f"Requesting active pairs for {chain}: {url}")
                         
                         # Make API request
                         response = await safe_api_call(session, url)
                         
                         if response and 'pairs' in response and response['pairs']:
+                            # Filter for pairs that match our criteria:
+                            # - Created in the last 24 hours (1440 minutes)
+                            # - At least $50,000 in 1h volume
+                            # - At least $15,000 in liquidity
+                            filtered_pairs = []
+                            now = datetime.now()
+                            
+                            for pair in response['pairs']:
+                                try:
+                                    # Filter by age
+                                    if 'pairCreatedAt' in pair:
+                                        # Convert timestamp to datetime
+                                        created_time = datetime.fromtimestamp(int(pair['pairCreatedAt']) / 1000)
+                                        # Check if created within the last 24 hours
+                                        age_minutes = (now - created_time).total_seconds() / 60
+                                        if age_minutes > 1440:  # More than 24 hours old
+                                            continue
+                                    
+                                    # Filter by volume
+                                    volume_1h = float(pair.get('volume', {}).get('h1', 0))
+                                    if volume_1h < 50000:  # Less than $50,000 in 1h volume
+                                        continue
+                                        
+                                    # Filter by liquidity
+                                    liquidity = float(pair.get('liquidity', {}).get('usd', 0))
+                                    if liquidity < 15000:  # Less than $15,000 in liquidity
+                                        continue
+                                        
+                                    # If it passed all filters, add to our list
+                                    filtered_pairs.append(pair)
+                                except Exception as e:
+                                    logging.debug(f"Error filtering pair: {e}")
+                                    continue
+                            
                             # Sort by volume (high to low) to find the most active pairs
                             sorted_pairs = sorted(
-                                response['pairs'], 
+                                filtered_pairs, 
                                 key=lambda p: float(p.get('volume', {}).get('h24', 0)), 
                                 reverse=True
                             )
