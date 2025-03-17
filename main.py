@@ -142,9 +142,11 @@ class DiscordBot(commands.Bot):
         digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
         
-        # Add the DexScreenerDigestCog (using the same channel as regular digest)
-        dex_digest_cog = DexScreenerDigestCog(self, daily_digest_channel_id, self.monitor)
-        await self.add_cog(dex_digest_cog)
+        # DexScreener feature is currently disabled due to API issues
+        # Uncomment the lines below to enable it when API issues are resolved
+        # dex_digest_cog = DexScreenerDigestCog(self, daily_digest_channel_id, self.monitor)
+        # await self.add_cog(dex_digest_cog)
+        logging.info("DexScreener feature is currently disabled")
         
         # Load channel IDs from config
         config_path = "config.json"
@@ -342,11 +344,11 @@ class DiscordBot(commands.Bot):
             ]
             embed.add_field(name="Hyperliquid Wallet Commands", value="\n".join(hyperliquid_commands), inline=False)
             
-            # Add Dexscreener commands
-            dexscreener_commands = [
-                "`!dex` - Generate a Dexscreener Digest with trending tokens"
-            ]
-            embed.add_field(name="Dexscreener Commands", value="\n".join(dexscreener_commands), inline=False)
+            # Dexscreener commands temporarily disabled
+            # dexscreener_commands = [
+            #     "`!dex` - Generate a Dexscreener Digest with trending tokens"
+            # ]
+            # embed.add_field(name="Dexscreener Commands", value="\n".join(dexscreener_commands), inline=False)
             
             await ctx.send(embed=embed)
 
