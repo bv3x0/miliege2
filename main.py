@@ -39,11 +39,12 @@ logging.basicConfig(
             backupCount=5,
             encoding='utf-8'
         ),
-        # Console handler
+        # Console handler (keeps the current console output)
         logging.StreamHandler()
     ]
 )
 
+# Create logger for the main module
 logger = logging.getLogger(__name__)
 
 # Load environment variables
