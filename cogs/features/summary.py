@@ -5,6 +5,7 @@ from collections import OrderedDict
 import datetime
 import pytz
 import asyncio
+from utils.format import format_token_header
 
 class TradeSummaryCog(commands.Cog):
     def __init__(self, bot, channel_id, monitor=None):
@@ -106,8 +107,7 @@ class TradeSummaryCog(commands.Cog):
         remaining_tokens = []
         
         for token_address, data in self.hourly_trades.items():
-            # Format the entry with ### for header styling (matching digest.py)
-            entry = f"### [{data['name']}]({data['url']})\n"
+            entry = format_token_header(data['name'], data['url']) + '\n'
             
             # Group users by their actions
             action_groups = {
@@ -175,8 +175,8 @@ class TradeSummaryCog(commands.Cog):
                 )
                 
                 for token_address in remaining_tokens:
-                    # Format the entry with ### for header styling (matching digest.py)
-                    entry = f"### [{data['name']}]({data['url']})\n"
+                    token_data = self.hourly_trades[token_address]
+                    entry = format_token_header(token_data['name'], token_data['url']) + '\n'
                     
                     # Group users by their actions
                     action_groups = {
@@ -185,7 +185,7 @@ class TradeSummaryCog(commands.Cog):
                         'bought and sold': []
                     }
                     
-                    for user, user_data in data['users'].items():
+                    for user, user_data in token_data['users'].items():
                         actions = user_data['actions']
                         link = user_data['message_link']
                         user_link = f"[{user}]({link})"
@@ -202,18 +202,18 @@ class TradeSummaryCog(commands.Cog):
                     
                     if action_groups['bought']:
                         users = ', '.join(action_groups['bought'])
-                        amount = format(int(data['buys']), ',')
+                        amount = format(int(token_data['buys']), ',')
                         activity_parts.append(f"{users} bought ${amount}")
                     
                     if action_groups['sold']:
                         users = ', '.join(action_groups['sold'])
-                        amount = format(int(data['sells']), ',')
+                        amount = format(int(token_data['sells']), ',')
                         activity_parts.append(f"{users} sold ${amount}")
                     
                     if action_groups['bought and sold']:
                         users = ', '.join(action_groups['bought and sold'])
-                        buy_amount = format(int(data['buys']), ',')
-                        sell_amount = format(int(data['sells']), ',')
+                        buy_amount = format(int(token_data['buys']), ',')
+                        sell_amount = format(int(token_data['sells']), ',')
                         activity_parts.append(f"{users} bought ${buy_amount} and sold ${sell_amount}")
                     
                     entry += '\n'.join(activity_parts)
@@ -311,3 +311,16 @@ class TradeSummaryCog(commands.Cog):
         except Exception as e:
             logging.error(f"Error in force summary: {e}", exc_info=True)
             await ctx.send(f"Error: {str(e)}")
+
+    def cleanup_old_trades(self):
+        """Remove trades older than 24 hours"""
+        try:
+            current_time = datetime.datetime.now(self.ny_tz)
+            cutoff_time = current_time - datetime.timedelta(hours=24)
+            
+            # If we had timestamp tracking, we could clean up old trades
+            # For now, we just clear all trades after processing
+            self.hourly_trades.clear()
+            logging.info("Cleaned up old trades")
+        except Exception as e:
+            logging.error(f"Error cleaning up old trades: {e}")

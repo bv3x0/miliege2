@@ -12,6 +12,7 @@ from sqlalchemy import desc # type: ignore
 from db.models import Token
 import re
 from utils.colors import EMBED_BORDER  # type: ignore # Import the color constant
+from utils.format import format_token_header  # Update import
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id):
@@ -104,14 +105,37 @@ class DigestCog(commands.Cog):
         return ny_time.strftime("%Y-%m-%d-%H")
         
     def _update_token_hour(self):
-        """Update the current hour key if needed"""
+        """Update the current hour key if needed and cleanup old hours"""
         current_key = self._get_current_hour_key()
         if current_key != self.current_hour_key:
             self.current_hour_key = current_key
             # Initialize new hour
             if current_key not in self.hour_tokens:
                 self.hour_tokens[current_key] = OrderedDict()
+                
+            # Cleanup old hours (keep last 48 hours)
+            self._cleanup_old_hours()
         return current_key
+        
+    def _cleanup_old_hours(self):
+        """Remove hours older than 48 hours"""
+        try:
+            current_time = datetime.now(self.ny_tz)
+            cutoff_time = current_time - timedelta(hours=48)
+            cutoff_key = cutoff_time.strftime("%Y-%m-%d-%H")
+            
+            keys_to_remove = [
+                key for key in self.hour_tokens.keys()
+                if key < cutoff_key
+            ]
+            
+            for key in keys_to_remove:
+                del self.hour_tokens[key]
+                
+            if keys_to_remove:
+                logging.info(f"Cleaned up {len(keys_to_remove)} old hour buckets")
+        except Exception as e:
+            logging.error(f"Error cleaning up old hours: {e}")
 
     async def create_digest_embed(self, tokens, is_hourly=True):
         """Create the digest embed - shared between auto and manual digests"""
@@ -157,30 +181,42 @@ class DigestCog(commands.Cog):
                 try:
                     # Fix the string to number conversion
                     def parse_market_cap(mcap_str):
-                        if not mcap_str or mcap_str == 'N/A':
-                            return None
+                        """Safely parse market cap strings with better error handling"""
+                        try:
+                            if not mcap_str or mcap_str == 'N/A':
+                                return None
+                                
+                            # Remove $ symbol and clean string
+                            clean_str = mcap_str.replace('$', '')
+                            clean_str = re.sub(r'<:[a-zA-Z0-9_]+:[0-9]+>', '', clean_str)
+                            clean_str = clean_str.strip()
                             
-                        # Remove $ symbol
-                        clean_str = mcap_str.replace('$', '')
-                        
-                        # Remove Discord emoji patterns (like <:wow:1149703956746997871>)
-                        clean_str = re.sub(r'<:[a-zA-Z0-9_]+:[0-9]+>', '', clean_str)
-                        
-                        # Strip any extra whitespace that might be left after removing emojis
-                        clean_str = clean_str.strip()
-                        
-                        # Handle suffixes properly (both uppercase and lowercase)
-                        if 'M' in clean_str or 'm' in clean_str:
-                            clean_str = clean_str.replace('M', '').replace('m', '')
-                            return float(clean_str) * 1000000
-                        elif 'K' in clean_str or 'k' in clean_str:
-                            clean_str = clean_str.replace('K', '').replace('k', '')
-                            return float(clean_str) * 1000
-                        elif 'B' in clean_str or 'b' in clean_str:
-                            clean_str = clean_str.replace('B', '').replace('b', '')
-                            return float(clean_str) * 1000000000
-                        else:
+                            # Handle suffixes
+                            multipliers = {
+                                'M': 1000000,
+                                'm': 1000000,
+                                'K': 1000,
+                                'k': 1000,
+                                'B': 1000000000,
+                                'b': 1000000000
+                            }
+                            
+                            # Check for suffixes
+                            for suffix, multiplier in multipliers.items():
+                                if clean_str.endswith(suffix):
+                                    number_part = clean_str[:-1].strip()
+                                    try:
+                                        return float(number_part) * multiplier
+                                    except ValueError:
+                                        logging.warning(f"Could not convert {number_part} to float")
+                                        return None
+                            
+                            # No suffix, try direct conversion
                             return float(clean_str)
+                            
+                        except Exception as e:
+                            logging.error(f"Error parsing market cap {mcap_str}: {e}")
+                            return None
                     
                     current_mcap_value = parse_market_cap(current_mcap)
                     initial_mcap_value = parse_market_cap(initial_mcap)
@@ -213,7 +249,7 @@ class DigestCog(commands.Cog):
                 # Log the values for debugging
                 logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
-                token_line = f"### [{name}]({token['chart_url']})"
+                token_line = format_token_header(name, token['chart_url'])
                 stats_line = f"{current_mcap} mc (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({message_link})" if message_link else f"{source} via {user}"
                 

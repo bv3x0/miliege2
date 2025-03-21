@@ -96,3 +96,7 @@ def format_age(timestamp) -> str:
     except Exception as e:
         logging.error(f"Error calculating age: {e}")
         return None
+
+def format_token_header(name: str, url: str) -> str:
+    """Format token name and URL as a Discord header with link"""
+    return f"### [{name}]({url})"
