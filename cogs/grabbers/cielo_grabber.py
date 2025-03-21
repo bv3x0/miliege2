@@ -64,107 +64,41 @@ class CieloGrabber(commands.Cog):
                 return
             
             if message.author.bot and message.author.name == "Cielo Alerts":
-                logging.info("=== Cielo Alert Message Start ===")
-                logging.info(f"Content: {message.content}")
-                if message.embeds:
-                    for i, embed in enumerate(message.embeds):
-                        logging.info(f"Embed {i+1}:")
-                        logging.info(f"Title: {embed.title}")
-                        logging.info(f"Description: {embed.description}")
-                        logging.info(f"Fields: {[(f.name, f.value) for f in embed.fields]}")
-                logging.info("=== Cielo Alert Message End ===")
-
-            if message.author.bot and not (message.author.name == "Cielo" or message.author.name == "Cielo Alerts"):
-                logging.debug("Ignoring non-Cielo bot message")
-                return
-
-            if self.input_channel_id and message.channel.id != self.input_channel_id:
-                logging.debug(f"Ignoring message from non-input channel {message.channel.id}")
-                return
-
-            logging.debug(f"Processing message in channel {message.channel.name} ({message.channel.id})")
-            
-            # Check for star emoji (new tokens) or trade emoji (trades)
-            has_star = '⭐' in message.content or '★' in message.content
-            has_trade = '🏷️' in message.content or '🏷' in message.content
-            
-            if has_star:
-                logging.info(f"Found star emoji in message: {message.content[:100]}...")
+                logging.debug("Processing Cielo Alerts message")
                 
-                # Extract credit from the first line with a tag emoji
-                credit_user = None
-                lines = message.content.split('\n')
-                for line in lines:
-                    if '🏷' in line or '📝' in line:
-                        credit_user = line.replace('🏷', '').replace('📝', '').strip()
-                        logging.info(f"Found credit user in message content: {credit_user}")
+                if not message.embeds:
+                    return
+                    
+                embed = message.embeds[0]
+                if not embed.fields:
+                    return
+                    
+                # Get the user from the title (remove the 🏷 emoji)
+                user = embed.title.replace('🏷', '').strip()
+                
+                # Get the swap info from the first field's value
+                swap_info = embed.fields[0].value
+                
+                # Get the token address from the second field (if it exists and starts with "Token:")
+                token_address = None
+                for field in embed.fields:
+                    if field.value.startswith('Token:'):
+                        token_address = field.value.replace('Token:', '').replace('`', '').strip()
                         break
                 
-                # Extract token address and swap info
-                token_address = None
-                swap_info = None
-                chain_info = "unknown"
-                dexscreener_maker_link = None
-                tx_link = None
-                
-                for line in lines:
-                    if line.startswith('Token:'):
-                        token_match = re.search(r'Token:\s*([a-zA-Z0-9]+)', line)
-                        if token_match:
-                            token_address = token_match.group(1)
-                            logging.info(f"Found token address: {token_address}")
+                if token_address and ('Swapped' in swap_info):
+                    # Create dexscreener URL based on the chain
+                    chain = next((f.value for f in embed.fields if f.name == 'Chain'), 'unknown').lower()
+                    dexscreener_url = f"https://dexscreener.com/{chain}/{token_address}"
                     
-                    if ('⭐' in line or '★' in line) and 'Swapped' in line:
-                        swap_info = line.replace('⭐', '').replace('★', '').strip()
-                        logging.info(f"Found swap info: {swap_info}")
+                    logging.info(f"Processing trade - User: {user}, Token: {token_address}")
+                    logging.info(f"Swap info: {swap_info}")
                     
-                    if line.startswith('Chain'):
-                        chain_parts = line.split()
-                        if len(chain_parts) > 1:
-                            chain_info = chain_parts[1].lower()
-                
-                if token_address:
-                    # Create a temporary message
-                    temp_message = await message.channel.send("Processing token...")
-                    
-                    # Process the token
-                    await self._process_token(
-                        token_address,
-                        temp_message,
-                        credit_user,
-                        swap_info,
-                        dexscreener_maker_link,
-                        tx_link,
-                        chain_info,
-                        original_message_id=message.id,
-                        original_channel_id=message.channel.id,
-                        original_guild_id=message.guild.id if message.guild else None
-                    )
-                    
-                    # Delete temporary message
-                    try:
-                        await temp_message.delete()
-                    except Exception as e:
-                        logging.error(f"Error deleting temporary message: {e}")
-            
-            elif has_trade and 'Swapped' in message.content:
-                logging.info("Processing swap message for trade tracking")
-                # Extract contract address and other info for trade tracking
-                lines = message.content.split('\n')
-                contract_address = None
-                for line in lines:
-                    if line.startswith('Token:'):
-                        token_match = re.search(r'Token:\s*([a-zA-Z0-9]+)', line)
-                        if token_match:
-                            contract_address = token_match.group(1)
-                            break
-                
-                if contract_address:
-                    dexscreener_url = f"https://dexscreener.com/solana/{contract_address}"
-                    await self._track_trade(message, contract_address, message.author.name, message.content, dexscreener_url)
+                    # Call _track_trade with the parsed information
+                    await self._track_trade(message, token_address, user, swap_info, dexscreener_url)
 
         except Exception as e:
-            logging.error(f"Error processing message: {e}", exc_info=True)
+            logging.error(f"Error processing Cielo message: {e}", exc_info=True)
 
     async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None, tx_link=None, chain_info=None, original_message_id=None, original_channel_id=None, original_guild_id=None):
         try:
@@ -632,77 +566,48 @@ class CieloGrabber(commands.Cog):
             
             logging.debug(f"Processing trade with swap_info: {swap_info}")
             
-            # Updated pattern to match current Cielo format
-            swap_pattern = r'Swapped\s+([\d,\.]+)\s+(\w+)\s*\(\$([0-9,\.]+)\)\s+for\s+([\d,\.]+)\s+(\w+)\s+On\s+Jupiter'
+            # Updated pattern to match the embed field format
+            # Example: "Swapped **1.98** ****WBNB**** ($1,256.44) for **5,547,690.53** ****CHIGA**** @ $0.00023"
+            swap_pattern = r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)'
             match = re.search(swap_pattern, swap_info)
             
             if not match:
                 logging.warning(f"Could not parse swap info: {swap_info}")
                 return
                 
-            from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
+            from_amount, from_token, dollar_amount = match.groups()
             dollar_amount = float(dollar_amount.replace(',', ''))
-            
-            logging.debug(f"Successfully parsed trade: {from_amount} {from_token} (${dollar_amount}) -> {to_amount} {to_token}")
             
             # Create message link
             message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
             
-            # Let the summary cog handle the trade tracking
-            if self.summary_cog:
-                # Use token_tracker's major_tokens instead
-                from_is_major = from_token.upper() in self.token_tracker.major_tokens
-                to_is_major = to_token.upper() in self.token_tracker.major_tokens
-                
-                if from_is_major and not to_is_major:
-                    # Simple buy of to_token
-                    self.summary_cog.track_trade(
-                        token_address, 
-                        to_token, 
-                        user, 
-                        dollar_amount, 
-                        'buy', 
-                        message_link, 
-                        dexscreener_url
-                    )
-                    logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount}")
-                    
-                elif not from_is_major and to_is_major:
-                    # Simple sell of from_token
-                    self.summary_cog.track_trade(
-                        token_address, 
-                        from_token, 
-                        user, 
-                        dollar_amount, 
-                        'sell', 
-                        message_link, 
-                        dexscreener_url
-                    )
-                    logging.info(f"Tracked sell: {user} sold {from_token} for ${dollar_amount}")
-                    
-                elif not from_is_major and not to_is_major:
-                    # Track both as separate trades
-                    # For the from_token (sell)
-                    self.summary_cog.track_trade(
-                        token_address, 
-                        from_token, 
-                        user, 
-                        dollar_amount, 
-                        'sell', 
-                        message_link, 
-                        dexscreener_url
-                    )
-                    # For the to_token (buy)
-                    self.summary_cog.track_trade(
-                        token_address, 
-                        to_token, 
-                        user, 
-                        dollar_amount, 
-                        'buy', 
-                        message_link, 
-                        dexscreener_url
-                    )
-                    logging.info(f"Tracked swap: {user} sold {from_token} and bought {to_token} for ${dollar_amount}")
+            # Check if it's a buy or sell based on token types
+            from_is_major = from_token.upper() in self.token_tracker.major_tokens
+            
+            if from_is_major:
+                # It's a buy
+                self.summary_cog.track_trade(
+                    token_address,
+                    from_token,
+                    user,
+                    dollar_amount,
+                    'buy',
+                    message_link,
+                    dexscreener_url
+                )
+                logging.info(f"Tracked buy: {user} bought for ${dollar_amount}")
+            else:
+                # It's a sell
+                self.summary_cog.track_trade(
+                    token_address,
+                    from_token,
+                    user,
+                    dollar_amount,
+                    'sell',
+                    message_link,
+                    dexscreener_url
+                )
+                logging.info(f"Tracked sell: {user} sold for ${dollar_amount}")
             
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
