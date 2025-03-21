@@ -239,6 +239,7 @@ class TradeSummaryCog(commands.Cog):
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url):
         try:
+            logging.debug(f"track_trade called with: token={token_name}, user={user}, amount=${amount}, type={trade_type}")
             # Move the minimum trade check to the start
             MIN_TRADE_AMOUNT = 100  # $100
             if amount < MIN_TRADE_AMOUNT:

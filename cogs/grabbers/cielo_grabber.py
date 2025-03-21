@@ -21,7 +21,10 @@ class CieloGrabber(commands.Cog):
         self.monitor = monitor
         self.session = session
         self.digest_cog = digest_cog
-        self.summary_cog = summary_cog  # Add the summary cog
+        self.summary_cog = summary_cog
+        
+        # Add at start of __init__
+        logging.info(f"Initializing CieloGrabber with summary_cog: {summary_cog is not None}")
         
         # Convert channel IDs to int if they're strings
         if input_channel_id and isinstance(input_channel_id, str):
