@@ -99,15 +99,12 @@ class TradeSummaryCog(commands.Cog):
             return None
             
         embed = discord.Embed(
-            title="Hourly Trade Summary",
-            color=discord.Color.blue(),
-            timestamp=datetime.datetime.now(self.ny_tz)
+            color=discord.Color.blue()
         )
         
-        # Add author with notepad icon
         embed.set_author(
-            name="Trade Summary",
-            icon_url="https://cdn.discordapp.com/emojis/1133962725094064168.webp"  # 📝 notepad icon
+            name="Hourly Trade Digest",
+            icon_url="https://cdn.discordapp.com/emojis/1133962725094064168.webp"
         )
         
         total_chars = 0
@@ -115,7 +112,7 @@ class TradeSummaryCog(commands.Cog):
         
         for token_address, data in self.hourly_trades.items():
             # Format the entry
-            entry = f"### [{data['name']}]({data['url']})\n"
+            entry = f"[{data['name']}]({data['url']})\n"
             
             # Group users by their actions
             action_groups = {
@@ -175,18 +172,16 @@ class TradeSummaryCog(commands.Cog):
         if remaining_tokens:
             try:
                 second_embed = discord.Embed(
-                    title="Hourly Trade Summary (Continued)",
-                    color=discord.Color.blue(),
-                    timestamp=datetime.datetime.now(self.ny_tz)
+                    color=discord.Color.blue()
                 )
                 second_embed.set_author(
-                    name="Trade Summary",
-                    icon_url="https://cdn.discordapp.com/emojis/1133962725094064168.webp"  # 📝 notepad icon
+                    name="Hourly Trade Digest (Continued)",
+                    icon_url="https://cdn.discordapp.com/emojis/1133962725094064168.webp"
                 )
                 
                 for token_address in remaining_tokens:
                     # Format the entry
-                    entry = f"### [{data['name']}]({data['url']})\n"
+                    entry = f"[{data['name']}]({data['url']})\n"
                     
                     # Group users by their actions
                     action_groups = {
