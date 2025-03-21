@@ -68,16 +68,11 @@ class CieloGrabber(commands.Cog):
             
             if message.author.bot and message.author.name == "Cielo Alerts":
                 logging.debug("Processing Cielo Alerts message")
-                # Add more debug logging before parsing
                 try:
-                    # Log the message content for debugging
-                    logging.debug(f"Attempting to parse message content: {message.content}")
+                    logging.debug(f"Attempting to parse Cielo Alerts message:\n{message.content}")
                     
-                    # Your existing parsing logic here
-                    # ...
-                    
-                    # Before calling _track_trade, log the parsed data
-                    logging.debug(f"Parsed trade data: token={token_address}, amount=${dollar_amount}")
+                    # Remove the problematic line that referenced undefined variables
+                    # The actual parsing will happen in _track_trade
                     
                 except Exception as e:
                     logging.error(f"Error parsing Cielo message: {e}", exc_info=True)
@@ -634,10 +629,11 @@ class CieloGrabber(commands.Cog):
 
     async def _track_trade(self, message, token_address, user, swap_info, dexscreener_url):
         try:
-            # Add null check for summary_cog
             if not self.summary_cog:
                 logging.warning("Trade tracking skipped: summary_cog not initialized")
                 return
+            
+            logging.debug(f"Processing trade with swap_info: {swap_info}")
             
             # Extract swap details using a more comprehensive pattern
             swap_pattern = r'Swapped\s+([\d,.]+)\s+(\w+)\s*\(\$([0-9,.]+)\)\s+for\s+([\d,.]+)\s+(\w+)'
@@ -649,6 +645,8 @@ class CieloGrabber(commands.Cog):
                 
             from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
             dollar_amount = float(dollar_amount.replace(',', ''))
+            
+            logging.debug(f"Successfully parsed trade: {from_amount} {from_token} (${dollar_amount}) -> {to_amount} {to_token}")
             
             # Create message link
             message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
