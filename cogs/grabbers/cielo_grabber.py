@@ -51,232 +51,34 @@ class CieloGrabber(commands.Cog):
             raise AttributeError("TokenTracker must have major_tokens attribute")
 
     @commands.Cog.listener()
+    async def on_ready(self):
+        logging.info(f"CieloGrabber is ready. Monitoring channel: {self.input_channel_id}")
+
+    @commands.Cog.listener()
     async def on_message(self, message):
+        logging.info(f"Received message in channel {message.channel.id}: {message.content[:50]}...")
         try:
-            # Check if this message is in the input channel (if specified)
-            if self.input_channel_id and message.channel.id != self.input_channel_id:
-                # Skip messages not in the input channel
+            if message.author.bot:
+                logging.debug("Ignoring bot message")
                 return
+
+            if self.input_channel_id and message.channel.id != self.input_channel_id:
+                logging.debug(f"Ignoring message from non-input channel {message.channel.id}")
+                return
+
+            logging.debug(f"Processing message in channel {message.channel.name} ({message.channel.id})")
             
-            # Only do detailed logging for Cielo or Cielo Alerts
-            if message.author.bot and (message.author.name == "Cielo" or message.author.name == "Cielo Alerts"):
-                logging.info("""
-=== Cielo Message Detected ===
-From: %s
-Content: %s
-Has Embeds: %s
-Embed Count: %d
-""", message.author.name, message.content, bool(message.embeds), len(message.embeds) if message.embeds else 0)
-                
-                # Detailed embed field logging
-                if message.embeds:
-                    for i, embed in enumerate(message.embeds):
-                        logging.info(f"\nEmbed {i} Details:")
-                        if embed.author:
-                            logging.info(f"Author: {embed.author.name}")
-                        logging.info(f"Title: {embed.title}")
-                        logging.info(f"Description: {embed.description}")
-                        # Log the raw embed data to see the tag field
-                        logging.info(f"Raw embed data: {embed.to_dict()}")
-                        
-                        for j, field in enumerate(embed.fields):
-                            logging.info(f"Field {j}:")
-                            logging.info(f"  Name: '{field.name}'")
-                            logging.info(f"  Value: '{field.value}'")
-                            logging.info(f"  Inline: {field.inline}")
-                
-                # Check for both star and tag emoji
-                has_star = False
-                has_tag = False
-                is_swap = False
-                
-                # Check message content
-                if message.content:
-                    has_star = '⭐' in message.content or '⭐️' in message.content
-                    has_tag = '🏷' in message.content
-                    is_swap = 'Swapped' in message.content
-                
-                # Check embeds
-                if message.embeds:
-                    for embed in message.embeds:
-                        if embed.description:
-                            has_star = has_star or ('⭐' in embed.description or '⭐️' in embed.description)
-                            has_tag = has_tag or '🏷' in embed.description
-                            is_swap = is_swap or 'Swapped' in embed.description
-                        
-                        for field in embed.fields:
-                            if field.value:
-                                has_star = has_star or ('⭐' in field.value or '⭐️' in field.value)
-                                has_tag = has_tag or '🏷' in field.value
-                                is_swap = is_swap or 'Swapped' in field.value
-                
-                # Skip if neither star nor (tag + swap)
-                if not (has_star or (has_tag and is_swap)):
-                    return
-                
-                # Extract credit from embed title or message content
-                credit_user = None
-                
-                # First try to get from embed title (original method)
-                if message.embeds:
-                    for embed in message.embeds:
-                        if embed.title and '🏷' in embed.title:
-                            # Remove the tag emoji and strip whitespace
-                            credit_user = embed.title.replace('🏷', '').strip()
-                            logging.info(f"Found credit user in embed title: {credit_user}")
-                            break
-                
-                # For Cielo Alerts, try to get from the first line with a tag emoji
-                if not credit_user and message.author.name == "Cielo Alerts" and message.content:
-                    lines = message.content.split('\n')
-                    for line in lines:
-                        if '🏷' in line or '📝' in line:
-                            # Remove the tag emoji and strip whitespace
-                            credit_user = line.replace('🏷', '').replace('📝', '').strip()
-                            logging.info(f"Found credit user in message content: {credit_user}")
-                            break
-                
-                if not credit_user:
-                    logging.warning("Could not find credit user in embed title or message content")
+            # Check for trade emoji
+            if '🏷️' in message.content:
+                logging.info(f"Found trade emoji in message: {message.content[:100]}...")
+                if 'Swapped' in message.content:
+                    logging.info("Processing swap message for trade tracking")
+                    # Extract contract address and other info
+                    # This part is missing! Need to call _track_trade here
+                    await self._track_trade(message, contract_address, message.author.name, message.content, dexscreener_url)
 
-                # Extract swap information and token address
-                swap_info = None
-                token_address = None
-                dexscreener_maker_link = None
-                tx_link = None
-                chain_info = "unknown"
-                
-                # For Cielo Alerts format (from the screenshot)
-                if message.author.name == "Cielo Alerts" and message.content:
-                    lines = message.content.split('\n')
-                    
-                    # Process each line to extract information
-                    for line in lines:
-                        # Look for swap information in a line with star emoji
-                        if ('⭐' in line or '★' in line) and 'Swapped' in line:
-                            # Remove the star emoji
-                            swap_info = line.replace('⭐', '').replace('★', '').strip()
-                            logging.info(f"Found swap info in content: {swap_info}")
-                        
-                        # Look for token address in a line starting with "Token:"
-                        if line.startswith('Token:'):
-                            # Extract the token address
-                            token_match = re.search(r'Token:\s*([a-zA-Z0-9]+)', line)
-                            if token_match:
-                                token_address = token_match.group(1)
-                                logging.info(f"Processing token from content: {token_address}")
-                        
-                        # Look for chain information
-                        if line.startswith('Chain'):
-                            chain_parts = line.split()
-                            if len(chain_parts) > 1:
-                                chain_info = chain_parts[1].lower()
-                                logging.info(f"Found chain info: {chain_info}")
-                        
-                        # Look for transaction link
-                        if 'Transaction' in line and 'Details' in line:
-                            tx_link = "Details"  # Just a placeholder, we'll need to extract the actual link
-                        
-                        # Look for chart link
-                        if 'Chart' in line and 'Link' in line:
-                            # We'll construct the dexscreener link later using the token address and chain
-                            pass
-                
-                # Original embed processing for Cielo
-                elif message.embeds:
-                    for embed in message.embeds:
-                        for j, field in enumerate(embed.fields):
-                            # Look for swap information in field 0
-                            if j == 0 and field.value and ('⭐️ Swapped' in field.value or '⭐ Swapped' in field.value):
-                                # Remove the star emoji and the market cap part
-                                swap_info = field.value.replace('⭐️ ', '').replace('⭐ ', '')
-                                # Remove the market cap part if it exists
-                                if ' | MC:' in swap_info:
-                                    swap_info = swap_info.split(' | MC:')[0]
-                                logging.info(f"Found swap info: {swap_info}")
-                                
-                            # Look for token address in field 1
-                            if "Token:" in field.value:
-                                logging.info(f"Found Token field: {field.value}")
-                                match = re.search(r'Token:\s*`([a-zA-Z0-9]+)`', field.value)
-                                if match:
-                                    token_address = match.group(1)
-                                    logging.info(f"Processing token: {token_address}")
-                            
-                            # Look for dexscreener maker link in the Chart field
-                            if field.name == 'Chart' and 'maker=' in field.value:
-                                link_match = re.search(r'\[Link\]\((https://dexscreener\.com/.+?maker=.+?)\)', field.value)
-                                if link_match:
-                                    dexscreener_maker_link = link_match.group(1)
-                                    logging.info(f"Found dexscreener maker link: {dexscreener_maker_link}")
-                                    
-                            # Extract transaction link if available
-                            if field.name == 'Transaction':
-                                # Extract the URL from markdown link [Details](url)
-                                tx_match = re.search(r'\[.+?\]\((https?://.+?)\)', field.value)
-                                if tx_match:
-                                    tx_link = tx_match.group(1)
-                                    
-                            # Extract chain info
-                            if field.name == 'Chain':
-                                chain_info = field.value.lower()
-                
-                # If we found a token, process it
-                if token_address:
-                    # Determine which channel to use for output
-                    output_channel = None
-                    if self.output_channel_id:
-                        output_channel = self.bot.get_channel(self.output_channel_id)
-                        logging.info(f"Using configured output channel: {self.output_channel_id}")
-                    
-                    if not output_channel:
-                        # Fallback to the same channel as the input
-                        output_channel = message.channel
-                        logging.info("Using input channel for output (no output channel configured)")
-                    
-                    # Create a temporary message in the output channel
-                    temp_message = await output_channel.send("Processing token...")
-                    
-                    # Process the token and send results to the output channel
-                    await self._process_token(
-                        token_address, 
-                        temp_message, 
-                        credit_user, 
-                        swap_info, 
-                        dexscreener_maker_link, 
-                        tx_link, 
-                        chain_info,
-                        original_message_id=message.id,  # Pass the original Cielo message ID
-                        original_channel_id=message.channel.id,  # Pass the original Cielo channel ID
-                        original_guild_id=message.guild.id if message.guild else None  # Pass the original Cielo guild ID
-                    )
-                    
-                    # Delete our temporary message
-                    try:
-                        await temp_message.delete()
-                    except Exception as e:
-                        logging.error(f"Error deleting temporary message: {e}")
-                    
-                    # Don't delete the original Cielo message
-                    logging.info(f"Keeping original message from {message.author.name}: {message.id}")
-
-                    # After processing the token, if it's a trade (tag + swap), track it
-                    if has_tag and is_swap:
-                        try:
-                            await self._track_trade(message, token_address, credit_user, swap_info, dexscreener_maker_link)
-                        except Exception as e:
-                            logging.error(f"Failed to track trade: {e}", exc_info=True)
-                            # Don't re-raise, just log the error to prevent message processing from failing
-                    return
-                else:
-                    logging.warning(f"No token address found in message from {message.author.name}")
-            else:
-                # Basic debug level logging for non-Cielo messages
-                logging.debug(f"Message from {message.author.name}")
-                    
         except Exception as e:
-            logging.error(f"Error in message processing: {e}", exc_info=True)
-            self.monitor.record_error()
+            logging.error(f"Error processing message: {e}", exc_info=True)
 
     async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None, tx_link=None, chain_info=None, original_message_id=None, original_channel_id=None, original_guild_id=None):
         try:

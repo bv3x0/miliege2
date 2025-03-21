@@ -65,26 +65,21 @@ class TradeSummaryCog(commands.Cog):
                     for embed in embeds:
                         try:
                             await channel.send(embed=embed)
-                            await asyncio.sleep(1)  # Small delay between messages
+                            logging.info("Successfully sent trade summary embed")
                         except discord.HTTPException as e:
                             logging.error(f"Failed to send trade summary: {e}")
-                            if self.monitor:
-                                self.monitor.record_error()
-                            self.failed_trades.update(self.hourly_trades)
-                            # Try to send again next hour
-                
                     self.hourly_trades.clear()
+                    logging.info("Cleared hourly trades after successful send")
+            else:
+                logging.info("No trades to process in hourly summary")
                     
         except Exception as e:
             logging.error(f"Error in hourly summary: {e}", exc_info=True)
-            if self.monitor:
-                self.monitor.record_error()
 
     @hourly_summary.before_loop
     async def before_hourly_summary(self):
         await self.bot.wait_until_ready()
         now = datetime.datetime.utcnow()
-        # Set to 30 minutes past the hour instead of the start of the hour
         next_time = now.replace(minute=30, second=0, microsecond=0)
         if now.minute >= 30:
             next_time = next_time + datetime.timedelta(hours=1)
@@ -244,7 +239,13 @@ class TradeSummaryCog(commands.Cog):
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url):
         try:
-            logging.debug(f"Processing {trade_type} trade: {token_name} by {user} for ${amount}")
+            # Move the minimum trade check to the start
+            MIN_TRADE_AMOUNT = 100  # $100
+            if amount < MIN_TRADE_AMOUNT:
+                logging.info(f"Skipping small trade: ${amount}")
+                return
+            
+            logging.info(f"Tracking {trade_type} trade: {token_name} by {user} for ${amount}")
             if token_address not in self.hourly_trades:
                 self.hourly_trades[token_address] = {
                     'name': token_name,
@@ -269,10 +270,7 @@ class TradeSummaryCog(commands.Cog):
                 trade_data['users'][user] = {'message_link': message_link, 'actions': set()}
             trade_data['users'][user]['actions'].add(action)
 
-            MIN_TRADE_AMOUNT = 100  # $100
-            if amount < MIN_TRADE_AMOUNT:
-                logging.info(f"Skipping small trade: ${amount}")
-                return
+            logging.info(f"Successfully tracked trade for {token_name}")
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
 

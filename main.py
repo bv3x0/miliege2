@@ -23,46 +23,28 @@ from cogs.utils.config import settings
 import json
 from cogs.features.summary import TradeSummaryCog
 
-# Enhanced logging setup
-def setup_logging():
-    # Create logger and set to DEBUG level to capture everything
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-    
-    # Create file handler - captures everything (DEBUG and up)
-    handler = RotatingFileHandler(
-        'bot.log',
-        maxBytes=5*1024*1024,  # Increase to 5MB per file
-        backupCount=10,        # Keep 10 backup files
-        mode='a'
-    )
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
-    ))
-    handler.setLevel(logging.DEBUG)  # Capture all logs in file
-    
-    # Create console handler - only show WARNING and above
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'  # Simpler format for console
-    ))
-    console_handler.setLevel(logging.WARNING)  # Only show warnings and errors in console
-    
-    # Clear any existing handlers
-    logger.handlers = []
-    
-    # Add handlers
-    logger.addHandler(handler)
-    logger.addHandler(console_handler)
-    
-    # Configure discord.py's logger
-    discord_logger = logging.getLogger('discord')
-    discord_logger.setLevel(logging.INFO)
-    
-    return logger
+# Create logs directory if it doesn't exist
+if not os.path.exists('logs'):
+    os.makedirs('logs')
 
-# Initialize logger
-logger = setup_logging()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        # File handler with rotation
+        RotatingFileHandler(
+            'logs/bot.log',
+            maxBytes=5_000_000,  # 5MB per file
+            backupCount=5,
+            encoding='utf-8'
+        ),
+        # Console handler
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
