@@ -60,22 +60,19 @@ class CieloGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
-            # Add debug logging at start of message processing
-            logging.debug(f"CieloGrabber processing message: {message.content[:100]}...")
-            
             if message.channel.id != self.input_channel_id:
                 return
             
             if message.author.bot and message.author.name == "Cielo Alerts":
-                logging.debug("Processing Cielo Alerts message")
-                try:
-                    logging.debug(f"Attempting to parse Cielo Alerts message:\n{message.content}")
-                    
-                    # Remove the problematic line that referenced undefined variables
-                    # The actual parsing will happen in _track_trade
-                    
-                except Exception as e:
-                    logging.error(f"Error parsing Cielo message: {e}", exc_info=True)
+                logging.info("=== Cielo Alert Message Start ===")
+                logging.info(f"Content: {message.content}")
+                if message.embeds:
+                    for i, embed in enumerate(message.embeds):
+                        logging.info(f"Embed {i+1}:")
+                        logging.info(f"Title: {embed.title}")
+                        logging.info(f"Description: {embed.description}")
+                        logging.info(f"Fields: {[(f.name, f.value) for f in embed.fields]}")
+                logging.info("=== Cielo Alert Message End ===")
 
             if message.author.bot and not (message.author.name == "Cielo" or message.author.name == "Cielo Alerts"):
                 logging.debug("Ignoring non-Cielo bot message")
@@ -635,8 +632,8 @@ class CieloGrabber(commands.Cog):
             
             logging.debug(f"Processing trade with swap_info: {swap_info}")
             
-            # Extract swap details using a more comprehensive pattern
-            swap_pattern = r'Swapped\s+([\d,.]+)\s+(\w+)\s*\(\$([0-9,.]+)\)\s+for\s+([\d,.]+)\s+(\w+)'
+            # Updated pattern to match current Cielo format
+            swap_pattern = r'Swapped\s+([\d,\.]+)\s+(\w+)\s*\(\$([0-9,\.]+)\)\s+for\s+([\d,\.]+)\s+(\w+)\s+On\s+Jupiter'
             match = re.search(swap_pattern, swap_info)
             
             if not match:
