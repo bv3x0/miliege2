@@ -58,8 +58,8 @@ class CieloGrabber(commands.Cog):
     async def on_message(self, message):
         logging.info(f"Received message in channel {message.channel.id}: {message.content[:50]}...")
         try:
-            if message.author.bot:
-                logging.debug("Ignoring bot message")
+            if message.author.bot and not (message.author.name == "Cielo" or message.author.name == "Cielo Alerts"):
+                logging.debug("Ignoring non-Cielo bot message")
                 return
 
             if self.input_channel_id and message.channel.id != self.input_channel_id:
@@ -68,13 +68,83 @@ class CieloGrabber(commands.Cog):
 
             logging.debug(f"Processing message in channel {message.channel.name} ({message.channel.id})")
             
-            # Check for trade emoji
-            if '🏷️' in message.content:
-                logging.info(f"Found trade emoji in message: {message.content[:100]}...")
-                if 'Swapped' in message.content:
-                    logging.info("Processing swap message for trade tracking")
-                    # Extract contract address and other info
-                    # This part is missing! Need to call _track_trade here
+            # Check for star emoji (new tokens) or trade emoji (trades)
+            has_star = '⭐' in message.content or '★' in message.content
+            has_trade = '🏷️' in message.content or '🏷' in message.content
+            
+            if has_star:
+                logging.info(f"Found star emoji in message: {message.content[:100]}...")
+                
+                # Extract credit from the first line with a tag emoji
+                credit_user = None
+                lines = message.content.split('\n')
+                for line in lines:
+                    if '🏷' in line or '📝' in line:
+                        credit_user = line.replace('🏷', '').replace('📝', '').strip()
+                        logging.info(f"Found credit user in message content: {credit_user}")
+                        break
+                
+                # Extract token address and swap info
+                token_address = None
+                swap_info = None
+                chain_info = "unknown"
+                dexscreener_maker_link = None
+                tx_link = None
+                
+                for line in lines:
+                    if line.startswith('Token:'):
+                        token_match = re.search(r'Token:\s*([a-zA-Z0-9]+)', line)
+                        if token_match:
+                            token_address = token_match.group(1)
+                            logging.info(f"Found token address: {token_address}")
+                    
+                    if ('⭐' in line or '★' in line) and 'Swapped' in line:
+                        swap_info = line.replace('⭐', '').replace('★', '').strip()
+                        logging.info(f"Found swap info: {swap_info}")
+                    
+                    if line.startswith('Chain'):
+                        chain_parts = line.split()
+                        if len(chain_parts) > 1:
+                            chain_info = chain_parts[1].lower()
+                
+                if token_address:
+                    # Create a temporary message
+                    temp_message = await message.channel.send("Processing token...")
+                    
+                    # Process the token
+                    await self._process_token(
+                        token_address,
+                        temp_message,
+                        credit_user,
+                        swap_info,
+                        dexscreener_maker_link,
+                        tx_link,
+                        chain_info,
+                        original_message_id=message.id,
+                        original_channel_id=message.channel.id,
+                        original_guild_id=message.guild.id if message.guild else None
+                    )
+                    
+                    # Delete temporary message
+                    try:
+                        await temp_message.delete()
+                    except Exception as e:
+                        logging.error(f"Error deleting temporary message: {e}")
+            
+            elif has_trade and 'Swapped' in message.content:
+                logging.info("Processing swap message for trade tracking")
+                # Extract contract address and other info for trade tracking
+                lines = message.content.split('\n')
+                contract_address = None
+                for line in lines:
+                    if line.startswith('Token:'):
+                        token_match = re.search(r'Token:\s*([a-zA-Z0-9]+)', line)
+                        if token_match:
+                            contract_address = token_match.group(1)
+                            break
+                
+                if contract_address:
+                    dexscreener_url = f"https://dexscreener.com/solana/{contract_address}"
                     await self._track_trade(message, contract_address, message.author.name, message.content, dexscreener_url)
 
         except Exception as e:
