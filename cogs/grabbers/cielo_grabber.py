@@ -329,7 +329,7 @@ class CieloGrabber(commands.Cog):
                     stats_line_2 = socials_text
                     
                     # Create title line with token name, symbol, and URL
-                    title_line = f"### [{token_name} ({token_symbol})]({chart_url})"
+                    title_line = f"####[{token_name} ({token_symbol})]({chart_url})"
                     
                     # Add the title line and stats lines to the description
                     description_parts = [title_line, stats_line_1]
@@ -504,7 +504,7 @@ class CieloGrabber(commands.Cog):
                 description_parts = []
                 
                 # Title line with token name and symbol
-                description_parts.append(f"### [{token_name} ({token_symbol})]({chart_url})")
+                description_parts.append(f"####[{token_name} ({token_symbol})]({chart_url})")
                 
                 # Extract buy amount and token from swap info
                 if swap_info:
