@@ -59,8 +59,29 @@ class CieloGrabber(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        logging.info(f"Received message in channel {message.channel.id}: {message.content[:50]}...")
         try:
+            # Add debug logging at start of message processing
+            logging.debug(f"CieloGrabber processing message: {message.content[:100]}...")
+            
+            if message.channel.id != self.input_channel_id:
+                return
+            
+            if message.author.bot and message.author.name == "Cielo Alerts":
+                logging.debug("Processing Cielo Alerts message")
+                # Add more debug logging before parsing
+                try:
+                    # Log the message content for debugging
+                    logging.debug(f"Attempting to parse message content: {message.content}")
+                    
+                    # Your existing parsing logic here
+                    # ...
+                    
+                    # Before calling _track_trade, log the parsed data
+                    logging.debug(f"Parsed trade data: token={token_address}, amount=${dollar_amount}")
+                    
+                except Exception as e:
+                    logging.error(f"Error parsing Cielo message: {e}", exc_info=True)
+
             if message.author.bot and not (message.author.name == "Cielo" or message.author.name == "Cielo Alerts"):
                 logging.debug("Ignoring non-Cielo bot message")
                 return
