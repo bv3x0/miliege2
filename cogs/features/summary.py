@@ -8,35 +8,41 @@ import asyncio
 
 class TradeSummaryCog(commands.Cog):
     def __init__(self, bot, channel_id, monitor=None):
-        self.bot = bot
-        self.channel_id = channel_id
-        self.monitor = monitor
-        self.ny_tz = pytz.timezone('America/New_York')
-        
-        # Define major tokens
-        self.major_tokens = {
-            'ETH', 'WETH',  # Ethereum
-            'SOL', 'WSOL',  # Solana
-            'USDC',         # Major stablecoins
-            'USDT',
-            'DAI',
-            'BNB', 'WBNB',  # Binance
-            'S',            # Base
-            'MATIC',        # Polygon
-            'AVAX',         # Avalanche
-            'ARB'           # Arbitrum
-        }
-        
-        # Add wrapped versions
-        self.major_tokens.update({f'W{t}' for t in self.major_tokens})
-        
-        # Trade tracking
-        self.hourly_trades = {}  # Format: {token_address: {'name': str, 'url': str, 'buys': float, 'sells': float, 'users': {user: {'message_link': str, 'actions': set()}}}}
-        self.last_trade_digest = None
-        self.failed_trades = {}
-        
-        # Start the hourly task
-        self.hourly_summary.start()
+        try:
+            self.bot = bot
+            self.channel_id = channel_id
+            self.monitor = monitor
+            self.ny_tz = pytz.timezone('America/New_York')
+            
+            logging.info(f"Initializing TradeSummaryCog with channel_id: {channel_id}")
+            
+            # Define major tokens
+            self.major_tokens = {
+                'ETH', 'WETH',  # Ethereum
+                'SOL', 'WSOL',  # Solana
+                'USDC',         # Major stablecoins
+                'USDT',
+                'DAI',
+                'BNB', 'WBNB',  # Binance
+                'S',            # Base
+                'MATIC',        # Polygon
+                'AVAX',         # Avalanche
+                'ARB'           # Arbitrum
+            }
+            
+            # Add wrapped versions
+            self.major_tokens.update({f'W{t}' for t in self.major_tokens})
+            
+            # Trade tracking
+            self.hourly_trades = {}  # Format: {token_address: {'name': str, 'url': str, 'buys': float, 'sells': float, 'users': {user: {'message_link': str, 'actions': set()}}}}
+            self.last_trade_digest = None
+            self.failed_trades = {}
+            
+            # Start the hourly task
+            self.hourly_summary.start()
+            logging.info("Hourly summary task started")
+        except Exception as e:
+            logging.error(f"Error in TradeSummaryCog initialization: {e}", exc_info=True)
 
     def cog_unload(self):
         self.hourly_summary.cancel()
@@ -45,11 +51,15 @@ class TradeSummaryCog(commands.Cog):
     async def hourly_summary(self):
         """Send hourly trade summary"""
         try:
+            logging.info("Starting hourly summary task")
             channel = self.bot.get_channel(self.channel_id)
             if not channel:
+                logging.error(f"Could not find channel with ID {self.channel_id}")
                 return
-                
+            
+            logging.info(f"Found channel: {channel.name}")
             if self.hourly_trades:
+                logging.info(f"Processing {len(self.hourly_trades)} trades")
                 embeds = await self.create_summary_embed()
                 if embeds:
                     for embed in embeds:
@@ -270,3 +280,40 @@ class TradeSummaryCog(commands.Cog):
                 return
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
+
+    @commands.command()
+    async def testsummary(self, ctx):
+        """Test the trade summary functionality"""
+        try:
+            logging.info("Test summary command received")
+            # Add a test trade
+            self.track_trade(
+                "test_address",
+                "TEST_TOKEN",
+                "TestUser",
+                1000,
+                "buy",
+                "https://discord.com/test",
+                "https://dexscreener.com/test"
+            )
+            await ctx.send("Added test trade. Summary should appear at next :30")
+        except Exception as e:
+            logging.error(f"Error in test summary: {e}", exc_info=True)
+            await ctx.send(f"Error: {str(e)}")
+
+    @commands.command()
+    async def forcesummary(self, ctx):
+        """Force a trade summary to generate now"""
+        try:
+            logging.info("Force summary command received")
+            if self.hourly_trades:
+                embeds = await self.create_summary_embed()
+                if embeds:
+                    for embed in embeds:
+                        await ctx.send(embed=embed)
+                self.hourly_trades.clear()
+            else:
+                await ctx.send("No trades to summarize")
+        except Exception as e:
+            logging.error(f"Error in force summary: {e}", exc_info=True)
+            await ctx.send(f"Error: {str(e)}")

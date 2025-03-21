@@ -32,8 +32,8 @@ def setup_logging():
     # Create file handler - captures everything (DEBUG and up)
     handler = RotatingFileHandler(
         'bot.log',
-        maxBytes=1024*1024,
-        backupCount=5,
+        maxBytes=5*1024*1024,  # Increase to 5MB per file
+        backupCount=10,        # Keep 10 backup files
         mode='a'
     )
     handler.setFormatter(logging.Formatter(
