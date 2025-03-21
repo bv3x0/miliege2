@@ -21,7 +21,7 @@ from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
 from discord import app_commands
 from cogs.utils.config import settings
 import json
-from cogs.features.trade_summary import TradeSummaryCog
+from cogs.features.summary import TradeSummaryCog
 
 # Enhanced logging setup
 def setup_logging():
