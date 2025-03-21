@@ -106,8 +106,8 @@ class TradeSummaryCog(commands.Cog):
         remaining_tokens = []
         
         for token_address, data in self.hourly_trades.items():
-            # Format the entry - add back the ### prefix
-            entry = f"### [{data['name']}]({data['url']})\n"
+            # Format the entry - remove the ### prefix since Discord handles the formatting
+            entry = f"[{data['name']}]({data['url']})\n"
             
             # Group users by their actions
             action_groups = {
@@ -175,8 +175,8 @@ class TradeSummaryCog(commands.Cog):
                 )
                 
                 for token_address in remaining_tokens:
-                    # Format the entry - add back the ### prefix here too
-                    entry = f"### [{data['name']}]({data['url']})\n"
+                    # Format the entry - remove the ### prefix here too
+                    entry = f"[{data['name']}]({data['url']})\n"
                     
                     # Group users by their actions
                     action_groups = {
