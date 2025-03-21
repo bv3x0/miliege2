@@ -12,8 +12,8 @@ from cogs.utils import (
     Colors
 )
 from db.models import Token, MarketCapUpdate
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import desc
+from sqlalchemy.exc import SQLAlchemyError # type: ignore
+from sqlalchemy import desc # type: ignore
 
 class BotMonitor:
     def __init__(self):
@@ -52,6 +52,23 @@ class TokenTracker:
         # Load tokens from database if session is provided
         if session_factory:
             self._load_tokens_from_db()
+        
+        # Add major tokens set
+        self.major_tokens = {
+            'ETH', 'WETH',  # Ethereum
+            'SOL', 'WSOL',  # Solana
+            'USDC',         # Major stablecoins
+            'USDT',
+            'DAI',
+            'BNB', 'WBNB',  # Binance
+            'S',            # Base
+            'MATIC',        # Polygon
+            'AVAX',         # Avalanche
+            'ARB'           # Arbitrum
+        }
+        
+        # Add common variations
+        self.major_tokens.update({f'W{t}' for t in self.major_tokens})  # Add wrapped versions
     
     def _load_tokens_from_db(self):
         """Load the most recent tokens from database into memory cache."""
@@ -297,3 +314,7 @@ class TokenTracker:
             
             for contract in to_remove:
                 del self.tokens[contract]
+
+    def is_major_token(self, token: str) -> bool:
+        """Check if a token is considered a major token"""
+        return token.upper() in self.major_tokens

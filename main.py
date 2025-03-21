@@ -21,6 +21,7 @@ from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
 from discord import app_commands
 from cogs.utils.config import settings
 import json
+from cogs.features.trade_summary import TradeSummaryCog
 
 # Enhanced logging setup
 def setup_logging():
@@ -142,6 +143,10 @@ class DiscordBot(commands.Bot):
         digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
         
+        # Create TradeSummaryCog
+        summary_cog = TradeSummaryCog(self, daily_digest_channel_id, self.monitor)
+        await self.add_cog(summary_cog)
+        
         # DexScreener feature is currently disabled due to API issues
         # Uncomment the lines below to enable it when API issues are resolved
         # dex_digest_cog = DexScreenerDigestCog(self, daily_digest_channel_id, self.monitor)
@@ -183,7 +188,8 @@ class DiscordBot(commands.Bot):
             self.token_tracker, 
             self.monitor, 
             self.session, 
-            digest_cog,
+            digest_cog=digest_cog,
+            summary_cog=summary_cog,
             input_channel_id=cielo_input_channel_id,
             output_channel_id=cielo_output_channel_id
         ))

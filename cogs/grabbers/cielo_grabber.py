@@ -12,14 +12,16 @@ from cogs.utils import (
     UI
 )
 from cogs.utils.format import Colors, BotConstants, Messages
+import datetime
 
 class CieloGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, input_channel_id=None, output_channel_id=None):
+    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, summary_cog=None, input_channel_id=None, output_channel_id=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
         self.session = session
         self.digest_cog = digest_cog
+        self.summary_cog = summary_cog  # Add the summary cog
         
         # Convert channel IDs to int if they're strings
         if input_channel_id and isinstance(input_channel_id, str):
@@ -43,6 +45,10 @@ class CieloGrabber(commands.Cog):
         else:
             self.output_channel_id = output_channel_id
             logging.info(f"Initialized CieloGrabber with output channel ID: {self.output_channel_id}")
+
+        # Verify token_tracker has major_tokens
+        if not hasattr(token_tracker, 'major_tokens'):
+            raise AttributeError("TokenTracker must have major_tokens attribute")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -79,44 +85,33 @@ Embed Count: %d
                             logging.info(f"  Value: '{field.value}'")
                             logging.info(f"  Inline: {field.inline}")
                 
-                # Check if this message contains a star emoji in the content or any field
+                # Check for both star and tag emoji
                 has_star = False
+                has_tag = False
+                is_swap = False
                 
-                # First check the message content
-                if message.content and '⭐' in message.content:
-                    has_star = True
-                    logging.info("Found star emoji in message content")
+                # Check message content
+                if message.content:
+                    has_star = '⭐' in message.content or '⭐️' in message.content
+                    has_tag = '🏷' in message.content
+                    is_swap = 'Swapped' in message.content
                 
-                # Then check embeds if no star in content
-                if not has_star and message.embeds:
+                # Check embeds
+                if message.embeds:
                     for embed in message.embeds:
-                        # Check description
-                        if embed.description and '⭐' in embed.description:
-                            has_star = True
-                            logging.info("Found star emoji in embed description")
-                            break
-                            
-                        # Check fields
+                        if embed.description:
+                            has_star = has_star or ('⭐' in embed.description or '⭐️' in embed.description)
+                            has_tag = has_tag or '🏷' in embed.description
+                            is_swap = is_swap or 'Swapped' in embed.description
+                        
                         for field in embed.fields:
-                            if field.value and ('⭐' in field.value or '⭐️' in field.value):
-                                has_star = True
-                                logging.info("Found star emoji in message field")
-                                break
-                        if has_star:
-                            break
+                            if field.value:
+                                has_star = has_star or ('⭐' in field.value or '⭐️' in field.value)
+                                has_tag = has_tag or '🏷' in field.value
+                                is_swap = is_swap or 'Swapped' in field.value
                 
-                # For Cielo Alerts, also check for star in the message content directly
-                if not has_star and message.author.name == "Cielo Alerts" and message.content:
-                    lines = message.content.split('\n')
-                    for line in lines:
-                        if '⭐' in line or '★' in line:
-                            has_star = True
-                            logging.info(f"Found star emoji in Cielo Alerts content line: {line}")
-                            break
-                
-                # Skip processing if no star emoji found
-                if not has_star:
-                    logging.info("No star emoji found in message, skipping processing")
+                # Skip if neither star nor (tag + swap)
+                if not (has_star or (has_tag and is_swap)):
                     return
                 
                 # Extract credit from embed title or message content
@@ -264,6 +259,14 @@ Embed Count: %d
                     
                     # Don't delete the original Cielo message
                     logging.info(f"Keeping original message from {message.author.name}: {message.id}")
+
+                    # After processing the token, if it's a trade (tag + swap), track it
+                    if has_tag and is_swap:
+                        try:
+                            await self._track_trade(message, token_address, credit_user, swap_info, dexscreener_maker_link)
+                        except Exception as e:
+                            logging.error(f"Failed to track trade: {e}", exc_info=True)
+                            # Don't re-raise, just log the error to prevent message processing from failing
                     return
                 else:
                     logging.warning(f"No token address found in message from {message.author.name}")
@@ -732,3 +735,83 @@ Embed Count: %d
                 await message.channel.send("❌ **Error:** Failed to process token information.")
             except:
                 logging.error("Failed to send error message", exc_info=True)
+
+    async def _track_trade(self, message, token_address, user, swap_info, dexscreener_url):
+        try:
+            # Add null check for summary_cog
+            if not self.summary_cog:
+                logging.warning("Trade tracking skipped: summary_cog not initialized")
+                return
+            
+            # Extract swap details using a more comprehensive pattern
+            swap_pattern = r'Swapped\s+([\d,.]+)\s+(\w+)\s*\(\$([0-9,.]+)\)\s+for\s+([\d,.]+)\s+(\w+)'
+            match = re.search(swap_pattern, swap_info)
+            
+            if not match:
+                logging.warning(f"Could not parse swap info: {swap_info}")
+                return
+                
+            from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
+            dollar_amount = float(dollar_amount.replace(',', ''))
+            
+            # Create message link
+            message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+            
+            # Let the summary cog handle the trade tracking
+            if self.summary_cog:
+                # Use token_tracker's major_tokens instead
+                from_is_major = from_token.upper() in self.token_tracker.major_tokens
+                to_is_major = to_token.upper() in self.token_tracker.major_tokens
+                
+                if from_is_major and not to_is_major:
+                    # Simple buy of to_token
+                    self.summary_cog.track_trade(
+                        token_address, 
+                        to_token, 
+                        user, 
+                        dollar_amount, 
+                        'buy', 
+                        message_link, 
+                        dexscreener_url
+                    )
+                    logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount}")
+                    
+                elif not from_is_major and to_is_major:
+                    # Simple sell of from_token
+                    self.summary_cog.track_trade(
+                        token_address, 
+                        from_token, 
+                        user, 
+                        dollar_amount, 
+                        'sell', 
+                        message_link, 
+                        dexscreener_url
+                    )
+                    logging.info(f"Tracked sell: {user} sold {from_token} for ${dollar_amount}")
+                    
+                elif not from_is_major and not to_is_major:
+                    # Track both as separate trades
+                    # For the from_token (sell)
+                    self.summary_cog.track_trade(
+                        token_address, 
+                        from_token, 
+                        user, 
+                        dollar_amount, 
+                        'sell', 
+                        message_link, 
+                        dexscreener_url
+                    )
+                    # For the to_token (buy)
+                    self.summary_cog.track_trade(
+                        token_address, 
+                        to_token, 
+                        user, 
+                        dollar_amount, 
+                        'buy', 
+                        message_link, 
+                        dexscreener_url
+                    )
+                    logging.info(f"Tracked swap: {user} sold {from_token} and bought {to_token} for ${dollar_amount}")
+            
+        except Exception as e:
+            logging.error(f"Error tracking trade: {e}", exc_info=True)

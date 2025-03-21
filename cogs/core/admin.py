@@ -84,7 +84,7 @@ class AdminCommands(commands.Cog):
         feature="Feature to pause"
     )
     @app_commands.choices(feature=[
-        app_commands.Choice(name="Hourly Digest", value="hourly_digest"),
+        app_commands.Choice(name="Hourly New Coins", value="hourly_digest"),
         app_commands.Choice(name="Hyperliquid Bot", value="hyperliquid_bot"),
         app_commands.Choice(name="Cielo Grabber", value="cielo_grabber_bot")
     ])
@@ -101,7 +101,7 @@ class AdminCommands(commands.Cog):
         feature="Feature to resume"
     )
     @app_commands.choices(feature=[
-        app_commands.Choice(name="Hourly Digest", value="hourly_digest"),
+        app_commands.Choice(name="Hourly New Coins", value="hourly_digest"),
         app_commands.Choice(name="Hyperliquid Bot", value="hyperliquid_bot"),
         app_commands.Choice(name="Cielo Grabber", value="cielo_grabber_bot")
     ])

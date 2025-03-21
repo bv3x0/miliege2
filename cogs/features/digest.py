@@ -132,7 +132,7 @@ class DigestCog(commands.Cog):
         )
         
         # Move title to author field with icon
-        title = "Hourly Digest" if is_hourly else "Latest Alerts"
+        title = "Hourly New Coins" if is_hourly else "Latest Alerts"
         embed.set_author(name=title, icon_url="https://symbl-world.akamaized.net/i/webp/aa/af338d2b436394131fb3bf6a08dd3f.webp")
         
         recent_tokens = list(tokens.items())[-10:]  # Last 10 tokens
