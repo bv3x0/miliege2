@@ -228,7 +228,7 @@ class DigestCog(commands.Cog):
                 # Log the values for debugging
                 logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
-                token_line = f"### [{name}]({token['chart_url']})"
+                token_line = f"## [{name}]({token['chart_url']})"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                 

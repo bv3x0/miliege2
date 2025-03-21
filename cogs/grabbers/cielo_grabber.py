@@ -566,16 +566,15 @@ class CieloGrabber(commands.Cog):
             
             logging.debug(f"Processing trade with swap_info: {swap_info}")
             
-            # Updated pattern to match the embed field format
-            # Example: "Swapped **1.98** ****WBNB**** ($1,256.44) for **5,547,690.53** ****CHIGA**** @ $0.00023"
-            swap_pattern = r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)'
+            # Updated pattern to match the embed field format with Jupiter
+            swap_pattern = r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)\s+for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*'
             match = re.search(swap_pattern, swap_info)
             
             if not match:
                 logging.warning(f"Could not parse swap info: {swap_info}")
                 return
                 
-            from_amount, from_token, dollar_amount = match.groups()
+            from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
             dollar_amount = float(dollar_amount.replace(',', ''))
             
             # Create message link
@@ -583,31 +582,32 @@ class CieloGrabber(commands.Cog):
             
             # Check if it's a buy or sell based on token types
             from_is_major = from_token.upper() in self.token_tracker.major_tokens
+            to_is_major = to_token.upper() in self.token_tracker.major_tokens
             
-            if from_is_major:
-                # It's a buy
+            if from_is_major and not to_is_major:
+                # Swapping from a major token TO a non-major token is a BUY of the non-major token
                 self.summary_cog.track_trade(
                     token_address,
-                    from_token,
+                    to_token,  # Use the TO token name
                     user,
                     dollar_amount,
                     'buy',
                     message_link,
                     dexscreener_url
                 )
-                logging.info(f"Tracked buy: {user} bought for ${dollar_amount}")
-            else:
-                # It's a sell
+                logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount}")
+            elif not from_is_major and to_is_major:
+                # Swapping from a non-major token TO a major token is a SELL of the non-major token
                 self.summary_cog.track_trade(
                     token_address,
-                    from_token,
+                    from_token,  # Use the FROM token name
                     user,
                     dollar_amount,
                     'sell',
                     message_link,
                     dexscreener_url
                 )
-                logging.info(f"Tracked sell: {user} sold for ${dollar_amount}")
+                logging.info(f"Tracked sell: {user} sold {from_token} for ${dollar_amount}")
             
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
