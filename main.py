@@ -21,7 +21,6 @@ from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
 from discord import app_commands
 from cogs.utils.config import settings
 import json
-from cogs.features.summary import TradeSummaryCog
 from cogs.features.newcoin import NewCoinCog
 
 # Create logs directory if it doesn't exist
@@ -158,9 +157,6 @@ class DiscordBot(commands.Bot):
         digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
         
-        summary_cog = TradeSummaryCog(self, daily_digest_channel_id, self.monitor)
-        await self.add_cog(summary_cog)
-        
         # 2. New coin alerts feature
         newcoin_cog = NewCoinCog(self, self.session, cielo_output_channel_id)
         await self.add_cog(newcoin_cog)
@@ -172,8 +168,7 @@ class DiscordBot(commands.Bot):
             self.monitor, 
             self.session, 
             digest_cog=digest_cog,
-            summary_cog=summary_cog,
-            newcoin_cog=newcoin_cog,  # Add the new cog reference
+            newcoin_cog=newcoin_cog,
             input_channel_id=cielo_input_channel_id
         ))
         
