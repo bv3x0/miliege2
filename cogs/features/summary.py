@@ -107,7 +107,7 @@ class TradeSummaryCog(commands.Cog):
         remaining_tokens = []
         
         for token_address, data in self.hourly_trades.items():
-            entry = format_token_header(data['name'], data['url']) + '\n'
+            entry = format_token_header(data['name'], data['url'])
             
             # Group users by their actions
             action_groups = {
@@ -128,7 +128,7 @@ class TradeSummaryCog(commands.Cog):
                 elif 'sold' in actions:
                     action_groups['sold'].append(user_link)
             
-            # Build the activity description
+            # Build the activity description with single newline
             activity_parts = []
             
             if action_groups['bought']:
@@ -147,7 +147,8 @@ class TradeSummaryCog(commands.Cog):
                 sell_amount = format(int(data['sells']), ',')
                 activity_parts.append(f"{users} bought ${buy_amount} and sold ${sell_amount}")
             
-            entry += '\n'.join(activity_parts)
+            # Join with single newline
+            entry += '\n' + '\n'.join(activity_parts)
             
             # Check limits
             if len(embed.fields) < 25 and total_chars + len(entry) < 5500:
@@ -176,7 +177,7 @@ class TradeSummaryCog(commands.Cog):
                 
                 for token_address in remaining_tokens:
                     token_data = self.hourly_trades[token_address]
-                    entry = format_token_header(token_data['name'], token_data['url']) + '\n'
+                    entry = format_token_header(token_data['name'], token_data['url'])
                     
                     # Group users by their actions
                     action_groups = {
@@ -197,7 +198,7 @@ class TradeSummaryCog(commands.Cog):
                         elif 'sold' in actions:
                             action_groups['sold'].append(user_link)
                     
-                    # Build the activity description
+                    # Build the activity description with single newline
                     activity_parts = []
                     
                     if action_groups['bought']:
@@ -216,7 +217,8 @@ class TradeSummaryCog(commands.Cog):
                         sell_amount = format(int(token_data['sells']), ',')
                         activity_parts.append(f"{users} bought ${buy_amount} and sold ${sell_amount}")
                     
-                    entry += '\n'.join(activity_parts)
+                    # Join with single newline
+                    entry += '\n' + '\n'.join(activity_parts)
                     
                     # Check limits
                     if len(second_embed.fields) < 25 and total_chars + len(entry) < 5500:
