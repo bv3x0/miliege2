@@ -94,7 +94,7 @@ class DiscordBot(commands.Bot):
         self.db_session = self.Session()
         
         self.monitor = BotMonitor()
-        self.token_tracker = TokenTracker(session_factory=self.db_session)
+        self.token_tracker = TokenTracker(session_factory=self.Session)
         self.session = None  # Will be initialized in setup_hook
 
     async def on_message(self, message):
