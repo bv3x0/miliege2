@@ -252,18 +252,21 @@ class NewCoinCog(commands.Cog):
         """Set footer text with user and amount information"""
         if not user:
             return
-        
+            
         footer_text = user
-        
-        # Extract amount from swap_info if available
-        if swap_info and 'dollar_amount' in swap_info:
-            amount = float(swap_info['dollar_amount'])
-            if amount < 250:
-                footer_text = "🤏 " + footer_text
-            elif amount >= 10000:
-                footer_text = "🤑 " + footer_text
-            footer_text += f" ⋅ ${format(int(amount), ',')} buy"
-        
+            
+        # Extract amount from swap info if available
+        if swap_info:
+            # Parse the dollar amount from the swap info string
+            dollar_match = re.search(r'\(\$([0-9,.]+)\)', swap_info)
+            if dollar_match:
+                amount = float(dollar_match.group(1).replace(',', ''))
+                if amount < 250:
+                    footer_text = "🤏 " + footer_text
+                elif amount >= 10000:
+                    footer_text = "🤑 " + footer_text
+                footer_text += f" ⋅ ${format(int(amount), ',')} buy"
+            
         embed.set_footer(text=footer_text)
 
     def _extract_swap_info(self, swap_info):

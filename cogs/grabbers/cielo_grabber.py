@@ -134,10 +134,14 @@ class CieloGrabber(commands.Cog):
                         # Under $1M - use the wow emoji
                         author_icon_url = "https://cdn.discordapp.com/emojis/1149703956746997871.webp"
                         logging.info(f"Using wow emoji for market cap: {market_cap_value}")
+                        # Add fire emoji after "mc"
+                        formatted_mcap = f"${format_large_number(market_cap_value)} mc 🔥"
                     else:
                         # Over $1M or unknown - use the green circle
                         author_icon_url = "https://cdn.discordapp.com/emojis/1323480997873848371.webp"
                         logging.info(f"Using green circle for market cap: {market_cap_value}")
+                        # No fire emoji for higher market caps
+                        formatted_mcap = f"${format_large_number(market_cap_value)} mc"
                         
                     new_embed.set_author(name="Buy Alert", icon_url=author_icon_url)
                     
@@ -611,6 +615,7 @@ class CieloGrabber(commands.Cog):
                         message_link,
                         dexscreener_url,
                         swap_info=swap_info,
+                        message_embed=message.embeds[0].to_dict(),
                         is_first_trade=is_first_trade
                     )
                     logging.info(f"Called track_trade for buy: {user} bought {to_token}")
