@@ -574,11 +574,12 @@ class DigestCog(commands.Cog):
                                 if 'MC:' in part:
                                     mc_str = part.strip()
                                     # Extract just the number and suffix (e.g., "431.4k" from "MC: $431.4k")
-                                    mc_match = re.search(r'MC:\s*\$([0-9,.]+)([KMB]?)', mc_str)
+                                    mc_match = re.search(r'MC:\s*\$([0-9,.]+)([KMBkmb]?)', mc_str, re.IGNORECASE)
                                     if mc_match:
                                         value = float(mc_match.group(1).replace(',', ''))
-                                        suffix = mc_match.group(2)
+                                        suffix = mc_match.group(2).upper()
                                         
+                                        # Store the raw numeric value
                                         if suffix == 'K':
                                             initial_mcap_value = value * 1000
                                         elif suffix == 'M':
@@ -588,27 +589,31 @@ class DigestCog(commands.Cog):
                                         else:
                                             initial_mcap_value = value
                                             
-                                        initial_mcap_formatted = f"${format_large_number(initial_mcap_value)}"
+                                        # Store the original formatted string, preserving the suffix
+                                        initial_mcap_formatted = mc_str.replace('MC:', '').strip()
                                         logging.info(f"Extracted MC from embed data: {initial_mcap_formatted}")
                     
                     # Fallback to regex parsing of swap_info if we couldn't get it from embed
                     elif swap_info:
                         # Parse swap info for market cap if available
-                        mc_match = re.search(r'MC:\s*\$([0-9,.]+)([KMB]?)', swap_info)
+                        mc_match = re.search(r'MC:\s*(\$[0-9,.]+[KMBkmb]?)', swap_info, re.IGNORECASE)
                         if mc_match:
-                            value = float(mc_match.group(1).replace(',', ''))
-                            suffix = mc_match.group(2)
-                            
-                            if suffix == 'K':
-                                initial_mcap_value = value * 1000
-                            elif suffix == 'M':
-                                initial_mcap_value = value * 1000000
-                            elif suffix == 'B':
-                                initial_mcap_value = value * 1000000000
-                            else:
-                                initial_mcap_value = value
+                            initial_mcap_formatted = mc_match.group(1)
+                            # Also parse the numeric value
+                            value_match = re.search(r'\$([0-9,.]+)([KMBkmb]?)', initial_mcap_formatted, re.IGNORECASE)
+                            if value_match:
+                                value = float(value_match.group(1).replace(',', ''))
+                                suffix = value_match.group(2).upper()
                                 
-                            initial_mcap_formatted = f"${format_large_number(initial_mcap_value)}"
+                                if suffix == 'K':
+                                    initial_mcap_value = value * 1000
+                                elif suffix == 'M':
+                                    initial_mcap_value = value * 1000000
+                                elif suffix == 'B':
+                                    initial_mcap_value = value * 1000000000
+                                else:
+                                    initial_mcap_value = value
+                                    
                             logging.info(f"Extracted MC from swap info: {initial_mcap_formatted}")
 
                     token_data = {
