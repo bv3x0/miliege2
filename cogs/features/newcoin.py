@@ -82,6 +82,7 @@ class NewCoinCog(commands.Cog):
 
             # Extract and format token data
             token_data = self._extract_token_data(pair_data)
+            token_data['url'] = dexscreener_url  # Add the chart URL from Cielo
             
             # Create embed description
             embed.description = self._create_description(token_data, chain)
@@ -141,9 +142,15 @@ class NewCoinCog(commands.Cog):
         # Format social links
         social_parts = self._format_social_links(data['socials'])
         
+        # Create token name/symbol part with optional URL
+        if data.get('url'):
+            token_header = f"### [{data['name']} ({data['symbol']})]({data['url']})"
+        else:
+            token_header = f"### {data['name']} ({data['symbol']})"
+        
         # Create description parts
         description_parts = [
-            f"### [{data['name']} ({data['symbol']})]({data['url']})",
+            token_header,
             f"${formatted_mcap} mc ⋅ {simplified_age} ⋅ {chain.lower()}",
             " ⋅ ".join(social_parts) if social_parts else "no socials"
         ]
