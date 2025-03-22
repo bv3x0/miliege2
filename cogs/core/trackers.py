@@ -46,8 +46,10 @@ class TokenTracker:
         self.max_tokens = max_tokens
         self.max_age_hours = max_age_hours
         self.update_lock = asyncio.Lock()
+        
+        # Store both the session and factory
         self.session_factory = session_factory
-        self.buy_counts = {}  # Keep this in memory for now
+        self.db_session = session_factory  # Add this line - store the session directly
         
         # Load tokens from database if session is provided
         if session_factory:

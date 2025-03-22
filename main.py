@@ -85,19 +85,15 @@ class DiscordBot(commands.Bot):
         
         # Initialize database
         self.db = Database(database_url)
-        
-        # Create tables if they don't exist
         self.db.create_tables()
         
-        # Initialize session factory
-        self.Session = self.db.session_factory
-        # Create a session from the factory
-        self.db_session = self.Session()
+        # Create a single session to be shared
+        self.db_session = self.db.session_factory()
         
         self.monitor = BotMonitor()
-        # Pass the session, not the factory
+        # Pass the session
         self.token_tracker = TokenTracker(session_factory=self.db_session)
-        self.session = None  # Will be initialized in setup_hook
+        self.session = None
 
     async def on_message(self, message):
         if message.author.name == "Cielo":
