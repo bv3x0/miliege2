@@ -3,7 +3,7 @@ from discord.ext import commands, tasks
 import logging
 from collections import deque, OrderedDict
 import aiohttp
-from cogs.utils import safe_api_call, format_large_number # type: ignore
+from cogs.utils import safe_api_call, format_large_number, Colors # type: ignore
 from datetime import datetime, timedelta
 import pytz
 import asyncio
@@ -11,11 +11,9 @@ from sqlalchemy.exc import SQLAlchemyError # type: ignore
 from sqlalchemy import desc # type: ignore
 from db.models import Token
 import re
-from cogs.utils.colors import EMBED_BORDER  # type: ignore # Import the color constant
 from cogs.utils.format import format_token_header  # Update import
 from cogs.utils import (
     DexScreenerAPI,
-    Colors,
     UI
 )
 import json
