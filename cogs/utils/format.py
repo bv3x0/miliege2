@@ -99,4 +99,5 @@ def format_age(timestamp) -> str:
 
 def format_token_header(name: str, url: str) -> str:
     """Format token name and URL as a Discord header with link"""
-    return f"### [{name}]({url})"
+    # Use bold for field values since ### only works in embed description
+    return f"**[{name}]({url})**"
