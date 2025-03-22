@@ -318,7 +318,6 @@ class DigestCog(commands.Cog):
                     # Create new embed with current lines
                     embed = discord.Embed(color=Colors.EMBED_BORDER)
                     embed.set_author(name="Latest Alerts")
-                    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1179512997094379561.webp?size=96&animated=true")
                     embed.description = "\n".join(current_description_lines)
                     embeds.append(embed)
                     
@@ -331,7 +330,6 @@ class DigestCog(commands.Cog):
         if current_description_lines:
             embed = discord.Embed(color=Colors.EMBED_BORDER)
             embed.set_author(name="Latest Alerts")
-            embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1179512997094379561.webp?size=96&animated=true")
             embed.description = "\n".join(current_description_lines)
             embeds.append(embed)
         
