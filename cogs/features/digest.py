@@ -153,7 +153,7 @@ class DigestCog(commands.Cog):
             for contract, token in recent_tokens:
                 name = token['name']
                 chain = token.get('chain', 'Unknown')
-                initial_mcap = token.get('initial_market_cap_formatted', 'N/A')  # Get the initial MC from when alert was posted
+                initial_mcap = token.get('initial_market_cap_formatted', 'N/A')
                 source = token.get('source', 'unknown')
                 user = token.get('user', 'unknown')
                 
@@ -391,10 +391,17 @@ class DigestCog(commands.Cog):
         # Update the current hour key
         self._update_token_hour()
         
+        # Create a copy to avoid modifying the original
+        token_data_copy = token_data.copy()
+        
+        # Ensure we capture the initial market cap when first processing the token
+        if 'initial_market_cap' in token_data_copy:
+            token_data_copy['initial_market_cap_formatted'] = f"${format_large_number(token_data_copy['initial_market_cap'])}"
+        
         # Log the current state before adding
         logging.info(f"DigestCog: Adding token to hour {self.current_hour_key}")
         logging.info(f"DigestCog: Current hour buckets: {list(self.hour_tokens.keys())}")
-        logging.info(f"DigestCog: Token data: {token_data}")
+        logging.info(f"DigestCog: Token data: {token_data_copy}")
         
         # Initialize the hour if it doesn't exist
         if self.current_hour_key not in self.hour_tokens:
@@ -402,7 +409,7 @@ class DigestCog(commands.Cog):
             logging.info(f"DigestCog: Created new hour bucket for {self.current_hour_key}")
         
         # Ensure we have all required fields
-        token_data_copy = token_data.copy()  # Create a copy to avoid modifying the original
+        token_data_copy = token_data_copy.copy()  # Create a copy to avoid modifying the original
         
         # Only set default values if they're not already present
         if 'source' not in token_data_copy:
