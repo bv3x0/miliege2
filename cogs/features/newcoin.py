@@ -92,13 +92,6 @@ class NewCoinCog(commands.Cog):
             # Set author without icon
             embed.set_author(name="New Trade Alert")
             
-            # Set thumbnail for low market cap tokens
-            market_cap = pair_data.get('fdv', 'N/A')
-            market_cap_value = self._parse_market_cap(market_cap)
-            
-            if market_cap_value and market_cap_value < 1_000_000:
-                embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1149703956746997871.webp")
-
             # Extract and format token data
             token_data = self._extract_token_data(pair_data)
             token_data['url'] = dexscreener_url  # Add the chart URL from Cielo
@@ -153,6 +146,12 @@ class NewCoinCog(commands.Cog):
             format_large_number(market_cap_value)
             if market_cap_value is not None else "N/A"
         )
+        
+        # Add fire emoji for low mcap tokens
+        if market_cap_value and market_cap_value < 1_000_000:
+            formatted_mcap = f"${formatted_mcap} 🔥"
+        else:
+            formatted_mcap = f"${formatted_mcap}"
 
         # Format age
         age_string = get_age_string(data['pair_created_at'])
@@ -170,7 +169,7 @@ class NewCoinCog(commands.Cog):
         # Create description parts
         description_parts = [
             token_header,
-            f"${formatted_mcap} mc ⋅ {simplified_age} ⋅ {chain.lower()}",
+            f"{formatted_mcap} mc ⋅ {simplified_age} ⋅ {chain.lower()}",
             " ⋅ ".join(social_parts) if social_parts else "no socials"
         ]
         
