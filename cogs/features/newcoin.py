@@ -18,7 +18,8 @@ class NewCoinCog(commands.Cog):
         self.session = session
         self.output_channel_id = output_channel_id
         self.last_alert = {}  # Initialize the dictionary
-        self.cleanup.start()  # Start the cleanup task
+        self.rate_limit = 300  # 5 minutes
+        self.cleanup.start()
         logging.info(f"Initializing NewCoinCog with output channel ID: {output_channel_id}")
 
     @tasks.loop(hours=1)
@@ -205,3 +206,7 @@ class NewCoinCog(commands.Cog):
         
         await channel.send(embed=embed)
         await channel.send(f"`{token_address}`")
+
+    def cog_unload(self):
+        """Cleanup when cog is unloaded"""
+        self.cleanup.cancel()  # Cancel the task when the cog is unloaded
