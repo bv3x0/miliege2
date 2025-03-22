@@ -89,12 +89,14 @@ class DiscordBot(commands.Bot):
         # Create tables if they don't exist
         self.db.create_tables()
         
-        # Initialize session factory and create a session
+        # Initialize session factory
         self.Session = self.db.session_factory
+        # Create a session from the factory
         self.db_session = self.Session()
         
         self.monitor = BotMonitor()
-        self.token_tracker = TokenTracker(session_factory=self.Session)
+        # Pass the session, not the factory
+        self.token_tracker = TokenTracker(session_factory=self.db_session)
         self.session = None  # Will be initialized in setup_hook
 
     async def on_message(self, message):
@@ -155,6 +157,8 @@ class DiscordBot(commands.Bot):
         # Initialize cogs in order
         # 1. Core features that don't depend on other cogs
         digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
+        # Explicitly set the database session for DigestCog
+        digest_cog.db_session = self.db_session
         await self.add_cog(digest_cog)
         
         # 2. New coin alerts feature
