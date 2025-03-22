@@ -70,16 +70,15 @@ class NewCoinCog(commands.Cog):
             # Create embed with standard color
             embed = discord.Embed(color=Colors.EMBED_BORDER)
             
-            # Set author with appropriate icon based on market cap
+            # Set author without icon
+            embed.set_author(name="New Trade Alert")
+            
+            # Set thumbnail for low market cap tokens
             market_cap = pair_data.get('fdv', 'N/A')
             market_cap_value = self._parse_market_cap(market_cap)
             
-            author_icon_url = (
-                "https://cdn.discordapp.com/emojis/1149703956746997871.webp"  # wow emoji
-                if market_cap_value and market_cap_value < 1_000_000
-                else "https://cdn.discordapp.com/emojis/1323480997873848371.webp"  # green circle
-            )
-            embed.set_author(name="Buy Alert", icon_url=author_icon_url)
+            if market_cap_value and market_cap_value < 1_000_000:
+                embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1149703956746997871.webp")
 
             # Extract and format token data
             token_data = self._extract_token_data(pair_data)
@@ -172,12 +171,29 @@ class NewCoinCog(commands.Cog):
         
         return age_string
 
+    def _format_social_links(self, socials):
+        """Format social media links for display"""
+        social_parts = []
+        
+        # Map of social media keys to display text
+        social_map = {
+            'twitter': 'X',
+            'telegram': 'TG',
+            'website': 'web'
+        }
+        
+        for platform, url in socials.items():
+            if platform in social_map and url:
+                display_name = social_map[platform]
+                social_parts.append(f"[{display_name}]({url})")
+        
+        return social_parts
+
     async def _handle_no_data(self, channel, token_address, user, swap_info, chain, dexscreener_url):
         """Handle case when no data is available from DexScreener"""
         embed = discord.Embed(color=Colors.EMBED_BORDER)
         embed.set_author(
-            name="Buy Alert",
-            icon_url="https://cdn.discordapp.com/emojis/1323480997873848371.webp"
+            name="New Trade Alert"
         )
         
         # Extract basic info from swap_info

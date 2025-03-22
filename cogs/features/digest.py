@@ -45,6 +45,24 @@ class DigestCog(commands.Cog):
         # Use the monitor if provided, otherwise track errors locally
         self.monitor = monitor if monitor else None
         self.error_count = 0
+        
+        # Add trade tracking from TradeSummaryCog
+        self.hourly_trades = {}  # Format: {token_address: {'buys': float, 'sells': float, 'users': {user: {'message_link': str, 'actions': set()}}}}
+        
+        # Define major tokens (copied from TradeSummaryCog)
+        self.major_tokens = {
+            'ETH', 'WETH',  # Ethereum
+            'SOL', 'WSOL',  # Solana
+            'USDC',         # Major stablecoins
+            'USDT',
+            'DAI',
+            'BNB', 'WBNB',  # Binance
+            'S',            # Base
+            'MATIC',        # Polygon
+            'AVAX',         # Avalanche
+            'ARB'           # Arbitrum
+        }
+        self.major_tokens.update({f'W{t}' for t in self.major_tokens})
 
     def _load_tokens_from_db(self):
         """Load tokens from the database into the hour buckets"""
@@ -123,21 +141,13 @@ class DigestCog(commands.Cog):
         return current_key
 
     async def create_digest_embed(self, tokens, is_hourly=True):
-        """Create the digest embed - shared between auto and manual digests"""
+        """Create the digest embed(s) - shared between auto and manual digests"""
         if not tokens:
             return None
 
-        embed = discord.Embed(
-            color=Colors.EMBED_BORDER  # Now properly referenced
-        )
-        
-        # Move title to author field with icon
-        title = "Hourly New Coins" if is_hourly else "Latest Alerts"
-        embed.set_author(name=title, icon_url="https://symbl-world.akamaized.net/i/webp/aa/af338d2b436394131fb3bf6a08dd3f.webp")
-        
         recent_tokens = list(tokens.items())[-10:]  # Last 10 tokens
-        
-        description_lines = []
+        embeds = []
+        current_description_lines = []
         
         async with aiohttp.ClientSession() as session:
             for contract, token in recent_tokens:
@@ -228,19 +238,104 @@ class DigestCog(commands.Cog):
                 # Log the values for debugging
                 logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
-                token_line = f"### [{name}]({token['chart_url']})"
-                stats_line = f"{current_mcap} mc (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
-                source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+                # Check if we have trade data for this token
+                trade_info = ""
+                if contract in self.hourly_trades:
+                    trade_data = self.hourly_trades[contract]
+                    
+                    # Group users by their actions
+                    action_groups = {
+                        'bought': [],
+                        'sold': [],
+                        'bought and sold': []
+                    }
+                    
+                    for user, user_data in trade_data['users'].items():
+                        actions = user_data['actions']
+                        link = user_data['message_link']
+                        user_link = f"[{user}]({link})"
+                        
+                        if 'bought' in actions and 'sold' in actions:
+                            action_groups['bought and sold'].append((user_link, user_data.get('is_first_trade', False)))
+                        elif 'bought' in actions:
+                            action_groups['bought'].append((user_link, user_data.get('is_first_trade', False)))
+                        elif 'sold' in actions:
+                            action_groups['sold'].append((user_link, user_data.get('is_first_trade', False)))
+                    
+                    # Build the trade description
+                    trade_parts = []
+                    
+                    if action_groups['bought']:
+                        users = []
+                        is_first = False
+                        for user_link, first_trade in action_groups['bought']:
+                            users.append(user_link)
+                            is_first = is_first or first_trade
+                        amount = float(trade_data['buys'])
+                        formatted_amount = format_large_number(amount) if amount >= 1000 else str(int(amount))
+                        star = " ⭐" if is_first else ""
+                        trade_parts.append(f"{', '.join(users)} bought ${formatted_amount}{star}")
+                    
+                    if action_groups['sold']:
+                        users = []
+                        for user_link, _ in action_groups['sold']:  # No star for sells
+                            users.append(user_link)
+                        amount = float(trade_data['sells'])
+                        formatted_amount = format_large_number(amount) if amount >= 1000 else str(int(amount))
+                        trade_parts.append(f"{', '.join(users)} sold ${formatted_amount}")
+                    
+                    if action_groups['bought and sold']:
+                        users = []
+                        is_first = False
+                        for user_link, first_trade in action_groups['bought and sold']:
+                            users.append(user_link)
+                            is_first = is_first or first_trade
+                        buy_amount = float(trade_data['buys'])
+                        sell_amount = float(trade_data['sells'])
+                        formatted_buy = format_large_number(buy_amount) if buy_amount >= 1000 else str(int(buy_amount))
+                        formatted_sell = format_large_number(sell_amount) if sell_amount >= 1000 else str(int(sell_amount))
+                        star = " ⭐" if is_first else ""
+                        trade_parts.append(f"{', '.join(users)} bought ${formatted_buy} and sold ${formatted_sell}{star}")
+                    
+                    if trade_parts:
+                        trade_info = '\n'.join(trade_parts)
                 
-                description_lines.extend([token_line, stats_line, source_line])
+                # Format the description lines
+                token_line = f"### [{name}]({token['chart_url']})"
+                stats_line = f"MC: {current_mcap} (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
+                
+                # Calculate the length of new lines to be added
+                new_lines = [token_line, stats_line]
+                if trade_info and source.lower() == 'cielo':
+                    new_lines.append(trade_info)
+                else:
+                    source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+                    new_lines.append(source_line)
+                
+                # Check if adding these lines would exceed Discord's limit
+                potential_description = "\n".join(current_description_lines + new_lines)
+                if len(potential_description) > 4000 and current_description_lines:  # Leave some buffer
+                    # Create new embed with current lines
+                    embed = discord.Embed(color=Colors.EMBED_BORDER)
+                    embed.set_author(name="Latest Alerts")
+                    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1179512997094379561.webp?size=96&animated=true")
+                    embed.description = "\n".join(current_description_lines)
+                    embeds.append(embed)
+                    
+                    # Start new collection of lines
+                    current_description_lines = new_lines
+                else:
+                    current_description_lines.extend(new_lines)
         
-        # Get current NY time for the footer - keeping variable for potential future use
-        ny_time = datetime.now(self.ny_tz)
+        # Create final embed with any remaining lines
+        if current_description_lines:
+            embed = discord.Embed(color=Colors.EMBED_BORDER)
+            embed.set_author(name="Latest Alerts")
+            embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1179512997094379561.webp?size=96&animated=true")
+            embed.description = "\n".join(current_description_lines)
+            embeds.append(embed)
         
-        # No longer adding timestamp, emoji, or extra spacing
-        
-        embed.description = "\n".join(description_lines)
-        return embed
+        return embeds
 
     @tasks.loop(hours=1)
     async def hourly_digest(self):
@@ -263,9 +358,10 @@ class DigestCog(commands.Cog):
                     tokens_to_report = self.hour_tokens.get(hour_key, OrderedDict())
                     
                     if tokens_to_report:
-                        embed = await self.create_digest_embed(tokens_to_report, is_hourly=True)
-                        if embed:
-                            await channel.send(embed=embed)
+                        embeds = await self.create_digest_embed(tokens_to_report, is_hourly=True)
+                        if embeds:
+                            for embed in embeds:
+                                await channel.send(embed=embed)
                             # Clear data only after successful send
                             self._clear_hour_data(hour_key)
                     break  # Success, exit retry loop
@@ -341,9 +437,10 @@ class DigestCog(commands.Cog):
                 await ctx.send("<:dwbb:1321571679109124126>")
                 return
 
-            embed = await self.create_digest_embed(current_hour_tokens, is_hourly=False)
-            if embed:
-                await ctx.send(embed=embed)
+            embeds = await self.create_digest_embed(current_hour_tokens, is_hourly=False)
+            if embeds:
+                for embed in embeds:
+                    await ctx.send(embed=embed)
                 
         except Exception as e:
             logging.error(f"Error sending digest: {e}")
@@ -413,3 +510,42 @@ class DigestCog(commands.Cog):
         if hour_key in self.hour_tokens:
             del self.hour_tokens[hour_key]
             logging.info(f"Cleared token data for hour: {hour_key}")
+
+    def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url, is_first_trade=False):
+        """Track trades (copied from TradeSummaryCog)"""
+        try:
+            # Move the minimum trade check to the start
+            MIN_TRADE_AMOUNT = 100  # $100
+            if amount < MIN_TRADE_AMOUNT:
+                logging.info(f"Skipping small trade: ${amount}")
+                return
+            
+            if token_address not in self.hourly_trades:
+                self.hourly_trades[token_address] = {
+                    'buys': 0.0,
+                    'sells': 0.0,
+                    'users': {}
+                }
+            
+            trade_data = self.hourly_trades[token_address]
+            
+            # Update amounts
+            if trade_type == 'buy':
+                trade_data['buys'] += amount
+                action = 'bought'
+            else:
+                trade_data['sells'] += amount
+                action = 'sold'
+            
+            # Update user info
+            if user not in trade_data['users']:
+                trade_data['users'][user] = {
+                    'message_link': message_link, 
+                    'actions': set(),
+                    'is_first_trade': is_first_trade  # Add this field
+                }
+            trade_data['users'][user]['actions'].add(action)
+
+            logging.info(f"Successfully tracked trade for token {token_address} (first trade: {is_first_trade})")
+        except Exception as e:
+            logging.error(f"Error tracking trade: {e}", exc_info=True)

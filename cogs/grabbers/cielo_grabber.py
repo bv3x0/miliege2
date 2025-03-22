@@ -562,6 +562,9 @@ class CieloGrabber(commands.Cog):
             from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
             dollar_amount = float(dollar_amount.replace(',', ''))
             
+            # Check if this is a first-time trade (has star emoji)
+            is_first_trade = '⭐️' in swap_info
+            
             # Create message link
             message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
             
@@ -570,18 +573,19 @@ class CieloGrabber(commands.Cog):
             to_is_major = to_token.upper() in self.token_tracker.major_tokens
             
             if from_is_major and not to_is_major:
-                # Track buy in summary
-                if self.summary_cog:
-                    self.summary_cog.track_trade(
+                # Track buy in digest
+                if self.digest_cog:
+                    self.digest_cog.track_trade(
                         token_address,
                         to_token,
                         user,
                         dollar_amount,
                         'buy',
                         message_link,
-                        dexscreener_url
+                        dexscreener_url,
+                        is_first_trade=is_first_trade
                     )
-                    logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount}")
+                    logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount} (first trade: {is_first_trade})")
                 
                 # If it's a first-time buy (star emoji), send to newcoin cog
                 if '⭐️' in swap_info and self.newcoin_cog:
@@ -596,9 +600,9 @@ class CieloGrabber(commands.Cog):
                     )
                 
             elif not from_is_major and to_is_major:
-                # Track sell in summary
-                if self.summary_cog:
-                    self.summary_cog.track_trade(
+                # Track sell in digest instead of summary
+                if self.digest_cog:
+                    self.digest_cog.track_trade(
                         token_address,
                         from_token,
                         user,

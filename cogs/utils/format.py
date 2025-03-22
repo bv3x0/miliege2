@@ -26,7 +26,13 @@ class Messages:
     SUCCESS: Final = "✅"
 
 def format_large_number(number: Union[int, float, str]) -> str:
-    """Format large numbers with K, M, B suffixes"""
+    """Format large numbers with K, M, B suffixes
+    
+    Rules:
+    - Thousands (K): No decimal places ($677K instead of $677.41K)
+    - Millions (M): One decimal place ($2.1M)
+    - Billions (B): One decimal place ($2.5B)
+    """
     try:
         num = float(str(number).replace(',', ''))
     except (ValueError, TypeError):
@@ -35,14 +41,19 @@ def format_large_number(number: Union[int, float, str]) -> str:
     if num == 0:
         return "0"
 
-    magnitude = 0
-    while abs(num) >= 1000:
-        magnitude += 1
-        num /= 1000.0
-
-    # Always use exactly 1 decimal place
-    formatted = f"{num:.1f}".rstrip('0').rstrip('.')
-    return f"{formatted}{'KMB'[magnitude-1] if magnitude > 0 else ''}"
+    abs_num = abs(num)
+    
+    if abs_num >= 1_000_000_000:  # Billions
+        formatted = f"{num / 1_000_000_000:.1f}B"
+    elif abs_num >= 1_000_000:     # Millions
+        formatted = f"{num / 1_000_000:.1f}M"
+    elif abs_num >= 1_000:         # Thousands
+        formatted = f"{int(num / 1_000)}K"  # No decimal places for thousands
+    else:
+        formatted = f"{int(num)}"  # Regular numbers
+        
+    # Remove .0 if it exists
+    return formatted.replace('.0', '')
 
 def format_currency(amount: Union[str, float]) -> str:
     """Format currency with appropriate precision"""
