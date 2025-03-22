@@ -551,6 +551,10 @@ class CieloGrabber(commands.Cog):
 
     async def _track_trade(self, message, token_address, user, swap_info, dexscreener_url):
         try:
+            # Add debug logging
+            logging.info(f"Starting trade processing - DigestCog present: {self.digest_cog is not None}")
+            logging.info(f"Trade details - User: {user}, Token: {token_address}")
+            
             # Parse swap info
             swap_pattern = r'(?:⭐️\s+)?Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)\s+for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*(?:\s+@\s+\$[0-9.]+ \| MC: \$[0-9.]+[KMB]?)?'
             match = re.search(swap_pattern, swap_info)
@@ -560,6 +564,11 @@ class CieloGrabber(commands.Cog):
                 return
                 
             from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
+            
+            # Add debug logging for token classification
+            logging.info(f"From token ({from_token}) is major: {from_token.upper() in self.token_tracker.major_tokens}")
+            logging.info(f"To token ({to_token}) is major: {to_token.upper() in self.token_tracker.major_tokens}")
+            
             dollar_amount = float(dollar_amount.replace(',', ''))
             
             # Check if this is a first-time trade (has star emoji)
