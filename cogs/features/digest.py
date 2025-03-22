@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 import logging
 from collections import deque, OrderedDict
 import aiohttp
+from cogs.utils import safe_api_call, format_large_number # type: ignore
 from datetime import datetime, timedelta
 import pytz
 import asyncio
@@ -10,9 +11,9 @@ from sqlalchemy.exc import SQLAlchemyError # type: ignore
 from sqlalchemy import desc # type: ignore
 from db.models import Token
 import re
+from cogs.utils.colors import EMBED_BORDER  # type: ignore # Import the color constant
+from cogs.utils.format import format_token_header  # Update import
 from cogs.utils import (
-    format_large_number,
-    safe_api_call,
     DexScreenerAPI,
     Colors,
     UI
@@ -29,9 +30,10 @@ class DigestCog(commands.Cog):
         self.hour_tokens = OrderedDict()
         self.current_hour_key = self._get_current_hour_key()
         
-        # Get database session from bot
-        self.db_session = bot.db_session
-        if self.db_session:
+        # Load tokens from database if token_tracker has a db_session
+        self.db_session = None
+        if hasattr(token_tracker, 'db_session') and token_tracker.db_session:
+            self.db_session = token_tracker.db_session
             self._load_tokens_from_db()
         else:
             logging.warning("DigestCog: No database session available - token data will not persist across reboots")
@@ -228,7 +230,7 @@ class DigestCog(commands.Cog):
                 # Log the values for debugging
                 logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
-                token_line = f"###[{name}]({token['chart_url']})"
+                token_line = f"### [{name}]({token['chart_url']})"
                 stats_line = f"{current_mcap} mc (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
                 source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                 
@@ -720,7 +722,7 @@ class DexScreenerDigestCog(commands.Cog):
             social_links_str = " ⋅ ".join(social_links) if social_links else "No links"
             
             # Create formatted token entry
-            token_line = f"####[{name}]({url})"
+            token_line = f"#### [{name}]({url})"
             stats_line = f"{mcap} ⋅ {age_str} ⋅ {chain}"
             
             if social_links:
