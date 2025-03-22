@@ -149,9 +149,9 @@ class NewCoinCog(commands.Cog):
         
         # Add fire emoji for low mcap tokens
         if market_cap_value and market_cap_value < 1_000_000:
-            formatted_mcap = f"${formatted_mcap} 🔥"
+            formatted_mcap = f"${formatted_mcap} mc 🔥"
         else:
-            formatted_mcap = f"${formatted_mcap}"
+            formatted_mcap = f"${formatted_mcap} mc"
 
         # Format age
         age_string = get_age_string(data['pair_created_at'])
@@ -166,10 +166,10 @@ class NewCoinCog(commands.Cog):
         else:
             token_header = f"### {data['name']} ({data['symbol']})"
         
-        # Create description parts with fire emoji after "mc" for low mcap tokens (<$1M)
+        # Create description parts (removed duplicate fire emoji)
         description_parts = [
             token_header,
-            f"{formatted_mcap} mc{' 🔥' if market_cap_value and market_cap_value < 1_000_000 else ''} ⋅ {simplified_age} ⋅ {chain.lower()}",
+            f"{formatted_mcap} ⋅ {simplified_age} ⋅ {chain.lower()}",
             " ⋅ ".join(social_parts) if social_parts else "no socials"
         ]
         
