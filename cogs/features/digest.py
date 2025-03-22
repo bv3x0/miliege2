@@ -391,9 +391,15 @@ class DigestCog(commands.Cog):
         # Update the current hour key
         self._update_token_hour()
         
+        # Log the current state before adding
+        logging.info(f"DigestCog: Adding token to hour {self.current_hour_key}")
+        logging.info(f"DigestCog: Current hour buckets: {list(self.hour_tokens.keys())}")
+        logging.info(f"DigestCog: Token data: {token_data}")
+        
         # Initialize the hour if it doesn't exist
         if self.current_hour_key not in self.hour_tokens:
             self.hour_tokens[self.current_hour_key] = OrderedDict()
+            logging.info(f"DigestCog: Created new hour bucket for {self.current_hour_key}")
         
         # Ensure we have all required fields
         token_data_copy = token_data.copy()  # Create a copy to avoid modifying the original
@@ -406,12 +412,10 @@ class DigestCog(commands.Cog):
         if 'chain' not in token_data_copy:
             token_data_copy['chain'] = 'unknown'
             
-        # Log the token data for debugging
-        logging.info(f"Adding token to digest hour {self.current_hour_key}: {token_data_copy.get('name')} - source: {token_data_copy.get('source')}, user: {token_data_copy.get('user')}, chain: {token_data_copy.get('chain')}")
-        
         # Add to hour-specific tracker
         self.hour_tokens[self.current_hour_key][contract] = token_data_copy
-        logging.info(f"Token {token_data_copy.get('name', contract)} added to hour {self.current_hour_key}")
+        logging.info(f"DigestCog: Added token {token_data_copy.get('name', contract)} to hour {self.current_hour_key}")
+        logging.info(f"DigestCog: Current tokens in hour: {len(self.hour_tokens[self.current_hour_key])}")
 
     @commands.command()
     async def digest(self, ctx):
@@ -425,11 +429,18 @@ class DigestCog(commands.Cog):
             # Update the current hour key
             self._update_token_hour()
             
+            # Log the current state
+            logging.info(f"DigestCog: Running digest command")
+            logging.info(f"DigestCog: Current hour key: {self.current_hour_key}")
+            logging.info(f"DigestCog: Available hour buckets: {list(self.hour_tokens.keys())}")
+            
             # Get tokens only from the current hour
             current_hour_tokens = self.hour_tokens.get(self.current_hour_key, OrderedDict())
             
-            # Log the token count for debugging
-            logging.info(f"DigestCog: !digest command - found {len(current_hour_tokens)} tokens for current hour {self.current_hour_key}")
+            # Log the token count and contents for debugging
+            logging.info(f"DigestCog: Found {len(current_hour_tokens)} tokens for current hour {self.current_hour_key}")
+            if current_hour_tokens:
+                logging.info(f"DigestCog: Token addresses in current hour: {list(current_hour_tokens.keys())}")
             
             if not current_hour_tokens:
                 await ctx.send("<:dwbb:1321571679109124126>")
@@ -441,7 +452,7 @@ class DigestCog(commands.Cog):
                     await ctx.send(embed=embed)
                 
         except Exception as e:
-            logging.error(f"Error sending digest: {e}")
+            logging.error(f"Error sending digest: {e}", exc_info=True)
             await ctx.send("❌ **Error:** Unable to generate the digest.")
 
     def _install_token_tracker_hook(self):
