@@ -11,6 +11,7 @@ from cogs.utils.format import Colors
 import asyncio
 import datetime
 from discord.ext import tasks
+import re
 
 class NewCoinCog(commands.Cog):
     def __init__(self, bot, session, output_channel_id=None):
@@ -279,19 +280,17 @@ class NewCoinCog(commands.Cog):
         
         # Try to extract token name and amount from swap info
         try:
-            # Example swap_info: "⭐️ Swapped **1.96** ****SOL**** ($252.48) for **19,485,842.22** ****SARATOGA****"
+            # Look for dollar amount in parentheses
+            dollar_match = re.search(r'\(\$([0-9,.]+)\)', swap_info)
+            if dollar_match:
+                amount_str = dollar_match.group(1)
+                token_info['dollar_amount'] = amount_str.replace(',', '')
+                token_info['formatted_buy'] = f"${amount_str}"
+            
+            # Extract token name between **** markers
             parts = swap_info.split('****')
             if len(parts) >= 4:
-                token_info['name'] = parts[3].strip()  # Get token name
-                
-            # Extract dollar amount
-            dollar_match = swap_info.find('($')
-            if dollar_match != -1:
-                end_match = swap_info.find(')', dollar_match)
-                if end_match != -1:
-                    amount_str = swap_info[dollar_match+2:end_match]
-                    token_info['dollar_amount'] = amount_str.replace('$', '').replace(',', '')
-                    token_info['formatted_buy'] = f"${amount_str}"
+                token_info['name'] = parts[3].strip()
                 
         except Exception as e:
             logging.error(f"Error extracting swap info: {e}")
