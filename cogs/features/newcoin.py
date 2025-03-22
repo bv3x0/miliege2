@@ -90,7 +90,7 @@ class NewCoinCog(commands.Cog):
             embed = discord.Embed(color=0xC9B956)
             
             # Set author without icon
-            embed.set_author(name="New Trade Alert")
+            embed.set_author(name="New Coin")
             
             # Extract and format token data
             token_data = self._extract_token_data(pair_data)
@@ -166,10 +166,10 @@ class NewCoinCog(commands.Cog):
         else:
             token_header = f"### {data['name']} ({data['symbol']})"
         
-        # Create description parts
+        # Create description parts with fire emoji after "mc" for low mcap tokens (<$1M)
         description_parts = [
             token_header,
-            f"{formatted_mcap} mc ⋅ {simplified_age} ⋅ {chain.lower()}",
+            f"{formatted_mcap} mc{' 🔥' if market_cap_value and market_cap_value < 1_000_000 else ''} ⋅ {simplified_age} ⋅ {chain.lower()}",
             " ⋅ ".join(social_parts) if social_parts else "no socials"
         ]
         
@@ -218,7 +218,7 @@ class NewCoinCog(commands.Cog):
         """Handle case when no data is available from DexScreener"""
         embed = discord.Embed(color=0xC9B956)
         embed.set_author(
-            name="New Trade Alert"
+            name="New Coin"
         )
         
         # Extract basic info from swap_info

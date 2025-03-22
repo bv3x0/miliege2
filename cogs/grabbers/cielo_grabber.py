@@ -402,7 +402,7 @@ class CieloGrabber(commands.Cog):
                         'name': token_name,
                         'chart_url': chart_url,
                         'initial_market_cap': market_cap_value,
-                        'initial_market_cap_formatted': formatted_mcap,
+                        'initial_market_cap_formatted': f"${format_large_number(market_cap_value)}" if market_cap_value is not None else "N/A",
                         'chain': chain,
                         'message_id': message.id,
                         'channel_id': message.channel.id,

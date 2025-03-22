@@ -302,7 +302,9 @@ class DigestCog(commands.Cog):
                 
                 # Format the description lines
                 token_line = f"### [{name}]({token['chart_url']})"
-                stats_line = f"${current_mcap} mc (was {initial_mcap}){status_emoji} ⋅ {chain.lower()}"
+                # Remove any existing $ from initial_mcap if it exists
+                initial_mcap_clean = initial_mcap.replace('$', '') if initial_mcap else 'N/A'
+                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}){status_emoji} ⋅ {chain.lower()}"
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
