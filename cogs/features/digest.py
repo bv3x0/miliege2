@@ -302,6 +302,15 @@ class DigestCog(commands.Cog):
                 
                 # Format the description lines
                 token_line = f"### [{name}]({token['chart_url']})"
+                
+                # Add strikethrough if the token only has sells
+                if contract in self.hourly_trades:
+                    trade_data = self.hourly_trades[contract]
+                    has_buys = trade_data.get('buys', 0) > 0
+                    has_sells = trade_data.get('sells', 0) > 0
+                    if has_sells and not has_buys:
+                        token_line = f"### ~~[{name}]({token['chart_url']})~~"
+                
                 # Remove any existing $ from initial_mcap if it exists
                 initial_mcap_clean = initial_mcap.replace('$', '') if initial_mcap else 'N/A'
                 stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}){status_emoji} ⋅ {chain.lower()}"
