@@ -86,8 +86,8 @@ class NewCoinCog(commands.Cog):
                                    swap_info, dexscreener_url, chain):
         """Create and send the new coin embed with full token information"""
         try:
-            # Create embed with standard color
-            embed = discord.Embed(color=Colors.EMBED_BORDER)
+            # Create embed with custom color
+            embed = discord.Embed(color=0xC9B956)
             
             # Set author without icon
             embed.set_author(name="New Trade Alert")
@@ -216,7 +216,7 @@ class NewCoinCog(commands.Cog):
 
     async def _handle_no_data(self, channel, token_address, user, swap_info, chain, dexscreener_url):
         """Handle case when no data is available from DexScreener"""
-        embed = discord.Embed(color=Colors.EMBED_BORDER)
+        embed = discord.Embed(color=0xC9B956)
         embed.set_author(
             name="New Trade Alert"
         )
