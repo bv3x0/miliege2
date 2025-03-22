@@ -230,6 +230,56 @@ class NewCoinCog(commands.Cog):
         await channel.send(embed=embed)
         await channel.send(f"`{token_address}`")
 
+    def _set_footer(self, embed, user, swap_info):
+        """Set footer text with user and amount information"""
+        if not user:
+            return
+        
+        footer_text = user
+        
+        # Extract amount from swap_info if available
+        if swap_info and 'dollar_amount' in swap_info:
+            amount = float(swap_info['dollar_amount'])
+            if amount < 250:
+                footer_text = "🤏 " + footer_text
+            elif amount >= 10000:
+                footer_text = "🤑 " + footer_text
+            footer_text += f" ⋅ ${format(int(amount), ',')} buy"
+        
+        embed.set_footer(text=footer_text)
+
+    def _extract_swap_info(self, swap_info):
+        """Extract basic token info from swap info string"""
+        token_info = {
+            'name': 'Unknown',
+            'formatted_buy': '',
+            'dollar_amount': None
+        }
+        
+        if not swap_info:
+            return token_info
+        
+        # Try to extract token name and amount from swap info
+        try:
+            # Example swap_info: "⭐️ Swapped **1.96** ****SOL**** ($252.48) for **19,485,842.22** ****SARATOGA****"
+            parts = swap_info.split('****')
+            if len(parts) >= 4:
+                token_info['name'] = parts[3].strip()  # Get token name
+                
+            # Extract dollar amount
+            dollar_match = swap_info.find('($')
+            if dollar_match != -1:
+                end_match = swap_info.find(')', dollar_match)
+                if end_match != -1:
+                    amount_str = swap_info[dollar_match+2:end_match]
+                    token_info['dollar_amount'] = amount_str.replace('$', '').replace(',', '')
+                    token_info['formatted_buy'] = f"${amount_str}"
+                
+        except Exception as e:
+            logging.error(f"Error extracting swap info: {e}")
+        
+        return token_info
+
     def cog_unload(self):
         """Cleanup when cog is unloaded"""
         self.cleanup.cancel()  # Cancel the task when the cog is unloaded
