@@ -20,7 +20,9 @@ class NewCoinCog(commands.Cog):
         self.last_alert = {}  # Initialize the dictionary
         self.rate_limit = 300  # 5 minutes
         self.cleanup.start()
-        logging.info(f"Initializing NewCoinCog with output channel ID: {output_channel_id}")
+        logging.info(f"NewCoinCog initialized with output_channel_id: {output_channel_id}")
+        if output_channel_id is None:
+            logging.warning("NewCoinCog: No output channel ID provided!")
 
     @tasks.loop(hours=1)
     async def cleanup(self):
@@ -36,18 +38,33 @@ class NewCoinCog(commands.Cog):
         max_retries = 3
         retry_delay = 1  # seconds
         
+        logging.info(f"NewCoinCog.process_new_coin starting:")
+        logging.info(f"- Token: {token_address}")
+        logging.info(f"- User: {user}")
+        logging.info(f"- Chain: {chain}")
+        logging.info(f"- Output Channel ID: {self.output_channel_id}")
+        
+        if not self.output_channel_id:
+            logging.error("No output channel ID configured for NewCoinCog")
+            return
+        
+        channel = self.bot.get_channel(self.output_channel_id)
+        if not channel:
+            logging.error(f"Could not find channel with ID {self.output_channel_id}")
+            return
+        
+        logging.info(f"Found output channel: {channel.name} ({channel.id})")
+        
         for attempt in range(max_retries):
             try:
-                logging.info(f"Processing new coin alert for {token_address}")
-                
-                # Get the output channel or fall back to message channel
-                channel = (self.bot.get_channel(self.output_channel_id) 
-                          if self.output_channel_id else message.channel)
+                logging.info(f"Attempt {attempt + 1} to process new coin")
                 
                 # Get token data from DexScreener
                 dex_data = await DexScreenerAPI.get_token_info(self.session, token_address)
+                logging.info(f"DexScreener API response received: {bool(dex_data)}")
                 
                 if not dex_data or 'pairs' not in dex_data or not dex_data['pairs']:
+                    logging.warning(f"No valid data from DexScreener for {token_address}")
                     await self._handle_no_data(channel, token_address, user, swap_info, chain, dexscreener_url)
                     return
 
@@ -56,9 +73,10 @@ class NewCoinCog(commands.Cog):
                     channel, dex_data['pairs'][0], token_address, user, 
                     swap_info, dexscreener_url, chain
                 )
+                logging.info("Successfully created and sent embed")
                 break
             except Exception as e:
-                logging.error(f"Attempt {attempt + 1} failed: {e}")
+                logging.error(f"Attempt {attempt + 1} failed: {e}", exc_info=True)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
                 continue

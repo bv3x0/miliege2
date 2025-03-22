@@ -159,6 +159,7 @@ class DiscordBot(commands.Bot):
         
         # 2. New coin alerts feature
         newcoin_cog = NewCoinCog(self, self.session, cielo_output_channel_id)
+        logging.info(f"Initialized NewCoinCog with output channel ID: {cielo_output_channel_id}")
         await self.add_cog(newcoin_cog)
         
         # 3. Data collectors that depend on feature cogs

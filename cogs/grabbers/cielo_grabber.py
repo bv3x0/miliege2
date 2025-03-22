@@ -552,7 +552,7 @@ class CieloGrabber(commands.Cog):
     async def _track_trade(self, message, token_address, user, swap_info, dexscreener_url):
         try:
             # Add debug logging
-            logging.info(f"Starting trade processing - DigestCog present: {self.digest_cog is not None}")
+            logging.info(f"Starting trade processing - DigestCog present: {self.digest_cog is not None}, NewCoinCog present: {self.newcoin_cog is not None}")
             logging.info(f"Trade details - User: {user}, Token: {token_address}")
             
             # Parse swap info
@@ -576,6 +576,21 @@ class CieloGrabber(commands.Cog):
             
             # Create message link
             message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+
+            # Extract chain info from message embeds
+            chain_info = next((f.value for f in message.embeds[0].fields if f.name == 'Chain'), 'unknown')
+            
+            # If it's a first trade, trigger the new coin alert
+            if is_first_trade and self.newcoin_cog:
+                logging.info(f"Triggering new coin alert for {token_address}")
+                await self.newcoin_cog.process_new_coin(
+                    token_address,
+                    message,
+                    user,
+                    swap_info,
+                    dexscreener_url,
+                    chain_info
+                )
             
             # Check if it's a buy or sell based on token types
             from_is_major = from_token.upper() in self.token_tracker.major_tokens
