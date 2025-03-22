@@ -489,7 +489,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         )
         
         # Move title to author field with icon
-        embed.set_author(name="HL Digest", icon_url="https://static1.tokenterminal.com//hyperliquid/logo.png")
+        embed.set_author(name="Hyperliquid", icon_url="https://static1.tokenterminal.com//hyperliquid/logo.png")
         
         # Group trades by coin and position type
         for digest_key in sorted_keys:
