@@ -581,6 +581,9 @@ class CieloGrabber(commands.Cog):
             from_is_major = from_token.upper() in self.token_tracker.major_tokens
             to_is_major = to_token.upper() in self.token_tracker.major_tokens
             
+            # Add logging before calling track_trade
+            logging.info(f"About to call DigestCog.track_trade for {token_address}")
+
             if from_is_major and not to_is_major:
                 # Track buy in digest
                 if self.digest_cog:
@@ -594,22 +597,9 @@ class CieloGrabber(commands.Cog):
                         dexscreener_url,
                         is_first_trade=is_first_trade
                     )
-                    logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount} (first trade: {is_first_trade})")
-                
-                # If it's a first-time buy (star emoji), send to newcoin cog
-                if '⭐️' in swap_info and self.newcoin_cog:
-                    chain = next((f.value for f in message.embeds[0].fields if f.name == 'Chain'), 'unknown')
-                    await self.newcoin_cog.process_new_coin(
-                        token_address,
-                        message,
-                        user,
-                        swap_info,
-                        dexscreener_url,
-                        chain
-                    )
-                
+                    logging.info(f"Called track_trade for buy: {user} bought {to_token}")
             elif not from_is_major and to_is_major:
-                # Track sell in digest instead of summary
+                # Track sell in digest
                 if self.digest_cog:
                     self.digest_cog.track_trade(
                         token_address,
@@ -620,7 +610,34 @@ class CieloGrabber(commands.Cog):
                         message_link,
                         dexscreener_url
                     )
-                    logging.info(f"Tracked sell: {user} sold {from_token} for ${dollar_amount}")
-            
+                    logging.info(f"Called track_trade for sell: {user} sold {from_token}")
+            elif not from_is_major and not to_is_major:
+                # Both tokens are non-major - track both sell and buy
+                if self.digest_cog:
+                    # Track the sell of the from_token
+                    self.digest_cog.track_trade(
+                        token_address,
+                        from_token,
+                        user,
+                        dollar_amount,
+                        'sell',
+                        message_link,
+                        dexscreener_url
+                    )
+                    logging.info(f"Called track_trade for sell: {user} sold {from_token}")
+                    
+                    # Track the buy of the to_token
+                    self.digest_cog.track_trade(
+                        token_address,
+                        to_token,
+                        user,
+                        dollar_amount,
+                        'buy',
+                        message_link,
+                        dexscreener_url,
+                        is_first_trade=is_first_trade
+                    )
+                    logging.info(f"Called track_trade for buy: {user} bought {to_token}")
+
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)

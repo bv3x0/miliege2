@@ -529,12 +529,28 @@ class DigestCog(commands.Cog):
                 logging.info(f"Skipping small trade: ${amount}")
                 return
             
+            # Track the trade data
             if token_address not in self.hourly_trades:
                 self.hourly_trades[token_address] = {
                     'buys': 0.0,
                     'sells': 0.0,
                     'users': {}
                 }
+                
+                # Also add to hour_tokens if it's not there
+                if self.current_hour_key not in self.hour_tokens:
+                    self.hour_tokens[self.current_hour_key] = OrderedDict()
+                
+                if token_address not in self.hour_tokens[self.current_hour_key]:
+                    token_data = {
+                        'name': token_name,
+                        'chart_url': dexscreener_url,
+                        'source': 'cielo',
+                        'user': user,
+                        'chain': 'solana',  # You might want to make this dynamic
+                    }
+                    self.hour_tokens[self.current_hour_key][token_address] = token_data
+                    logging.info(f"DigestCog: Added traded token {token_name} to hour {self.current_hour_key}")
             
             trade_data = self.hourly_trades[token_address]
             
@@ -551,7 +567,7 @@ class DigestCog(commands.Cog):
                 trade_data['users'][user] = {
                     'message_link': message_link, 
                     'actions': set(),
-                    'is_first_trade': is_first_trade  # Add this field
+                    'is_first_trade': is_first_trade
                 }
             trade_data['users'][user]['actions'].add(action)
 
