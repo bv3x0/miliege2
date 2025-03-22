@@ -22,6 +22,7 @@ from discord import app_commands
 from cogs.utils.config import settings
 import json
 from cogs.features.summary import TradeSummaryCog
+from cogs.features.newcoin import NewCoinCog
 
 # Create logs directory if it doesn't exist
 if not os.path.exists('logs'):
@@ -122,20 +123,6 @@ class DiscordBot(commands.Bot):
         self.session = aiohttp.ClientSession()
         logger.info("Created shared aiohttp session")
         
-        # Create DigestCog first to share reference
-        digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
-        await self.add_cog(digest_cog)
-        
-        # Create TradeSummaryCog
-        summary_cog = TradeSummaryCog(self, daily_digest_channel_id, self.monitor)
-        await self.add_cog(summary_cog)
-        
-        # DexScreener feature is currently disabled due to API issues
-        # Uncomment the lines below to enable it when API issues are resolved
-        # dex_digest_cog = DexScreenerDigestCog(self, daily_digest_channel_id, self.monitor)
-        # await self.add_cog(dex_digest_cog)
-        logging.info("DexScreener feature is currently disabled")
-        
         # Load channel IDs from config
         config_path = "config.json"
         cielo_input_channel_id = None
@@ -158,14 +145,27 @@ class DiscordBot(commands.Bot):
                 logging.error(f"Error loading config: {e}")
 
         # Fall back to environment variables if not in config
-        if cielo_input_channel_id is None and hasattr(settings, 'CIELO_OUTPUT_CHANNEL_ID') and settings.CIELO_OUTPUT_CHANNEL_ID:
-            cielo_input_channel_id = settings.CIELO_OUTPUT_CHANNEL_ID
+        if cielo_input_channel_id is None and hasattr(settings, 'CIELO_INPUT_CHANNEL_ID'):
+            cielo_input_channel_id = settings.CIELO_INPUT_CHANNEL_ID
             logging.info(f"Using Cielo input channel from env: {cielo_input_channel_id}")
 
-        if cielo_output_channel_id is None and hasattr(settings, 'DAILY_DIGEST_CHANNEL_ID') and settings.DAILY_DIGEST_CHANNEL_ID:
+        if cielo_output_channel_id is None and hasattr(settings, 'DAILY_DIGEST_CHANNEL_ID'):
             cielo_output_channel_id = daily_digest_channel_id
             logging.info(f"Using output channel from env: {cielo_output_channel_id}")
 
+        # Initialize cogs in order
+        # 1. Core features that don't depend on other cogs
+        digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
+        await self.add_cog(digest_cog)
+        
+        summary_cog = TradeSummaryCog(self, daily_digest_channel_id, self.monitor)
+        await self.add_cog(summary_cog)
+        
+        # 2. New coin alerts feature
+        newcoin_cog = NewCoinCog(self, self.session, cielo_output_channel_id)
+        await self.add_cog(newcoin_cog)
+        
+        # 3. Data collectors that depend on feature cogs
         await self.add_cog(CieloGrabber(
             self, 
             self.token_tracker, 
@@ -173,16 +173,36 @@ class DiscordBot(commands.Bot):
             self.session, 
             digest_cog=digest_cog,
             summary_cog=summary_cog,
-            input_channel_id=cielo_input_channel_id,
-            output_channel_id=cielo_output_channel_id
+            newcoin_cog=newcoin_cog,  # Add the new cog reference
+            input_channel_id=cielo_input_channel_id
         ))
-        await self.add_cog(RickGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog))
+        
+        await self.add_cog(RickGrabber(
+            self, 
+            self.token_tracker, 
+            self.monitor, 
+            self.session, 
+            digest_cog
+        ))
+        
+        # 4. Other cogs
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
-        await self.add_cog(HyperliquidWalletGrabber(self, self.token_tracker, self.monitor, self.session, digest_cog, daily_digest_channel_id))
         await self.add_cog(AdminCommands(self))
-        logger.info("Hyperliquid Wallet Grabber loaded successfully")
-        logger.info("Cogs loaded successfully")
+        
+        # 5. Optional features
+        if hyperliquid_alerts_channel_id:
+            await self.add_cog(HyperliquidWalletGrabber(
+                self, 
+                self.token_tracker, 
+                self.monitor, 
+                self.session, 
+                digest_cog, 
+                hyperliquid_alerts_channel_id
+            ))
+            logger.info("Hyperliquid Wallet Grabber loaded successfully")
+
+        logger.info("All cogs loaded successfully")
 
         # Sync slash commands with Discord
         try:

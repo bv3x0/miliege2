@@ -15,18 +15,20 @@ from cogs.utils.format import Colors, BotConstants, Messages
 import datetime
 
 class CieloGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, summary_cog=None, input_channel_id=None, output_channel_id=None):
+    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, 
+                 summary_cog=None, newcoin_cog=None, input_channel_id=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
         self.session = session
         self.digest_cog = digest_cog
         self.summary_cog = summary_cog
+        self.newcoin_cog = newcoin_cog
         
         # Add at start of __init__
         logging.info(f"Initializing CieloGrabber with summary_cog: {summary_cog is not None}")
         
-        # Convert channel IDs to int if they're strings
+        # Convert channel ID if needed
         if input_channel_id and isinstance(input_channel_id, str):
             try:
                 self.input_channel_id = int(input_channel_id)
@@ -38,17 +40,6 @@ class CieloGrabber(commands.Cog):
             self.input_channel_id = input_channel_id
             logging.info(f"Initialized CieloGrabber with input channel ID: {self.input_channel_id}")
         
-        if output_channel_id and isinstance(output_channel_id, str):
-            try:
-                self.output_channel_id = int(output_channel_id)
-                logging.info(f"Initialized CieloGrabber with output channel ID: {self.output_channel_id}")
-            except ValueError:
-                logging.error(f"Invalid output channel ID: {output_channel_id}")
-                self.output_channel_id = None
-        else:
-            self.output_channel_id = output_channel_id
-            logging.info(f"Initialized CieloGrabber with output channel ID: {self.output_channel_id}")
-
         # Verify token_tracker has major_tokens
         if not hasattr(token_tracker, 'major_tokens'):
             raise AttributeError("TokenTracker must have major_tokens attribute")
@@ -79,7 +70,7 @@ class CieloGrabber(commands.Cog):
                 # Get the swap info from the first field's value
                 swap_info = embed.fields[0].value
                 
-                # Get the token address from the second field (if it exists and starts with "Token:")
+                # Get the token address from the second field
                 token_address = None
                 for field in embed.fields:
                     if field.value.startswith('Token:'):
@@ -94,7 +85,7 @@ class CieloGrabber(commands.Cog):
                     logging.info(f"Processing trade - User: {user}, Token: {token_address}")
                     logging.info(f"Swap info: {swap_info}")
                     
-                    # Call _track_trade with the parsed information
+                    # Process the trade
                     await self._track_trade(message, token_address, user, swap_info, dexscreener_url)
 
         except Exception as e:
@@ -329,7 +320,7 @@ class CieloGrabber(commands.Cog):
                     stats_line_2 = socials_text
                     
                     # Create title line with token name, symbol, and URL
-                    title_line = f"####[{token_name} ({token_symbol})]({chart_url})"
+                    title_line = f"### [{token_name} ({token_symbol})]({chart_url})"
                     
                     # Add the title line and stats lines to the description
                     description_parts = [title_line, stats_line_1]
@@ -504,7 +495,7 @@ class CieloGrabber(commands.Cog):
                 description_parts = []
                 
                 # Title line with token name and symbol
-                description_parts.append(f"####[{token_name} ({token_symbol})]({chart_url})")
+                description_parts.append(f"### [{token_name} ({token_symbol})]({chart_url})")
                 
                 # Extract buy amount and token from swap info
                 if swap_info:
@@ -560,14 +551,8 @@ class CieloGrabber(commands.Cog):
 
     async def _track_trade(self, message, token_address, user, swap_info, dexscreener_url):
         try:
-            if not self.summary_cog:
-                logging.warning("Trade tracking skipped: summary_cog not initialized")
-                return
-            
-            logging.debug(f"Processing trade with swap_info: {swap_info}")
-            
-            # Updated pattern to match the embed field format with Jupiter
-            swap_pattern = r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)\s+for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*'
+            # Parse swap info
+            swap_pattern = r'(?:⭐️\s+)?Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)\s+for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*(?:\s+@\s+\$[0-9.]+ \| MC: \$[0-9.]+[KMB]?)?'
             match = re.search(swap_pattern, swap_info)
             
             if not match:
@@ -585,29 +570,44 @@ class CieloGrabber(commands.Cog):
             to_is_major = to_token.upper() in self.token_tracker.major_tokens
             
             if from_is_major and not to_is_major:
-                # Swapping from a major token TO a non-major token is a BUY of the non-major token
-                self.summary_cog.track_trade(
-                    token_address,
-                    to_token,  # Use the TO token name
-                    user,
-                    dollar_amount,
-                    'buy',
-                    message_link,
-                    dexscreener_url
-                )
-                logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount}")
+                # Track buy in summary
+                if self.summary_cog:
+                    self.summary_cog.track_trade(
+                        token_address,
+                        to_token,
+                        user,
+                        dollar_amount,
+                        'buy',
+                        message_link,
+                        dexscreener_url
+                    )
+                    logging.info(f"Tracked buy: {user} bought {to_token} for ${dollar_amount}")
+                
+                # If it's a first-time buy (star emoji), send to newcoin cog
+                if '⭐️' in swap_info and self.newcoin_cog:
+                    chain = next((f.value for f in message.embeds[0].fields if f.name == 'Chain'), 'unknown')
+                    await self.newcoin_cog.process_new_coin(
+                        token_address,
+                        message,
+                        user,
+                        swap_info,
+                        dexscreener_url,
+                        chain
+                    )
+                
             elif not from_is_major and to_is_major:
-                # Swapping from a non-major token TO a major token is a SELL of the non-major token
-                self.summary_cog.track_trade(
-                    token_address,
-                    from_token,  # Use the FROM token name
-                    user,
-                    dollar_amount,
-                    'sell',
-                    message_link,
-                    dexscreener_url
-                )
-                logging.info(f"Tracked sell: {user} sold {from_token} for ${dollar_amount}")
+                # Track sell in summary
+                if self.summary_cog:
+                    self.summary_cog.track_trade(
+                        token_address,
+                        from_token,
+                        user,
+                        dollar_amount,
+                        'sell',
+                        message_link,
+                        dexscreener_url
+                    )
+                    logging.info(f"Tracked sell: {user} sold {from_token} for ${dollar_amount}")
             
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)

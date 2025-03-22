@@ -1,0 +1,206 @@
+import discord
+from discord.ext import commands
+import logging
+from cogs.utils import (
+    format_large_number,
+    format_age as get_age_string,
+    format_currency as format_buy_amount,
+    DexScreenerAPI
+)
+from cogs.utils.format import Colors
+import asyncio
+import datetime
+from discord.ext import tasks
+
+class NewCoinCog(commands.Cog):
+    def __init__(self, bot, session, output_channel_id=None):
+        self.bot = bot
+        self.session = session
+        self.output_channel_id = output_channel_id
+        logging.info(f"Initializing NewCoinCog with output channel ID: {output_channel_id}")
+        self.cleanup.start()
+
+    @tasks.loop(hours=1)
+    async def cleanup(self):
+        """Clean up old rate limit entries"""
+        now = datetime.datetime.now().timestamp()
+        self.last_alert = {
+            addr: ts for addr, ts in self.last_alert.items()
+            if now - ts < self.rate_limit * 2
+        }
+
+    async def process_new_coin(self, token_address, message, user, swap_info, dexscreener_url, chain):
+        """Handle first-buy alerts with detailed token info"""
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                logging.info(f"Processing new coin alert for {token_address}")
+                
+                # Get the output channel or fall back to message channel
+                channel = (self.bot.get_channel(self.output_channel_id) 
+                          if self.output_channel_id else message.channel)
+                
+                # Get token data from DexScreener
+                dex_data = await DexScreenerAPI.get_token_info(self.session, token_address)
+                
+                if not dex_data or 'pairs' not in dex_data or not dex_data['pairs']:
+                    await self._handle_no_data(channel, token_address, user, swap_info, chain, dexscreener_url)
+                    return
+
+                # Process token data and create embed
+                await self._create_and_send_embed(
+                    channel, dex_data['pairs'][0], token_address, user, 
+                    swap_info, dexscreener_url, chain
+                )
+                break
+            except Exception as e:
+                logging.error(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                continue
+
+    async def _create_and_send_embed(self, channel, pair_data, token_address, user, 
+                                   swap_info, dexscreener_url, chain):
+        """Create and send the new coin embed with full token information"""
+        try:
+            # Create embed with standard color
+            embed = discord.Embed(color=Colors.EMBED_BORDER)
+            
+            # Set author with appropriate icon based on market cap
+            market_cap = pair_data.get('fdv', 'N/A')
+            market_cap_value = self._parse_market_cap(market_cap)
+            
+            author_icon_url = (
+                "https://cdn.discordapp.com/emojis/1149703956746997871.webp"  # wow emoji
+                if market_cap_value and market_cap_value < 1_000_000
+                else "https://cdn.discordapp.com/emojis/1323480997873848371.webp"  # green circle
+            )
+            embed.set_author(name="Buy Alert", icon_url=author_icon_url)
+
+            # Extract and format token data
+            token_data = self._extract_token_data(pair_data)
+            
+            # Create embed description
+            embed.description = self._create_description(token_data, chain)
+            
+            # Set banner image if available
+            if banner_url := pair_data.get('info', {}).get('header'):
+                embed.set_image(url=banner_url)
+            
+            # Set footer with user and amount
+            self._set_footer(embed, user, swap_info)
+            
+            # Send messages
+            await channel.send(embed=embed)
+            await channel.send(f"`{token_address}`")
+            
+        except Exception as e:
+            logging.error(f"Error creating embed: {e}", exc_info=True)
+            raise
+
+    def _parse_market_cap(self, market_cap):
+        """Parse market cap value from various formats"""
+        if isinstance(market_cap, (int, float)):
+            return market_cap
+        elif isinstance(market_cap, str):
+            try:
+                cleaned_str = ''.join(c for c in market_cap if c.isdigit() or c == '.')
+                return float(cleaned_str)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def _extract_token_data(self, pair):
+        """Extract relevant token data from pair information"""
+        return {
+            'name': pair.get('baseToken', {}).get('name', 'Unknown Token'),
+            'symbol': pair.get('baseToken', {}).get('symbol', ''),
+            'chain': pair.get('chainId', 'Unknown Chain'),
+            'market_cap': pair.get('fdv', 'N/A'),
+            'price_change_24h': pair.get('priceChange', {}).get('h24', 'N/A'),
+            'pair_created_at': pair.get('pairCreatedAt'),
+            'socials': pair.get('info', {})
+        }
+
+    def _create_description(self, data, chain):
+        """Create formatted description for embed"""
+        # Format market cap
+        market_cap_value = self._parse_market_cap(data['market_cap'])
+        formatted_mcap = (
+            format_large_number(market_cap_value)
+            if market_cap_value is not None else "N/A"
+        )
+
+        # Format age
+        age_string = get_age_string(data['pair_created_at'])
+        simplified_age = self._simplify_age_string(age_string)
+
+        # Format social links
+        social_parts = self._format_social_links(data['socials'])
+        
+        # Create description parts
+        description_parts = [
+            f"### [{data['name']} ({data['symbol']})]({data['url']})",
+            f"${formatted_mcap} mc ⋅ {simplified_age} ⋅ {chain.lower()}",
+            " ⋅ ".join(social_parts) if social_parts else "no socials"
+        ]
+        
+        return "\n".join(description_parts)
+
+    def _simplify_age_string(self, age_string):
+        """Simplify age string format"""
+        if not age_string:
+            return ""
+        
+        replacements = [
+            (" days old", "d old"),
+            (" day old", "d old"),
+            (" hours old", "h old"),
+            (" hour old", "h old"),
+            (" minutes old", "min old"),
+            (" minute old", "min old"),
+            (" months old", "mo old"),
+            (" month old", "mo old")
+        ]
+        
+        for old, new in replacements:
+            age_string = age_string.replace(old, new)
+        
+        return age_string
+
+    async def _handle_no_data(self, channel, token_address, user, swap_info, chain, dexscreener_url):
+        """Handle case when no data is available from DexScreener"""
+        embed = discord.Embed(color=Colors.EMBED_BORDER)
+        embed.set_author(
+            name="Buy Alert",
+            icon_url="https://cdn.discordapp.com/emojis/1323480997873848371.webp"
+        )
+        
+        # Extract basic info from swap_info
+        token_info = self._extract_swap_info(swap_info)
+        
+        description_parts = [
+            f"### [{token_info['name']} ({token_info['name']})]({dexscreener_url})",
+            f"New token, no data • {chain}"
+        ]
+        
+        if token_info['formatted_buy']:
+            description_parts.append(f"{token_info['formatted_buy']} buy")
+        
+        embed.description = "\n".join(description_parts)
+        
+        if user:
+            footer_text = user
+            if token_info['dollar_amount']:
+                amount = float(token_info['dollar_amount'])
+                if amount < 250:
+                    footer_text = "🤏 " + footer_text
+                elif amount >= 10000:
+                    footer_text = "🤑 " + footer_text
+                footer_text += f" ⋅ ${format(int(amount), ',')} buy"
+            embed.set_footer(text=footer_text)
+        
+        await channel.send(embed=embed)
+        await channel.send(f"`{token_address}`")
