@@ -527,7 +527,7 @@ class DigestCog(commands.Cog):
             del self.hour_tokens[hour_key]
             logging.info(f"Cleared token data for hour: {hour_key}")
 
-    def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url, is_first_trade=False):
+    def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url, swap_info=None, is_first_trade=False):
         """Track trades (copied from TradeSummaryCog)"""
         try:
             # Move the minimum trade check to the start
@@ -549,15 +549,38 @@ class DigestCog(commands.Cog):
                     self.hour_tokens[self.current_hour_key] = OrderedDict()
                 
                 if token_address not in self.hour_tokens[self.current_hour_key]:
+                    # Extract market cap from swap info using regex
+                    mc_match = re.search(r'MC:\s*\$([0-9,.]+[KMB]?)', swap_info) if swap_info else None
+                    initial_mcap_value = None
+                    initial_mcap_formatted = 'N/A'
+                    
+                    if mc_match:
+                        mc_str = mc_match.group(1)
+                        # Convert to numeric value
+                        try:
+                            if 'K' in mc_str:
+                                initial_mcap_value = float(mc_str.replace('K', '')) * 1000
+                            elif 'M' in mc_str:
+                                initial_mcap_value = float(mc_str.replace('M', '')) * 1000000
+                            elif 'B' in mc_str:
+                                initial_mcap_value = float(mc_str.replace('B', '')) * 1000000000
+                            else:
+                                initial_mcap_value = float(mc_str.replace(',', ''))
+                            initial_mcap_formatted = f"${format_large_number(initial_mcap_value)}"
+                        except ValueError:
+                            logging.error(f"Failed to parse market cap: {mc_str}")
+
                     token_data = {
                         'name': token_name,
                         'chart_url': dexscreener_url,
                         'source': 'cielo',
                         'user': user,
                         'chain': 'solana',  # You might want to make this dynamic
+                        'initial_market_cap': initial_mcap_value,
+                        'initial_market_cap_formatted': initial_mcap_formatted
                     }
                     self.hour_tokens[self.current_hour_key][token_address] = token_data
-                    logging.info(f"DigestCog: Added traded token {token_name} to hour {self.current_hour_key}")
+                    logging.info(f"DigestCog: Added traded token {token_name} to hour {self.current_hour_key} with initial MC: {initial_mcap_formatted}")
             
             trade_data = self.hourly_trades[token_address]
             

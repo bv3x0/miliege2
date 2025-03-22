@@ -610,6 +610,7 @@ class CieloGrabber(commands.Cog):
                         'buy',
                         message_link,
                         dexscreener_url,
+                        swap_info=swap_info,
                         is_first_trade=is_first_trade
                     )
                     logging.info(f"Called track_trade for buy: {user} bought {to_token}")
