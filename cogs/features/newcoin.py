@@ -17,8 +17,9 @@ class NewCoinCog(commands.Cog):
         self.bot = bot
         self.session = session
         self.output_channel_id = output_channel_id
+        self.last_alert = {}  # Initialize the dictionary
+        self.cleanup.start()  # Start the cleanup task
         logging.info(f"Initializing NewCoinCog with output channel ID: {output_channel_id}")
-        self.cleanup.start()
 
     @tasks.loop(hours=1)
     async def cleanup(self):
