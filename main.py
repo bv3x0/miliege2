@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import asyncio
 from cogs.grabbers.cielo_grabber import CieloGrabber
-from cogs.features.digest import DigestCog, DexScreenerDigestCog
+from cogs.features.digest import DigestCog
 from cogs.core.trackers import BotMonitor, TokenTracker
 from cogs.core.health import HealthMonitor
 from functools import wraps
