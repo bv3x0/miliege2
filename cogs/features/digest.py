@@ -153,7 +153,7 @@ class DigestCog(commands.Cog):
             for contract, token in recent_tokens:
                 name = token['name']
                 chain = token.get('chain', 'Unknown')
-                initial_mcap = token.get('initial_market_cap_formatted', 'N/A')
+                initial_mcap = token.get('initial_market_cap_formatted', 'N/A')  # Get the initial MC from when alert was posted
                 source = token.get('source', 'unknown')
                 user = token.get('user', 'unknown')
                 
