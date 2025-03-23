@@ -171,64 +171,34 @@ class HyperliquidWalletGrabber(commands.Cog):
     
     async def _check_wallet_trades(self, wallet):
         """Check a specific wallet for new trades and fetch position data."""
-        try:
-            # Add trade checking logging
-            logging.debug(f"Checking trades for wallet: {wallet.address}")
-            trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
-            logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
-            
-            # Get or create a lock for this wallet
-            if wallet.address not in self.wallet_locks:
-                self.wallet_locks[wallet.address] = asyncio.Lock()
-            
-            async with self.wallet_locks[wallet.address]:
+        async with self.wallet_locks[wallet.address]:
+            try:
+                # Create a new session for this operation
+                session = self.session_factory()
                 try:
                     # Verify wallet still exists before checking
-                    wallet_check = self.session_factory().query(TrackedWallet).filter_by(id=wallet.id).first()
+                    wallet_check = session.query(TrackedWallet).filter_by(id=wallet.id).first()
                     if not wallet_check:
                         logging.warning(f"Wallet {wallet.address} was deleted during check cycle")
                         return
                     
                     # Use HyperliquidAPI instead of SDK
-                    positions_data = await HyperliquidAPI.get_user_state(self.session, wallet.address)
+                    trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
                     
-                    logging.debug(f"Fetched positions for wallet {wallet.address}")
-                    
-                    # Store positions by asset for easy lookup
-                    positions_by_asset = {}
-                    if positions_data and "assetPositions" in positions_data:
-                        for position in positions_data["assetPositions"]:
-                            if "position" in position and "coin" in position["position"]:
-                                coin = position["position"]["coin"]
-                                positions_by_asset[coin] = position
-                                
-                        logging.debug(f"Found {len(positions_by_asset)} active positions for wallet {wallet.address}")
+                    # Add debug logging for trade filtering
+                    if trades_data:
+                        logging.debug(f"Processing {len(trades_data)} total trades for wallet {wallet.address}")
+                        logging.debug(f"Last trade ID was: {wallet_check.last_trade_id}")
                     
                     # Filter out trades we've already seen
-                    if not trades_data:
-                        logging.debug(f"No trades found for wallet {wallet.address}")
-                        self.session_factory().commit()  # Just update the last checked time
-                        return
-                        
-                    # For newly added wallets, don't show old trades
-                    if not wallet_check.last_trade_id:
-                        # Store the most recent trade ID without sending alerts
-                        if trades_data:
-                            # Sort by time in descending order (newest first)
-                            sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
-                            wallet_check.last_trade_id = str(sorted_trades[0]["tid"])
-                            logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet_check.last_trade_id}")
-                        self.session_factory().commit()
-                        return
-                        
                     new_trades = self._filter_new_trades(trades_data, wallet_check.last_trade_id)
                     
                     if new_trades:
                         logging.info(f"Found {len(new_trades)} new trades for wallet {wallet.address}")
                         
-                        # Update the last seen trade ID
+                        # Update the last seen trade ID (should be the most recent trade)
                         wallet_check.last_trade_id = str(new_trades[0]["tid"])
-                        self.session_factory().commit()
+                        session.commit()
                         
                         # Group trades by coin to process them together
                         trades_by_coin = {}
@@ -249,33 +219,40 @@ class HyperliquidWalletGrabber(commands.Cog):
                                 
                             logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
                     else:
-                        self.session_factory().commit()  # Just update the last checked time
+                        session.commit()  # Just update the last checked time
                 except Exception as e:
                     logging.error(f"Error processing wallet {wallet.address}: {e}", exc_info=True)
-                    self.session_factory().rollback()
+                    session.rollback()
                     raise
                 finally:
-                    self.session_factory().close()
+                    session.close()
                 
-        except Exception as e:
-            logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
-            self.monitor.record_error()
+            except Exception as e:
+                logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
+                self.monitor.record_error()
     
     def _filter_new_trades(self, trades, last_trade_id):
         """Filter out trades we've already seen based on the last trade ID."""
-        if not last_trade_id:
-            # If this is the first time checking, only get the most recent trade
-            return trades[:1] if trades else []
+        if not trades:
+            return []
         
-        # Filter trades newer than the last seen trade ID
         # Sort by time in descending order (newest first)
         sorted_trades = sorted(trades, key=lambda x: x["time"], reverse=True)
         
+        # If this is the first time checking, only get the most recent trade
+        if not last_trade_id:
+            return sorted_trades[:1]
+        
+        # Find all trades newer than the last seen trade ID
         new_trades = []
         for trade in sorted_trades:
             if str(trade["tid"]) == last_trade_id:
                 break
             new_trades.append(trade)
+        
+        # Add debug logging
+        if new_trades:
+            logging.debug(f"Found {len(new_trades)} new trades after last trade ID {last_trade_id}")
         
         return new_trades
     
