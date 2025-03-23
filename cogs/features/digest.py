@@ -178,7 +178,7 @@ class DigestCog(commands.Cog):
                         current_mcap = f"${format_large_number(float(pair['fdv']))}"
 
                 # Format token information
-                # Compare market caps and add emoji based on 33% threshold
+                # Compare market caps and add emoji based on 40% threshold
                 try:
                     # Fix the string to number conversion
                     def parse_market_cap(mcap_str):
@@ -219,10 +219,11 @@ class DigestCog(commands.Cog):
                         # Debug log the calculation
                         logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
                         
-                        if percent_change >= 33:
-                            status_emoji = " 🟢"  # green circle for 33%+ up
-                        elif percent_change <= -33:
-                            status_emoji = " 🔴"  # red circle for 33%+ down
+                        # Changed threshold to 40% and updated emojis
+                        if percent_change >= 40:
+                            status_emoji = " :up:"  # Discord "UP" emoji for 40%+ up
+                        elif percent_change <= -40:
+                            status_emoji = " 🪦"  # gravestone for 40%+ down
                 except Exception as e:
                     logging.error(f"Error calculating percent change for {name}: {e}")
                     status_emoji = ""  # If there's any error in conversion, don't show any emoji
@@ -303,17 +304,21 @@ class DigestCog(commands.Cog):
                 # Format the description lines
                 token_line = f"### [{name}]({token['chart_url']})"
                 
+                # Add status emoji and X in correct order
+                if status_emoji:
+                    token_line += status_emoji
+                
                 # Add red X if the token only has sells
                 if contract in self.hourly_trades:
                     trade_data = self.hourly_trades[contract]
                     has_buys = trade_data.get('buys', 0) > 0
                     has_sells = trade_data.get('sells', 0) > 0
                     if has_sells and not has_buys:
-                        token_line = f"### [{name}]({token['chart_url']}) ❌"
+                        token_line += " ❌"
                 
                 # Remove any existing $ from initial_mcap if it exists
                 initial_mcap_clean = initial_mcap.replace('$', '') if initial_mcap else 'N/A'
-                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}){status_emoji} ⋅ {chain.lower()}"
+                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {chain.lower()}"
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
