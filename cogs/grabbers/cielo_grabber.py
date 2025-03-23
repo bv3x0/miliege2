@@ -568,6 +568,36 @@ class CieloGrabber(commands.Cog):
 
     async def _track_trade(self, message, token_address, user, swap_info, dexscreener_url):
         try:
+            # Add debug logging for raw embed data
+            if message.embeds:
+                embed = message.embeds[0]
+                logging.info(f"Raw embed data: {embed.to_dict()}")
+
+            # Extract initial market cap from the first field's value
+            initial_mcap_value = None
+            if message.embeds and message.embeds[0].fields:
+                swap_info_field = message.embeds[0].fields[0].value
+                # Look for MC: $X.YZ[K|M|B] pattern
+                mc_match = re.search(r'MC: \$([0-9,.]+[KMB]?)', swap_info_field)
+                if mc_match:
+                    mcap_str = mc_match.group(1)
+                    try:
+                        # Remove commas and convert K/M/B to actual numbers
+                        clean_mcap = mcap_str.replace(',', '')
+                        if 'K' in clean_mcap:
+                            initial_mcap_value = float(clean_mcap.replace('K', '')) * 1000
+                        elif 'M' in clean_mcap:
+                            initial_mcap_value = float(clean_mcap.replace('M', '')) * 1000000
+                        elif 'B' in clean_mcap:
+                            initial_mcap_value = float(clean_mcap.replace('B', '')) * 1000000000
+                        else:
+                            initial_mcap_value = float(clean_mcap)
+                        logging.info(f"Extracted initial market cap: {initial_mcap_value} from '{mcap_str}'")
+                    except (ValueError, TypeError) as e:
+                        logging.error(f"Error parsing initial market cap '{mcap_str}': {e}")
+                else:
+                    logging.warning(f"Could not find market cap in swap info: {swap_info_field}")
+
             # Add debug logging
             logging.info(f"Starting trade processing - DigestCog present: {self.digest_cog is not None}, NewCoinCog present: {self.newcoin_cog is not None}")
             logging.info(f"Trade details - User: {user}, Token: {token_address}")
@@ -617,7 +647,7 @@ class CieloGrabber(commands.Cog):
             logging.info(f"About to call DigestCog.track_trade for {token_address}")
 
             if from_is_major and not to_is_major:
-                # Track buy in digest
+                # Track buy in digest with initial market cap
                 if self.digest_cog:
                     self.digest_cog.track_trade(
                         token_address,
@@ -629,9 +659,10 @@ class CieloGrabber(commands.Cog):
                         dexscreener_url,
                         swap_info=swap_info,
                         message_embed=message.embeds[0].to_dict(),
-                        is_first_trade=is_first_trade
+                        is_first_trade=is_first_trade,
+                        initial_market_cap=initial_mcap_value
                     )
-                    logging.info(f"Called track_trade for buy: {user} bought {to_token}")
+                    logging.info(f"Called track_trade for buy: {user} bought {to_token} (initial mcap: {initial_mcap_value})")
             elif not from_is_major and to_is_major:
                 # Track sell in digest
                 if self.digest_cog:
