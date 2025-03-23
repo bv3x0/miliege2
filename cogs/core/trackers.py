@@ -328,3 +328,29 @@ class TokenTracker:
     def is_major_token(self, token: str) -> bool:
         """Check if a token is considered a major token"""
         return token.upper() in self.major_tokens
+
+    def add_token(self, contract_address: str, name: str, initial_mcap: str, source: str, user: str = None, message_link: str = None):
+        """Add or update a token in the tracker"""
+        current_time = datetime.now()
+        
+        # If token exists and new alert is from Cielo, always update the source
+        if contract_address in self.tokens and source.lower() == 'cielo':
+            self.tokens[contract_address].update({
+                'source': 'cielo',
+                'user': user,
+                'message_link': message_link
+            })
+            logging.info(f"Updated existing token {name} source to cielo")
+            return
+
+        # For other cases, only add if token doesn't exist
+        if contract_address not in self.tokens:
+            self.tokens[contract_address] = {
+                'name': name,
+                'initial_mcap': initial_mcap,
+                'timestamp': current_time,
+                'source': source,
+                'user': user,
+                'message_link': message_link
+            }
+            logging.info(f"Added new token {name} from {source}")
