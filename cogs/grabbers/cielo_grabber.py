@@ -13,6 +13,7 @@ from cogs.utils import (
 )
 from cogs.utils.format import Colors, BotConstants, Messages
 import datetime
+import aiohttp
 
 class CieloGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, 
@@ -399,7 +400,7 @@ class CieloGrabber(commands.Cog):
                     
                     # Store token data with raw market cap value
                     token_data = {
-                        'name': token_name,
+                        'name': pair.get('baseToken', {}).get('name', token_name),
                         'chart_url': chart_url,
                         'initial_market_cap': market_cap_value,
                         'initial_market_cap_formatted': f"${format_large_number(market_cap_value)}" if market_cap_value is not None else "N/A",
@@ -479,15 +480,27 @@ class CieloGrabber(commands.Cog):
                 token_name = "Unknown Token"
                 token_symbol = ""
                 
-                if swap_info:
-                    # Try to extract token name and amount from the swap info
+                # First try to get the full name from Dexscreener API
+                async with aiohttp.ClientSession() as session:
+                    dex_data = await DexScreenerAPI.get_token_info(session, contract_address)
+                    if dex_data and dex_data.get('pairs'):
+                        pair = dex_data['pairs'][0]
+                        if 'baseToken' in pair and 'name' in pair['baseToken']:
+                            token_name = pair['baseToken']['name']
+                            token_symbol = pair['baseToken'].get('symbol', '')
+                            logging.info(f"Got token name from Dexscreener: {token_name} ({token_symbol})")
+
+                # Only fall back to swap info if we couldn't get the name from Dexscreener
+                if token_name == "Unknown Token" and swap_info:
                     swap_match = re.search(r'for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*@\s*\$([0-9.]+)', swap_info)
                     if swap_match:
                         token_amount = swap_match.group(1)
-                        token_name = swap_match.group(2).strip()
+                        symbol = swap_match.group(2).strip()
                         token_price = swap_match.group(3)
-                        token_symbol = token_name  # Use token name as symbol since they're often the same in new tokens
-                        logging.info(f"Extracted from swap: amount={token_amount}, token={token_name}, price=${token_price}")
+                        # Use the symbol as both name and symbol, but mark it as potentially incomplete
+                        token_name = f"{symbol} (Symbol)"
+                        token_symbol = symbol
+                        logging.info(f"Using symbol as name (fallback): {token_name}")
 
                 # Create chart URL using the contract and chain
                 chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
