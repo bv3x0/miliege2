@@ -46,7 +46,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         self.wallet_locks = {}  # Dictionary to store locks per wallet
         
         # Get the session factory
-        self.session_factory = bot.Session
+        self.session_factory = bot.db.session_factory
         
         # Flag to enable/disable alerts
         self.is_enabled = True
