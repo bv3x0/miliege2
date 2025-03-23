@@ -146,6 +146,21 @@ class DigestCog(commands.Cog):
             return None
 
         recent_tokens = list(tokens.items())[-10:]  # Last 10 tokens
+        
+        # Add debug logging
+        logging.info(f"Creating digest embed with {len(tokens)} total tokens, showing last {len(recent_tokens)}")
+        
+        for contract, token in recent_tokens:
+            logging.info(f"Processing token: {token.get('name')} ({contract})")
+            if contract in self.hourly_trades:
+                trade_data = self.hourly_trades[contract]
+                logging.info(f"Found trade data: {trade_data}")
+                logging.info(f"Total buys: ${trade_data.get('buys', 0)}")
+                logging.info(f"Total sells: ${trade_data.get('sells', 0)}")
+                logging.info(f"Users: {list(trade_data.get('users', {}).keys())}")
+            else:
+                logging.info(f"No trade data found for token {contract}")
+
         embeds = []
         current_description_lines = []
         
@@ -444,26 +459,27 @@ class DigestCog(commands.Cog):
     async def digest(self, ctx):
         """Show the current hour's token digest on demand"""
         try:
-            # Ensure the hook is installed
-            if not self.hook_installed:
-                self._install_token_tracker_hook()
-                await ctx.send("⚠️ Token tracking hook was not installed. Installing now...")
+            # Add debug logging
+            logging.info(f"Running digest command")
+            logging.info(f"Current hour key: {self.current_hour_key}")
+            logging.info(f"Available hours: {list(self.hour_tokens.keys())}")
+            logging.info(f"Current hour trades: {self.hourly_trades}")
             
             # Update the current hour key
             self._update_token_hour()
             
-            # Log the current state
-            logging.info(f"DigestCog: Running digest command")
-            logging.info(f"DigestCog: Current hour key: {self.current_hour_key}")
-            logging.info(f"DigestCog: Available hour buckets: {list(self.hour_tokens.keys())}")
-            
             # Get tokens only from the current hour
             current_hour_tokens = self.hour_tokens.get(self.current_hour_key, OrderedDict())
             
-            # Log the token count and contents for debugging
-            logging.info(f"DigestCog: Found {len(current_hour_tokens)} tokens for current hour {self.current_hour_key}")
-            if current_hour_tokens:
-                logging.info(f"DigestCog: Token addresses in current hour: {list(current_hour_tokens.keys())}")
+            logging.info(f"Found {len(current_hour_tokens)} tokens for current hour")
+            for token_addr, token_data in current_hour_tokens.items():
+                logging.info(f"Token: {token_addr}")
+                logging.info(f"Trade data: {self.hourly_trades.get(token_addr)}")
+            
+            # Ensure the hook is installed
+            if not self.hook_installed:
+                self._install_token_tracker_hook()
+                await ctx.send("⚠️ Token tracking hook was not installed. Installing now...")
             
             if not current_hour_tokens:
                 await ctx.send("<:dwbb:1321571679109124126>")
@@ -545,11 +561,28 @@ class DigestCog(commands.Cog):
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False):
         try:
-            # Move the minimum trade check to the start
-            MIN_TRADE_AMOUNT = 100  # $100
-            if amount < MIN_TRADE_AMOUNT:
-                logging.info(f"Skipping small trade: ${amount}")
-                return
+            # Add debug logging at start
+            logging.info(f"DigestCog.track_trade starting for {token_name} ({token_address})")
+            logging.info(f"Current hour tokens: {list(self.hour_tokens.get(self.current_hour_key, {}).keys())}")
+            
+            # Initialize token data in hour_tokens if not present
+            if self.current_hour_key not in self.hour_tokens:
+                self.hour_tokens[self.current_hour_key] = OrderedDict()
+            
+            # Add token to hour_tokens if not present
+            if token_address not in self.hour_tokens[self.current_hour_key]:
+                # Get token data from token_tracker or create new entry
+                token_data = self.token_tracker.tokens.get(token_address, {})
+                if not token_data:
+                    token_data = {
+                        'name': token_name,
+                        'chart_url': dexscreener_url,
+                        'source': 'cielo',
+                        'user': user,
+                        'chain': 'solana',  # Default to solana since it's from Cielo
+                    }
+                self.hour_tokens[self.current_hour_key][token_address] = token_data
+                logging.info(f"Added new token {token_name} to hour {self.current_hour_key}")
             
             # Track the trade data
             if token_address not in self.hourly_trades:
@@ -558,28 +591,6 @@ class DigestCog(commands.Cog):
                     'sells': 0.0,
                     'users': {}
                 }
-                
-                # Also add to hour_tokens if it's not there
-                if self.current_hour_key not in self.hour_tokens:
-                    self.hour_tokens[self.current_hour_key] = OrderedDict()
-                
-                if token_address not in self.hour_tokens[self.current_hour_key]:
-                    # Get token data from token_tracker since it already has the initial market cap
-                    token_data = self.token_tracker.tokens.get(token_address, {})
-                    if not token_data:
-                        logging.warning(f"Token {token_address} not found in token_tracker")
-                        return
-
-                    self.hour_tokens[self.current_hour_key][token_address] = {
-                        'name': token_name,
-                        'chart_url': dexscreener_url,
-                        'source': 'cielo',
-                        'user': user,
-                        'chain': 'solana',
-                        'initial_market_cap': token_data.get('initial_market_cap'),
-                        'initial_market_cap_formatted': token_data.get('initial_market_cap_formatted', 'N/A')
-                    }
-                    logging.info(f"DigestCog: Added traded token {token_name} to hour {self.current_hour_key}")
             
             trade_data = self.hourly_trades[token_address]
             
@@ -601,5 +612,9 @@ class DigestCog(commands.Cog):
             trade_data['users'][user]['actions'].add(action)
 
             logging.info(f"Successfully tracked trade for token {token_address} (first trade: {is_first_trade})")
+            
+            # Add debug logging after adding to hour_tokens
+            logging.info(f"Updated hour tokens: {list(self.hour_tokens.get(self.current_hour_key, {}).keys())}")
+            logging.info(f"Updated trade data: {self.hourly_trades.get(token_address)}")
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
