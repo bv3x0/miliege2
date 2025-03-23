@@ -171,6 +171,10 @@ class HyperliquidWalletGrabber(commands.Cog):
     
     async def _check_wallet_trades(self, wallet):
         """Check a specific wallet for new trades and fetch position data."""
+        # Create a lock if it doesn't exist
+        if wallet.address not in self.wallet_locks:
+            self.wallet_locks[wallet.address] = asyncio.Lock()
+        
         async with self.wallet_locks[wallet.address]:
             try:
                 # Create a new session for this operation
