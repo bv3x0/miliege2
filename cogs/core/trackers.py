@@ -109,19 +109,27 @@ class TokenTracker:
             logging.error(f"Error loading tokens from database: {e}")
 
     def log_token(self, contract: str, data: Dict[str, Any], source: str, user: str = None) -> None:
-        """Log a token, maintaining only the most recent tokens but preserving first alert data.
-        
-        Args:
-            contract: Token contract address
-            data: Token data dictionary
-            source: Source of the alert (e.g., 'cielo', 'rick')
-            user: Username who triggered the alert
-        """
+        """Log a token, maintaining only the most recent tokens but preserving first alert data."""
         # Remove oldest tokens if max size reached in memory
         while len(self.tokens) >= self.max_tokens:
             self.tokens.popitem(last=False)
         
         current_time = datetime.now()
+        
+        # Ensure market cap is properly formatted when first seeing a token
+        if contract not in self.tokens and 'initial_market_cap' in data:
+            market_cap_value = data['initial_market_cap']
+            if isinstance(market_cap_value, (int, float)):
+                if market_cap_value >= 1000000000:
+                    formatted_mcap = f"${format_large_number(market_cap_value/1000000000)}B"
+                elif market_cap_value >= 1000000:
+                    formatted_mcap = f"${format_large_number(market_cap_value/1000000)}M"
+                elif market_cap_value >= 1000:
+                    formatted_mcap = f"${format_large_number(market_cap_value/1000)}K"
+                else:
+                    formatted_mcap = f"${format_large_number(market_cap_value)}"
+                data['initial_market_cap_formatted'] = formatted_mcap
+                logging.info(f"Formatted initial market cap for {contract}: {formatted_mcap}")
         
         # Update in-memory cache
         if contract in self.tokens:

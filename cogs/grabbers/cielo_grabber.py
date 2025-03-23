@@ -633,29 +633,19 @@ class CieloGrabber(commands.Cog):
                     )
                     logging.info(f"Called track_trade for sell: {user} sold {from_token}")
             elif not from_is_major and not to_is_major:
-                # Both tokens are non-major - track both sell and buy
+                # Both tokens are non-major, but we only have the contract address for the token being bought
                 if self.digest_cog:
-                    # Track the sell of the from_token
+                    # Track only the buy of the to_token since that's the one we have the address for
                     self.digest_cog.track_trade(
-                        token_address,
-                        from_token,
-                        user,
-                        dollar_amount,
-                        'sell',
-                        message_link,
-                        dexscreener_url
-                    )
-                    logging.info(f"Called track_trade for sell: {user} sold {from_token}")
-                    
-                    # Track the buy of the to_token
-                    self.digest_cog.track_trade(
-                        token_address,
+                        token_address,  # This is the address of the token being bought
                         to_token,
                         user,
                         dollar_amount,
                         'buy',
                         message_link,
                         dexscreener_url,
+                        swap_info=swap_info,
+                        message_embed=message.embeds[0].to_dict(),
                         is_first_trade=is_first_trade
                     )
                     logging.info(f"Called track_trade for buy: {user} bought {to_token}")

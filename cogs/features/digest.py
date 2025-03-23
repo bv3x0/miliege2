@@ -539,7 +539,6 @@ class DigestCog(commands.Cog):
             logging.info(f"Cleared token data for hour: {hour_key}")
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False):
-        """Track trades (copied from TradeSummaryCog)"""
         try:
             # Move the minimum trade check to the start
             MIN_TRADE_AMOUNT = 100  # $100
@@ -560,73 +559,22 @@ class DigestCog(commands.Cog):
                     self.hour_tokens[self.current_hour_key] = OrderedDict()
                 
                 if token_address not in self.hour_tokens[self.current_hour_key]:
-                    initial_mcap_value = None
-                    initial_mcap_formatted = 'N/A'
-                    
-                    # Try to get market cap from embed data first
-                    if message_embed and message_embed.get('fields'):
-                        # Get the first field which contains the swap info
-                        swap_field = message_embed['fields'][0]
-                        if swap_field and 'value' in swap_field:
-                            # Split by '|' and look for MC: part
-                            parts = swap_field['value'].split('|')
-                            for part in parts:
-                                if 'MC:' in part:
-                                    mc_str = part.strip()
-                                    # Extract just the number and suffix (e.g., "431.4k" from "MC: $431.4k")
-                                    mc_match = re.search(r'MC:\s*\$([0-9,.]+)([KMBkmb]?)', mc_str, re.IGNORECASE)
-                                    if mc_match:
-                                        value = float(mc_match.group(1).replace(',', ''))
-                                        suffix = mc_match.group(2).upper()
-                                        
-                                        # Store the raw numeric value
-                                        if suffix == 'K':
-                                            initial_mcap_value = value * 1000
-                                        elif suffix == 'M':
-                                            initial_mcap_value = value * 1000000
-                                        elif suffix == 'B':
-                                            initial_mcap_value = value * 1000000000
-                                        else:
-                                            initial_mcap_value = value
-                                            
-                                        # Store the original formatted string, preserving the suffix
-                                        initial_mcap_formatted = mc_str.replace('MC:', '').strip()
-                                        logging.info(f"Extracted MC from embed data: {initial_mcap_formatted}")
-                    
-                    # Fallback to regex parsing of swap_info if we couldn't get it from embed
-                    elif swap_info:
-                        # Parse swap info for market cap if available
-                        mc_match = re.search(r'MC:\s*(\$[0-9,.]+[KMBkmb]?)', swap_info, re.IGNORECASE)
-                        if mc_match:
-                            initial_mcap_formatted = mc_match.group(1)
-                            # Also parse the numeric value
-                            value_match = re.search(r'\$([0-9,.]+)([KMBkmb]?)', initial_mcap_formatted, re.IGNORECASE)
-                            if value_match:
-                                value = float(value_match.group(1).replace(',', ''))
-                                suffix = value_match.group(2).upper()
-                                
-                                if suffix == 'K':
-                                    initial_mcap_value = value * 1000
-                                elif suffix == 'M':
-                                    initial_mcap_value = value * 1000000
-                                elif suffix == 'B':
-                                    initial_mcap_value = value * 1000000000
-                                else:
-                                    initial_mcap_value = value
-                                    
-                            logging.info(f"Extracted MC from swap info: {initial_mcap_formatted}")
+                    # Get token data from token_tracker since it already has the initial market cap
+                    token_data = self.token_tracker.tokens.get(token_address, {})
+                    if not token_data:
+                        logging.warning(f"Token {token_address} not found in token_tracker")
+                        return
 
-                    token_data = {
+                    self.hour_tokens[self.current_hour_key][token_address] = {
                         'name': token_name,
                         'chart_url': dexscreener_url,
                         'source': 'cielo',
                         'user': user,
                         'chain': 'solana',
-                        'initial_market_cap': initial_mcap_value,
-                        'initial_market_cap_formatted': initial_mcap_formatted
+                        'initial_market_cap': token_data.get('initial_market_cap'),
+                        'initial_market_cap_formatted': token_data.get('initial_market_cap_formatted', 'N/A')
                     }
-                    self.hour_tokens[self.current_hour_key][token_address] = token_data
-                    logging.info(f"DigestCog: Added traded token {token_name} to hour {self.current_hour_key} with initial MC: {initial_mcap_formatted}")
+                    logging.info(f"DigestCog: Added traded token {token_name} to hour {self.current_hour_key}")
             
             trade_data = self.hourly_trades[token_address]
             
