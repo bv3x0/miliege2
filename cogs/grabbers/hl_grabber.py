@@ -32,6 +32,8 @@ class TrackedWallet(Base):
 
 class HyperliquidWalletGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, channel_id=None):
+        # Add initialization logging
+        logging.info(f"Initializing HyperliquidWalletGrabber with channel_id: {channel_id}")
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
@@ -132,7 +134,7 @@ class HyperliquidWalletGrabber(commands.Cog):
     async def check_wallets(self):
         """Check all tracked wallets for new trades."""
         try:
-            # Use a fresh query to get the current list of wallets
+            # Add debug logging for wallet checks
             wallets = self.db_session.query(TrackedWallet).all()
             wallet_count = len(wallets)
             logging.info(f"Checking {wallet_count} Hyperliquid wallets for new trades")
@@ -169,29 +171,23 @@ class HyperliquidWalletGrabber(commands.Cog):
     
     async def _check_wallet_trades(self, wallet):
         """Check a specific wallet for new trades and fetch position data."""
-        # Get or create a lock for this wallet
-        if wallet.address not in self.wallet_locks:
-            self.wallet_locks[wallet.address] = asyncio.Lock()
-        
-        async with self.wallet_locks[wallet.address]:
-            try:
-                # Create a new session for this operation
-                session = self.session_factory()
+        try:
+            # Add trade checking logging
+            logging.debug(f"Checking trades for wallet: {wallet.address}")
+            trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
+            logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
+            
+            # Get or create a lock for this wallet
+            if wallet.address not in self.wallet_locks:
+                self.wallet_locks[wallet.address] = asyncio.Lock()
+            
+            async with self.wallet_locks[wallet.address]:
                 try:
                     # Verify wallet still exists before checking
-                    wallet_check = session.query(TrackedWallet).filter_by(id=wallet.id).first()
+                    wallet_check = self.session_factory().query(TrackedWallet).filter_by(id=wallet.id).first()
                     if not wallet_check:
                         logging.warning(f"Wallet {wallet.address} was deleted during check cycle")
                         return
-                    
-                    # Use HyperliquidAPI instead of SDK
-                    trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
-                    
-                    # Log the number of trades fetched
-                    logging.debug(f"Fetched {len(trades_data) if trades_data else 0} trades for wallet {wallet.address}")
-                    
-                    # Update the last checked time
-                    wallet_check.last_checked_time = datetime.now()
                     
                     # Use HyperliquidAPI instead of SDK
                     positions_data = await HyperliquidAPI.get_user_state(self.session, wallet.address)
@@ -211,7 +207,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                     # Filter out trades we've already seen
                     if not trades_data:
                         logging.debug(f"No trades found for wallet {wallet.address}")
-                        session.commit()  # Just update the last checked time
+                        self.session_factory().commit()  # Just update the last checked time
                         return
                         
                     # For newly added wallets, don't show old trades
@@ -222,7 +218,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                             sorted_trades = sorted(trades_data, key=lambda x: x["time"], reverse=True)
                             wallet_check.last_trade_id = str(sorted_trades[0]["tid"])
                             logging.info(f"Initialized wallet {wallet.address} with latest trade ID {wallet_check.last_trade_id}")
-                        session.commit()
+                        self.session_factory().commit()
                         return
                         
                     new_trades = self._filter_new_trades(trades_data, wallet_check.last_trade_id)
@@ -232,7 +228,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                         
                         # Update the last seen trade ID
                         wallet_check.last_trade_id = str(new_trades[0]["tid"])
-                        session.commit()
+                        self.session_factory().commit()
                         
                         # Group trades by coin to process them together
                         trades_by_coin = {}
@@ -253,17 +249,17 @@ class HyperliquidWalletGrabber(commands.Cog):
                                 
                             logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
                     else:
-                        session.commit()  # Just update the last checked time
+                        self.session_factory().commit()  # Just update the last checked time
                 except Exception as e:
                     logging.error(f"Error processing wallet {wallet.address}: {e}", exc_info=True)
-                    session.rollback()
+                    self.session_factory().rollback()
                     raise
                 finally:
-                    session.close()
+                    self.session_factory().close()
                 
-            except Exception as e:
-                logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
-                self.monitor.record_error()
+        except Exception as e:
+            logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
+            self.monitor.record_error()
     
     def _filter_new_trades(self, trades, last_trade_id):
         """Filter out trades we've already seen based on the last trade ID."""

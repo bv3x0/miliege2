@@ -52,9 +52,6 @@ load_dotenv()
 token = os.getenv('DISCORD_BOT_TOKEN')
 daily_digest_channel_id = os.getenv('DAILY_DIGEST_CHANNEL_ID')
 database_url = os.getenv('DATABASE_URL')  # Optional, will use default if not set
-hyperliquid_alerts_channel_id = os.getenv('HYPERLIQUID_ALERTS_CHANNEL_ID')
-if hyperliquid_alerts_channel_id:
-    hyperliquid_alerts_channel_id = int(hyperliquid_alerts_channel_id)
 
 # Validate configuration
 if not token:
@@ -187,16 +184,15 @@ class DiscordBot(commands.Bot):
         await self.add_cog(AdminCommands(self))
         
         # 5. Optional features
-        if hyperliquid_alerts_channel_id:
-            await self.add_cog(HyperliquidWalletGrabber(
-                self, 
-                self.token_tracker, 
-                self.monitor, 
-                self.session, 
-                digest_cog, 
-                hyperliquid_alerts_channel_id
-            ))
-            logger.info("Hyperliquid Wallet Grabber loaded successfully")
+        await self.add_cog(HyperliquidWalletGrabber(
+            self, 
+            self.token_tracker, 
+            self.monitor, 
+            self.session, 
+            digest_cog, 
+            daily_digest_channel_id
+        ))
+        logger.info("Hyperliquid Wallet Grabber loaded successfully")
 
         logger.info("All cogs loaded successfully")
 
