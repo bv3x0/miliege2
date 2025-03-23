@@ -171,7 +171,7 @@ class HyperliquidWalletGrabber(commands.Cog):
     
     async def _check_wallet_trades(self, wallet):
         """Check a specific wallet for new trades and fetch position data."""
-        # Create a lock if it doesn't exist
+        # Get or create a lock for this wallet
         if wallet.address not in self.wallet_locks:
             self.wallet_locks[wallet.address] = asyncio.Lock()
         
@@ -188,6 +188,15 @@ class HyperliquidWalletGrabber(commands.Cog):
                     
                     # Use HyperliquidAPI instead of SDK
                     trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
+                    positions_data = await HyperliquidAPI.get_user_state(self.session, wallet.address)
+                    
+                    # Initialize positions_by_asset here, before we use it
+                    positions_by_asset = {}
+                    if positions_data and "assetPositions" in positions_data:
+                        for position in positions_data["assetPositions"]:
+                            if "position" in position and "coin" in position["position"]:
+                                coin = position["position"]["coin"]
+                                positions_by_asset[coin] = position
                     
                     # Add debug logging for trade filtering
                     if trades_data:
@@ -331,27 +340,21 @@ class HyperliquidWalletGrabber(commands.Cog):
             size = float(trade["sz"])
             price = float(trade["px"])
             
+            # Get position data for this coin if available
+            position_info = position_data.get(raw_coin, {})
+            
             # Extract position details if available
             position_size = size  # Default to trade size
             entry_price = price  # Default to trade price
             
-            # Calculate realized PnL for closing trades if available
-            realized_pnl = 0
-            if "realizedPnl" in trade:
-                try:
-                    realized_pnl = float(trade["realizedPnl"])
-                    logging.debug(f"Using realized PnL from trade data: {realized_pnl}")
-                except (ValueError, TypeError):
-                    logging.debug("Failed to parse realized PnL, using 0")
-            
             # Try to get the most accurate position data
-            if position_data and "position" in position_data:
-                pos = position_data["position"]
+            if position_info and "position" in position_info:
+                pos = position_info["position"]
                 
-                # Get position size - this is the most accurate representation of current position
+                # Get position size
                 if "szi" in pos:
                     try:
-                        position_size = abs(float(pos["szi"]))  # Use absolute value for consistent calculations
+                        position_size = abs(float(pos["szi"]))
                         logging.debug(f"Using position size from position data: {position_size}")
                     except (ValueError, TypeError):
                         logging.debug(f"Failed to parse position size, using trade size: {size}")
@@ -363,8 +366,6 @@ class HyperliquidWalletGrabber(commands.Cog):
                         logging.debug(f"Using entry price from position data: {entry_price}")
                     except (ValueError, TypeError):
                         logging.debug(f"Failed to parse entry price, using trade price: {price}")
-            else:
-                logging.debug(f"No position data available for {coin}, using trade data only")
             
             # Calculate position value using the most accurate data
             position_value = position_size * entry_price
@@ -391,7 +392,7 @@ class HyperliquidWalletGrabber(commands.Cog):
                 'price': price,  # Original trade price
                 'position_size': position_size,  # Current position size from position data if available
                 'position_value': position_value,
-                'realized_pnl': realized_pnl,  # Only relevant for closing trades
+                'realized_pnl': 0,  # Only relevant for closing trades
                 'time': datetime.now()
             }
             
