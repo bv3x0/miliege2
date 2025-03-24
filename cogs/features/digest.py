@@ -161,6 +161,15 @@ class DigestCog(commands.Cog):
                 source = token.get('source', 'unknown')
                 user = token.get('user', 'unknown')
                 
+                # Add this before trying to construct the token_line
+                if 'chart_url' not in token or not token['chart_url']:
+                    # Set a default chart URL if missing
+                    token['chart_url'] = f"https://dexscreener.com/{chain.lower()}/{contract}"
+                    logging.warning(f"Missing chart_url for {name}, creating default")
+                
+                # Then construct token_line
+                token_line = f"### [{name}]({token['chart_url']})"
+                
                 # Create Discord message link if we have the necessary info
                 message_link = None
                 original_message_link = None
@@ -218,11 +227,7 @@ class DigestCog(commands.Cog):
                         logging.info(f"Trade data for {user}: message_link={user_data.get('message_link', 'None')}")
                 
                 # Format the description lines
-                token_line = f"### [{name}]({token['chart_url']})"
-                
-                # Add status emoji and X in correct order
-                if status_emoji:
-                    token_line += status_emoji
+                token_line += status_emoji
                 
                 # Add red X if the token only has sells
                 if contract in self.hourly_trades:
@@ -531,43 +536,51 @@ class DigestCog(commands.Cog):
             
             current_hour = self.current_hour_key
             
-            # Process new token first to ensure market cap is captured
+            # Ensure dexscreener_url is always set - this is the critical part
+            if not dexscreener_url and chain and token_address:
+                dexscreener_url = f"https://dexscreener.com/{chain.lower()}/{token_address}"
+                logging.info(f"Generated chart URL: {dexscreener_url}")
+            
+            # Process new token or update existing token
             if token_address not in self.hour_tokens.get(current_hour, {}):
-                # Use the provided token_data if available
-                if token_data:
-                    self.hour_tokens[current_hour][token_address] = token_data
-                else:
-                    # Fallback to creating basic token data
-                    self.hour_tokens[current_hour][token_address] = {
-                        'name': token_name,
-                        'chart_url': dexscreener_url,
-                        'source': 'cielo',
-                        'user': user,
-                        'chain': chain or 'unknown'
-                    }
-            else:
-                # IMPORTANT: Even if token exists, always update source to cielo for cielo trades
-                # This ensures cielo trades take precedence over rick or other sources
-                self.hour_tokens[current_hour][token_address]['source'] = 'cielo'
+                # Create a new entry
+                token_entry = {
+                    'name': token_name,
+                    'chart_url': dexscreener_url,  # Always set this!
+                    'source': 'cielo',
+                    'user': user,
+                    'chain': chain or 'unknown'
+                }
                 
-                # Only update user if we're not overriding with "unknown"
-                if user and user != "unknown":
-                    self.hour_tokens[current_hour][token_address]['user'] = user
-                    
-                # Update other relevant fields if provided in token_data
+                # Add additional data from token_data if available
                 if token_data:
-                    # Update chart_url and chain if available
-                    if 'chart_url' in token_data and token_data['chart_url']:
-                        self.hour_tokens[current_hour][token_address]['chart_url'] = token_data['chart_url']
-                    if 'chain' in token_data and token_data['chain']:
-                        self.hour_tokens[current_hour][token_address]['chain'] = token_data['chain']
-                    # Update message IDs for linking
-                    if 'original_message_id' in token_data:
-                        self.hour_tokens[current_hour][token_address]['original_message_id'] = token_data['original_message_id']
-                    if 'original_channel_id' in token_data:
-                        self.hour_tokens[current_hour][token_address]['original_channel_id'] = token_data['original_channel_id']
-                    if 'original_guild_id' in token_data:
-                        self.hour_tokens[current_hour][token_address]['original_guild_id'] = token_data['original_guild_id']
+                    token_entry.update({k: v for k, v in token_data.items() if v is not None})
+                
+                # Store in hour_tokens
+                self.hour_tokens[current_hour][token_address] = token_entry
+                logging.info(f"Created new token entry for {token_name} with chart_url: {dexscreener_url}")
+            else:
+                # Update existing entry
+                token_entry = self.hour_tokens[current_hour][token_address]
+                
+                # Always update these fields
+                token_entry['source'] = 'cielo'
+                token_entry['user'] = user if user != "unknown" else token_entry.get('user', 'unknown')
+                
+                # CRITICAL: Ensure chart_url exists
+                if 'chart_url' not in token_entry or not token_entry['chart_url']:
+                    token_entry['chart_url'] = dexscreener_url
+                    logging.info(f"Updated missing chart_url for {token_name}: {dexscreener_url}")
+                
+                # Update other fields if needed
+                if chain:
+                    token_entry['chain'] = chain
+                
+                # Merge any additional data from token_data
+                if token_data:
+                    for k, v in token_data.items():
+                        if v is not None and (k not in token_entry or not token_entry[k]):
+                            token_entry[k] = v
             
             # Update trade tracking
             if token_address not in self.hourly_trades:
