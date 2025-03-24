@@ -26,7 +26,6 @@ class DigestCog(commands.Cog):
         self.ny_tz = pytz.timezone('America/New_York')
         # Store tokens by hour for better separation
         self.hour_tokens = OrderedDict()
-        self.current_hour_key = self._get_current_hour_key()
         
         # Load tokens from database if token_tracker has a db_session
         self.db_session = None
@@ -115,30 +114,20 @@ class DigestCog(commands.Cog):
             # Log success message with count
             logging.info(f"DigestCog: Loaded {token_count} tokens from database into {len(self.hour_tokens)} hour buckets")
             
-            # Ensure current hour is initialized
-            if self.current_hour_key not in self.hour_tokens:
-                self.hour_tokens[self.current_hour_key] = OrderedDict()
-                
         except Exception as e:
             logging.error(f"DigestCog: Error loading tokens from database: {e}", exc_info=True)
 
     def cog_unload(self):
         self.hourly_digest.cancel()  # Clean up task when cog is unloaded
         
-    def _get_current_hour_key(self):
-        """Get a string key for the current hour"""
+    @property
+    def current_hour_key(self):
+        """Get the current hour key and ensure the hour bucket exists"""
         ny_time = datetime.now(self.ny_tz)
-        return ny_time.strftime("%Y-%m-%d-%H")
-        
-    def _update_token_hour(self):
-        """Update the current hour key if needed"""
-        current_key = self._get_current_hour_key()
-        if current_key != self.current_hour_key:
-            self.current_hour_key = current_key
-            # Initialize new hour
-            if current_key not in self.hour_tokens:
-                self.hour_tokens[current_key] = OrderedDict()
-        return current_key
+        key = ny_time.strftime("%Y-%m-%d-%H")
+        if key not in self.hour_tokens:
+            self.hour_tokens[key] = OrderedDict()
+        return key
 
     async def create_digest_embed(self, tokens, is_hourly=True):
         """Create the digest embed(s) - shared between auto and manual digests"""
@@ -195,53 +184,21 @@ class DigestCog(commands.Cog):
                 # Format token information
                 # Compare market caps and add emoji based on 40% threshold
                 try:
-                    # Fix the string to number conversion
-                    def parse_market_cap(mcap_str):
-                        if not mcap_str or mcap_str == 'N/A':
-                            return None
-                            
-                        # Remove $ symbol
-                        clean_str = mcap_str.replace('$', '')
-                        
-                        # Remove Discord emoji patterns (like <:wow:1149703956746997871>)
-                        clean_str = re.sub(r'<:[a-zA-Z0-9_]+:[0-9]+>', '', clean_str)
-                        
-                        # Strip any extra whitespace that might be left after removing emojis
-                        clean_str = clean_str.strip()
-                        
-                        # Handle suffixes properly (both uppercase and lowercase)
-                        if 'M' in clean_str or 'm' in clean_str:
-                            clean_str = clean_str.replace('M', '').replace('m', '')
-                            return float(clean_str) * 1000000
-                        elif 'K' in clean_str or 'k' in clean_str:
-                            clean_str = clean_str.replace('K', '').replace('k', '')
-                            return float(clean_str) * 1000
-                        elif 'B' in clean_str or 'b' in clean_str:
-                            clean_str = clean_str.replace('B', '').replace('b', '')
-                            return float(clean_str) * 1000000000
-                        else:
-                            return float(clean_str)
+                    current_mcap_value = self.parse_market_cap(current_mcap)
+                    initial_mcap_value = token.get('initial_market_cap')  # Already parsed when stored
                     
-                    current_mcap_value = parse_market_cap(current_mcap)
-                    initial_mcap_value = parse_market_cap(initial_mcap)
-                    
-                    # Calculate percentage change only if both values are valid numbers
                     status_emoji = ""
-                    if current_mcap_value is not None and initial_mcap_value is not None and initial_mcap_value > 0:
-                        # Calculate percentage change
+                    if current_mcap_value and initial_mcap_value and initial_mcap_value > 0:
                         percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
-                        
-                        # Debug log the calculation
                         logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
                         
-                        # Changed threshold to 40% and updated emojis
                         if percent_change >= 40:
-                            status_emoji = " :up:"  # Discord "UP" emoji for 40%+ up
+                            status_emoji = " :up:"
                         elif percent_change <= -40:
-                            status_emoji = " 🪦"  # gravestone for 40%+ down
+                            status_emoji = " 🪦"
                 except Exception as e:
                     logging.error(f"Error calculating percent change for {name}: {e}")
-                    status_emoji = ""  # If there's any error in conversion, don't show any emoji
+                    status_emoji = ""
                 
                 # Make sure we have valid values for display
                 if not source or source == "":
@@ -282,35 +239,25 @@ class DigestCog(commands.Cog):
                     trade_parts = []
                     
                     if action_groups['bought']:
-                        users = []
-                        is_first = False
-                        for user_link, first_trade in action_groups['bought']:
-                            users.append(user_link)
-                            is_first = is_first or first_trade
+                        users, is_first = zip(*action_groups['bought'])
                         amount = float(trade_data['buys'])
                         formatted_amount = format_large_number(amount) if amount >= 1000 else str(int(amount))
-                        star = " ⭐" if is_first else ""
+                        star = " ⭐" if any(is_first) else ""
                         trade_parts.append(f"{', '.join(users)} bought ${formatted_amount}{star}")
                     
                     if action_groups['sold']:
-                        users = []
-                        for user_link, _ in action_groups['sold']:  # No star for sells
-                            users.append(user_link)
+                        users, _ = zip(*action_groups['sold'])
                         amount = float(trade_data['sells'])
                         formatted_amount = format_large_number(amount) if amount >= 1000 else str(int(amount))
                         trade_parts.append(f"{', '.join(users)} sold ${formatted_amount}")
                     
                     if action_groups['bought and sold']:
-                        users = []
-                        is_first = False
-                        for user_link, first_trade in action_groups['bought and sold']:
-                            users.append(user_link)
-                            is_first = is_first or first_trade
+                        users, is_first = zip(*action_groups['bought and sold'])
                         buy_amount = float(trade_data['buys'])
                         sell_amount = float(trade_data['sells'])
                         formatted_buy = format_large_number(buy_amount) if buy_amount >= 1000 else str(int(buy_amount))
                         formatted_sell = format_large_number(sell_amount) if sell_amount >= 1000 else str(int(sell_amount))
-                        star = " ⭐" if is_first else ""
+                        star = " ⭐" if any(is_first) else ""
                         trade_parts.append(f"{', '.join(users)} bought ${formatted_buy} and sold ${formatted_sell}{star}")
                     
                     if trade_parts:
@@ -382,7 +329,6 @@ class DigestCog(commands.Cog):
                 try:
                     # Process tokens from the hour that just ended
                     hour_key = self.current_hour_key
-                    self._update_token_hour()
                     
                     tokens_to_report = self.hour_tokens.get(hour_key, OrderedDict())
                     
@@ -419,41 +365,69 @@ class DigestCog(commands.Cog):
         
     def process_new_token(self, contract, token_data):
         """Process a new token and add it to both the global tracker and hour-specific tracker"""
-        # Update the current hour key
-        self._update_token_hour()
+        current_hour = self.current_hour_key
         
-        # Create a copy to avoid modifying the original
-        token_data_copy = token_data.copy()
+        # Extract initial market cap from message_embed if available
+        if 'message_embed' in token_data:
+            try:
+                embed_data = token_data['message_embed']
+                first_field = next((f['value'] for f in embed_data['fields'] if 'value' in f), None)
+                if first_field:
+                    mc_match = re.search(r'MC: \$([0-9,.]+[KMB]?)', first_field)
+                    if mc_match:
+                        mcap_str = mc_match.group(1)
+                        # Handle K/M/B suffixes
+                        multiplier = 1
+                        clean_mcap = mcap_str.upper()
+                        if 'K' in clean_mcap:
+                            multiplier = 1000
+                            clean_mcap = clean_mcap.replace('K', '')
+                        elif 'M' in clean_mcap:
+                            multiplier = 1000000
+                            clean_mcap = clean_mcap.replace('M', '')
+                        elif 'B' in clean_mcap:
+                            multiplier = 1000000000
+                            clean_mcap = clean_mcap.replace('B', '')
+                        
+                        try:
+                            mcap_value = float(clean_mcap.replace(',', '')) * multiplier
+                            token_data['initial_market_cap'] = mcap_value
+                            token_data['initial_market_cap_formatted'] = f"${mcap_str}"
+                            logging.info(f"Extracted initial market cap: {mcap_str} for {token_data.get('name', 'Unknown')}")
+                        except ValueError:
+                            logging.error(f"Failed to convert market cap value: {clean_mcap}")
+            except Exception as e:
+                logging.error(f"Error extracting initial market cap: {e}")
         
-        # Ensure we capture the initial market cap when first processing the token
-        if 'initial_market_cap' in token_data_copy:
-            token_data_copy['initial_market_cap_formatted'] = f"${format_large_number(token_data_copy['initial_market_cap'])}"
+        # Add to hour tokens
+        if contract not in self.hour_tokens.get(current_hour, {}):
+            self.hour_tokens[current_hour][contract] = token_data
         
-        # Log the current state before adding
-        logging.info(f"DigestCog: Adding token to hour {self.current_hour_key}")
-        logging.info(f"DigestCog: Current hour buckets: {list(self.hour_tokens.keys())}")
-        logging.info(f"DigestCog: Token data: {token_data_copy}")
+        # Track the trade data
+        if contract not in self.hourly_trades:
+            self.hourly_trades[contract] = {'buys': 0.0, 'sells': 0.0, 'users': {}}
         
-        # Initialize the hour if it doesn't exist
-        if self.current_hour_key not in self.hour_tokens:
-            self.hour_tokens[self.current_hour_key] = OrderedDict()
-            logging.info(f"DigestCog: Created new hour bucket for {self.current_hour_key}")
+        trade_data = self.hourly_trades[contract]
         
-        # Ensure we have all required fields
-        token_data_copy = token_data_copy.copy()  # Create a copy to avoid modifying the original
+        # Update amounts
+        if 'buy' in token_data:
+            trade_data['buys'] += token_data['buy']
+            action = 'bought'
+        elif 'sell' in token_data:
+            trade_data['sells'] += token_data['sell']
+            action = 'sold'
         
-        # Only set default values if they're not already present
-        if 'source' not in token_data_copy:
-            token_data_copy['source'] = 'unknown'
-        if 'user' not in token_data_copy:
-            token_data_copy['user'] = 'unknown'
-        if 'chain' not in token_data_copy:
-            token_data_copy['chain'] = 'unknown'
-            
-        # Add to hour-specific tracker
-        self.hour_tokens[self.current_hour_key][contract] = token_data_copy
-        logging.info(f"DigestCog: Added token {token_data_copy.get('name', contract)} to hour {self.current_hour_key}")
-        logging.info(f"DigestCog: Current tokens in hour: {len(self.hour_tokens[self.current_hour_key])}")
+        # Update user info
+        if 'user' in token_data:
+            if token_data['user'] not in trade_data['users']:
+                trade_data['users'][token_data['user']] = {
+                    'message_link': token_data.get('message_link', ''),
+                    'actions': set(),
+                    'is_first_trade': token_data.get('is_first_trade', False)
+                }
+            trade_data['users'][token_data['user']]['actions'].add(action)
+
+        logging.info(f"Tracked trade: {token_data['user']} {action} {token_data['name']} for ${token_data['buy'] if 'buy' in token_data else token_data['sell']}")
 
     @commands.command()
     async def digest(self, ctx):
@@ -464,9 +438,6 @@ class DigestCog(commands.Cog):
             logging.info(f"Current hour key: {self.current_hour_key}")
             logging.info(f"Available hours: {list(self.hour_tokens.keys())}")
             logging.info(f"Current hour trades: {self.hourly_trades}")
-            
-            # Update the current hour key
-            self._update_token_hour()
             
             # Get tokens only from the current hour
             current_hour_tokens = self.hour_tokens.get(self.current_hour_key, OrderedDict())
@@ -559,62 +530,100 @@ class DigestCog(commands.Cog):
             del self.hour_tokens[hour_key]
             logging.info(f"Cleared token data for hour: {hour_key}")
 
-    def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False):
+    def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, 
+                    dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False, chain=None):
+        """Track a trade for the digest"""
         try:
-            # Add debug logging at start
-            logging.info(f"DigestCog.track_trade starting for {token_name} ({token_address})")
-            logging.info(f"Current hour tokens: {list(self.hour_tokens.get(self.current_hour_key, {}).keys())}")
+            if not token_address or not token_name or not user:
+                logging.warning(f"Missing required trade data: address={token_address}, name={token_name}, user={user}")
+                return
             
-            # Initialize token data in hour_tokens if not present
-            if self.current_hour_key not in self.hour_tokens:
-                self.hour_tokens[self.current_hour_key] = OrderedDict()
+            if amount <= 0:
+                logging.warning(f"Invalid trade amount: ${amount}")
+                return
             
-            # Add token to hour_tokens if not present
-            if token_address not in self.hour_tokens[self.current_hour_key]:
-                # Get token data from token_tracker or create new entry
-                token_data = self.token_tracker.tokens.get(token_address, {})
-                if not token_data:
-                    token_data = {
-                        'name': token_name,
-                        'chart_url': dexscreener_url,
-                        'source': 'cielo',
-                        'user': user,
-                        'chain': 'solana',  # Default to solana since it's from Cielo
-                    }
-                self.hour_tokens[self.current_hour_key][token_address] = token_data
-                logging.info(f"Added new token {token_name} to hour {self.current_hour_key}")
+            if trade_type not in ['buy', 'sell']:
+                logging.warning(f"Invalid trade type: {trade_type}")
+                return
             
-            # Track the trade data
-            if token_address not in self.hourly_trades:
-                self.hourly_trades[token_address] = {
-                    'buys': 0.0,
-                    'sells': 0.0,
-                    'users': {}
+            current_hour = self.current_hour_key
+            
+            # Process new token first to ensure market cap is captured
+            if token_address not in self.hour_tokens.get(current_hour, {}):
+                token_data = {
+                    'name': token_name,
+                    'chart_url': dexscreener_url,
+                    'source': 'cielo',
+                    'user': user,
+                    'message_embed': message_embed,
+                    'chain': chain or 'unknown'  # Use provided chain or default
                 }
+                self.process_new_token(token_address, token_data)
+            
+            # Update trade tracking
+            if token_address not in self.hourly_trades:
+                self.hourly_trades[token_address] = {'buys': 0.0, 'sells': 0.0, 'users': {}}
             
             trade_data = self.hourly_trades[token_address]
-            
-            # Update amounts
             if trade_type == 'buy':
                 trade_data['buys'] += amount
-                action = 'bought'
             else:
                 trade_data['sells'] += amount
-                action = 'sold'
             
-            # Update user info
             if user not in trade_data['users']:
                 trade_data['users'][user] = {
-                    'message_link': message_link, 
+                    'message_link': message_link,
                     'actions': set(),
                     'is_first_trade': is_first_trade
                 }
-            trade_data['users'][user]['actions'].add(action)
-
-            logging.info(f"Successfully tracked trade for token {token_address} (first trade: {is_first_trade})")
+            trade_data['users'][user]['actions'].add(trade_type)
             
-            # Add debug logging after adding to hour_tokens
-            logging.info(f"Updated hour tokens: {list(self.hour_tokens.get(self.current_hour_key, {}).keys())}")
-            logging.info(f"Updated trade data: {self.hourly_trades.get(token_address)}")
+            logging.info(f"Tracked {trade_type}: {user} {trade_type} {token_name} for ${amount}")
+            
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
+
+    def _format_trade_info(self, trade_data):
+        """Format trade information for a token"""
+        action_groups = {
+            'bought': [],
+            'sold': [],
+            'bought and sold': []
+        }
+        
+        for user, user_data in trade_data['users'].items():
+            actions = user_data['actions']
+            user_link = f"[{user}]({user_data['message_link']})"
+            is_first = user_data.get('is_first_trade', False)
+            
+            if 'bought' in actions and 'sold' in actions:
+                action_groups['bought and sold'].append((user_link, is_first))
+            elif 'bought' in actions:
+                action_groups['bought'].append((user_link, is_first))
+            elif 'sold' in actions:
+                action_groups['sold'].append((user_link, is_first))
+        
+        trade_parts = []
+        
+        def format_amount(amount):
+            return format_large_number(amount) if amount >= 1000 else str(int(amount))
+        
+        if action_groups['bought']:
+            users, is_first = zip(*action_groups['bought'])
+            amount = format_amount(trade_data['buys'])
+            star = " ⭐" if any(is_first) else ""
+            trade_parts.append(f"{', '.join(users)} bought ${amount}{star}")
+        
+        if action_groups['sold']:
+            users, _ = zip(*action_groups['sold'])
+            amount = format_amount(trade_data['sells'])
+            trade_parts.append(f"{', '.join(users)} sold ${amount}")
+        
+        if action_groups['bought and sold']:
+            users, is_first = zip(*action_groups['bought and sold'])
+            buy_amount = format_amount(trade_data['buys'])
+            sell_amount = format_amount(trade_data['sells'])
+            star = " ⭐" if any(is_first) else ""
+            trade_parts.append(f"{', '.join(users)} bought ${buy_amount} and sold ${sell_amount}{star}")
+        
+        return '\n'.join(trade_parts) if trade_parts else ""

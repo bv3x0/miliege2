@@ -110,122 +110,65 @@ class TokenTracker:
 
     def log_token(self, contract: str, data: Dict[str, Any], source: str, user: str = None) -> None:
         """Log a token, maintaining only the most recent tokens but preserving first alert data."""
-        # Remove oldest tokens if max size reached in memory
-        while len(self.tokens) >= self.max_tokens:
-            self.tokens.popitem(last=False)
-        
-        current_time = datetime.now()
-        
-        # Ensure market cap is properly formatted when first seeing a token
-        if contract not in self.tokens and 'initial_market_cap' in data:
-            market_cap_value = data['initial_market_cap']
-            if isinstance(market_cap_value, (int, float)):
-                if market_cap_value >= 1000000000:
-                    formatted_mcap = f"${format_large_number(market_cap_value/1000000000)}B"
-                elif market_cap_value >= 1000000:
-                    formatted_mcap = f"${format_large_number(market_cap_value/1000000)}M"
-                elif market_cap_value >= 1000:
-                    formatted_mcap = f"${format_large_number(market_cap_value/1000)}K"
-                else:
-                    formatted_mcap = f"${format_large_number(market_cap_value)}"
-                data['initial_market_cap_formatted'] = formatted_mcap
-                logging.info(f"Formatted initial market cap for {contract}: {formatted_mcap}")
-        
-        # Update in-memory cache
-        if contract in self.tokens:
-            # Update timestamp but preserve original source, user, and initial market cap
-            self.tokens[contract].update({
-                **data,
-                'timestamp': current_time,
-                # Preserve these fields from the first alert
-                'source': self.tokens[contract]['source'],
-                'user': self.tokens[contract]['user'],
-                'initial_market_cap': self.tokens[contract]['initial_market_cap'],
-                'initial_market_cap_formatted': self.tokens[contract]['initial_market_cap_formatted'],
-            })
-        else:
-            # This is the first alert for this token
-            self.tokens[contract] = {
-                **data,
-                'timestamp': current_time,
-                'source': source,
-                'user': user
-            }
-        
-        # Update database if session is available
-        if self.session_factory:
-            try:
-                # Check if token exists in database
-                db_token = self.session_factory.query(Token).filter_by(contract_address=contract).first()
-                
-                if db_token:
-                    # Update existing token
-                    db_token.name = data.get('name', db_token.name)
-                    db_token.chart_url = data.get('chart_url', db_token.chart_url)
-                    db_token.chain = data.get('chain', db_token.chain)
-                    db_token.current_market_cap = data.get('market_cap_value', db_token.current_market_cap)
-                    db_token.current_market_cap_formatted = data.get('market_cap', db_token.current_market_cap_formatted)
-                    db_token.message_id = data.get('message_id', db_token.message_id)
-                    db_token.channel_id = data.get('channel_id', db_token.channel_id)
-                    db_token.guild_id = data.get('guild_id', db_token.guild_id)
-                    db_token.last_updated = current_time
-                    
-                    # Create market cap update record if market cap was provided
-                    if 'market_cap_value' in data or 'market_cap' in data:
-                        market_update = MarketCapUpdate(
-                            token_id=db_token.id,
-                            market_cap=data.get('market_cap_value'),
-                            market_cap_formatted=data.get('market_cap'),
-                            timestamp=current_time
-                        )
-                        self.session_factory.add(market_update)
-                    
-                else:
-                    # Create new token record
-                    new_token = Token(
-                        contract_address=contract,
-                        name=data.get('name', 'Unknown'),
-                        chain=data.get('chain'),
-                        chart_url=data.get('chart_url'),
-                        initial_market_cap=data.get('initial_market_cap'),
-                        initial_market_cap_formatted=data.get('initial_market_cap_formatted'),
-                        current_market_cap=data.get('market_cap_value'),
-                        current_market_cap_formatted=data.get('market_cap'),
-                        message_id=data.get('message_id'),
-                        channel_id=data.get('channel_id'),
-                        guild_id=data.get('guild_id'),
-                        source=source,
-                        credited_user=user,
-                        first_seen=current_time,
-                        last_updated=current_time
-                    )
-                    self.session_factory.add(new_token)
-                    
-                    # Flush to get the new token ID
-                    self.session_factory.flush()
-                    
-                    # Create initial market cap record if provided
-                    if 'market_cap_value' in data or 'market_cap' in data:
-                        market_update = MarketCapUpdate(
-                            token_id=new_token.id,
-                            market_cap=data.get('market_cap_value'),
-                            market_cap_formatted=data.get('market_cap'),
-                            timestamp=current_time
-                        )
-                        self.session_factory.add(market_update)
-                
-                # Commit changes
-                self.session_factory.commit()
-                logging.info(f"Token {contract} saved to database")
-                
-            except SQLAlchemyError as e:
-                logging.error(f"Database error when logging token {contract}: {e}")
-                if self.session_factory:
-                    self.session_factory.rollback()
-            except Exception as e:
-                logging.error(f"Unexpected error when logging token {contract}: {e}")
-                if self.session_factory:
-                    self.session_factory.rollback()
+        try:
+            current_time = datetime.now()
+            
+            # Remove oldest tokens if max size reached
+            while len(self.tokens) >= self.max_tokens:
+                self.tokens.popitem(last=False)
+            
+            # Update or create token data
+            if contract in self.tokens:
+                # Update timestamp but preserve original source, user, and initial market cap
+                self.tokens[contract].update({
+                    **data,
+                    'timestamp': current_time,
+                    'source': self.tokens[contract]['source'],
+                    'user': self.tokens[contract]['user'],
+                    'initial_market_cap': self.tokens[contract].get('initial_market_cap'),
+                    'initial_market_cap_formatted': self.tokens[contract].get('initial_market_cap_formatted'),
+                })
+            else:
+                # First alert for this token
+                self.tokens[contract] = {
+                    **data,
+                    'timestamp': current_time,
+                    'source': source,
+                    'user': user
+                }
+            
+            # Update database if session available
+            if self.db_session:
+                self._update_database(contract, self.tokens[contract])
+            
+        except Exception as e:
+            logging.error(f"Error logging token {contract}: {e}", exc_info=True)
+
+    def _update_database(self, contract: str, token_data: Dict[str, Any]):
+        """Update token information in database"""
+        try:
+            db_token = self.db_session.query(Token).filter_by(contract_address=contract).first()
+            
+            if db_token:
+                # Update existing token while preserving initial values
+                for key, value in token_data.items():
+                    if key not in ['initial_market_cap', 'initial_market_cap_formatted'] or not getattr(db_token, key):
+                        if hasattr(db_token, key):
+                            setattr(db_token, key, value)
+            else:
+                # Create new token record
+                new_token = Token(
+                    contract_address=contract,
+                    **{k: v for k, v in token_data.items() if hasattr(Token, k)}
+                )
+                self.db_session.add(new_token)
+            
+            self.db_session.commit()
+            
+        except Exception as e:
+            logging.error(f"Database error updating token {contract}: {e}")
+            if self.db_session:
+                self.db_session.rollback()
 
     def log_buy(self, token_name, buyer_id):
         if token_name not in self.buy_counts:

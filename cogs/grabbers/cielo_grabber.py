@@ -573,37 +573,8 @@ class CieloGrabber(commands.Cog):
                 embed = message.embeds[0]
                 logging.info(f"Raw embed data: {embed.to_dict()}")
 
-            # Extract initial market cap from the first field's value
-            initial_mcap_value = None
-            if message.embeds and message.embeds[0].fields:
-                swap_info_field = message.embeds[0].fields[0].value
-                # Look for MC: $X.YZ[K|M|B] pattern
-                mc_match = re.search(r'MC: \$([0-9,.]+[KMB]?)', swap_info_field)
-                if mc_match:
-                    mcap_str = mc_match.group(1)
-                    try:
-                        # Remove commas and convert K/M/B to actual numbers
-                        clean_mcap = mcap_str.replace(',', '')
-                        if 'K' in clean_mcap:
-                            initial_mcap_value = float(clean_mcap.replace('K', '')) * 1000
-                        elif 'M' in clean_mcap:
-                            initial_mcap_value = float(clean_mcap.replace('M', '')) * 1000000
-                        elif 'B' in clean_mcap:
-                            initial_mcap_value = float(clean_mcap.replace('B', '')) * 1000000000
-                        else:
-                            initial_mcap_value = float(clean_mcap)
-                        logging.info(f"Extracted initial market cap: {initial_mcap_value} from '{mcap_str}'")
-                    except (ValueError, TypeError) as e:
-                        logging.error(f"Error parsing initial market cap '{mcap_str}': {e}")
-                else:
-                    logging.warning(f"Could not find market cap in swap info: {swap_info_field}")
-
-            # Add debug logging
-            logging.info(f"Starting trade processing - DigestCog present: {self.digest_cog is not None}, NewCoinCog present: {self.newcoin_cog is not None}")
-            logging.info(f"Trade details - User: {user}, Token: {token_address}")
-            
             # Parse swap info
-            swap_pattern = r'(?:⭐️\s+)?Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)\s+for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*(?:\s+@\s+\$[0-9.]+ \| MC: \$[0-9.]+[KMB]?)?'
+            swap_pattern = r'(?:⭐️\s+)?Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)\s+for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*'
             match = re.search(swap_pattern, swap_info)
             
             if not match:
@@ -611,14 +582,9 @@ class CieloGrabber(commands.Cog):
                 return
                 
             from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
-            
-            # Add debug logging for token classification
-            logging.info(f"From token ({from_token}) is major: {from_token.upper() in self.token_tracker.major_tokens}")
-            logging.info(f"To token ({to_token}) is major: {to_token.upper() in self.token_tracker.major_tokens}")
-            
             dollar_amount = float(dollar_amount.replace(',', ''))
             
-            # Check if this is a first-time trade (has star emoji)
+            # Check if this is a first-time trade
             is_first_trade = '⭐️' in swap_info
             
             # Create message link
@@ -629,25 +595,16 @@ class CieloGrabber(commands.Cog):
             
             # If it's a first trade, trigger the new coin alert
             if is_first_trade and self.newcoin_cog:
-                logging.info(f"Triggering new coin alert for {token_address}")
                 await self.newcoin_cog.process_new_coin(
-                    token_address,
-                    message,
-                    user,
-                    swap_info,
-                    dexscreener_url,
-                    chain_info
+                    token_address, message, user, swap_info, dexscreener_url, chain_info
                 )
             
             # Check if it's a buy or sell based on token types
             from_is_major = from_token.upper() in self.token_tracker.major_tokens
             to_is_major = to_token.upper() in self.token_tracker.major_tokens
             
-            # Add logging before calling track_trade
-            logging.info(f"About to call DigestCog.track_trade for {token_address}")
-
             if from_is_major and not to_is_major:
-                # Track buy in digest with initial market cap
+                # Track buy in digest
                 if self.digest_cog:
                     self.digest_cog.track_trade(
                         token_address,
@@ -659,10 +616,9 @@ class CieloGrabber(commands.Cog):
                         dexscreener_url,
                         swap_info=swap_info,
                         message_embed=message.embeds[0].to_dict(),
-                        is_first_trade=is_first_trade,
-                        initial_market_cap=initial_mcap_value
+                        is_first_trade=is_first_trade
                     )
-                    logging.info(f"Called track_trade for buy: {user} bought {to_token} (initial mcap: {initial_mcap_value})")
+                    logging.info(f"Called track_trade for buy: {user} bought {to_token}")
             elif not from_is_major and to_is_major:
                 # Track sell in digest
                 if self.digest_cog:
@@ -676,23 +632,6 @@ class CieloGrabber(commands.Cog):
                         dexscreener_url
                     )
                     logging.info(f"Called track_trade for sell: {user} sold {from_token}")
-            elif not from_is_major and not to_is_major:
-                # Both tokens are non-major, but we only have the contract address for the token being bought
-                if self.digest_cog:
-                    # Track only the buy of the to_token since that's the one we have the address for
-                    self.digest_cog.track_trade(
-                        token_address,  # This is the address of the token being bought
-                        to_token,
-                        user,
-                        dollar_amount,
-                        'buy',
-                        message_link,
-                        dexscreener_url,
-                        swap_info=swap_info,
-                        message_embed=message.embeds[0].to_dict(),
-                        is_first_trade=is_first_trade
-                    )
-                    logging.info(f"Called track_trade for buy: {user} bought {to_token}")
 
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
