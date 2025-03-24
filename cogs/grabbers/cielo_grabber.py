@@ -615,8 +615,9 @@ class CieloGrabber(commands.Cog):
                         message_link,
                         dexscreener_url,
                         swap_info=swap_info,
-                        message_embed=message.embeds[0].to_dict(),
-                        is_first_trade=is_first_trade
+                        message_embed=message.embeds[0].to_dict() if message.embeds else None,
+                        is_first_trade=is_first_trade,
+                        chain=chain_info
                     )
                     logging.info(f"Called track_trade for buy: {user} bought {to_token}")
             elif not from_is_major and to_is_major:

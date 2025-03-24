@@ -284,9 +284,25 @@ class DigestCog(commands.Cog):
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
-                if trade_info and source.lower() == 'cielo':
-                    new_lines.append(trade_info)
+                
+                # If we have trade data and it's from Cielo, always show the trade info
+                if contract in self.hourly_trades and source.lower() == 'cielo':
+                    trade_data = self.hourly_trades[contract]
+                    if trade_data.get('sells', 0) > 0 or trade_data.get('buys', 0) > 0:
+                        # Format trade info with proper links
+                        trade_info = self._format_trade_info(trade_data)
+                        if trade_info:
+                            new_lines.append(trade_info)
+                        else:
+                            # Fallback if trade info formatting failed
+                            source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+                            new_lines.append(source_line)
+                    else:
+                        # Fallback for no trade amounts
+                        source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+                        new_lines.append(source_line)
                 else:
+                    # Non-Cielo source or no trade data
                     source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                     new_lines.append(source_line)
                 
@@ -363,6 +379,31 @@ class DigestCog(commands.Cog):
         logging.info(f"Hourly digest scheduled to start in {wait_seconds} seconds (at {next_hour})")
         await asyncio.sleep(wait_seconds)
         
+    def parse_market_cap(self, mcap_str):
+        """Parse market cap string to float value"""
+        try:
+            if not mcap_str or mcap_str == 'N/A':
+                return None
+            
+            # Remove $ and any commas
+            clean_mcap = mcap_str.replace('$', '').replace(',', '')
+            
+            # Handle K/M/B suffixes
+            multiplier = 1
+            if 'K' in clean_mcap.upper():
+                multiplier = 1000
+                clean_mcap = clean_mcap.upper().replace('K', '')
+            elif 'M' in clean_mcap.upper():
+                multiplier = 1000000
+                clean_mcap = clean_mcap.upper().replace('M', '')
+            elif 'B' in clean_mcap.upper():
+                multiplier = 1000000000
+                clean_mcap = clean_mcap.upper().replace('B', '')
+            
+            return float(clean_mcap) * multiplier
+        except (ValueError, TypeError):
+            return None
+
     def process_new_token(self, contract, token_data):
         """Process a new token and add it to both the global tracker and hour-specific tracker"""
         current_hour = self.current_hour_key
@@ -373,29 +414,14 @@ class DigestCog(commands.Cog):
                 embed_data = token_data['message_embed']
                 first_field = next((f['value'] for f in embed_data['fields'] if 'value' in f), None)
                 if first_field:
-                    mc_match = re.search(r'MC: \$([0-9,.]+[KMB]?)', first_field)
+                    mc_match = re.search(r'MC:\s*\$([0-9,.]+[KMB]?)', first_field)
                     if mc_match:
                         mcap_str = mc_match.group(1)
-                        # Handle K/M/B suffixes
-                        multiplier = 1
-                        clean_mcap = mcap_str.upper()
-                        if 'K' in clean_mcap:
-                            multiplier = 1000
-                            clean_mcap = clean_mcap.replace('K', '')
-                        elif 'M' in clean_mcap:
-                            multiplier = 1000000
-                            clean_mcap = clean_mcap.replace('M', '')
-                        elif 'B' in clean_mcap:
-                            multiplier = 1000000000
-                            clean_mcap = clean_mcap.replace('B', '')
-                        
-                        try:
-                            mcap_value = float(clean_mcap.replace(',', '')) * multiplier
+                        mcap_value = self.parse_market_cap(mcap_str)
+                        if mcap_value is not None:
                             token_data['initial_market_cap'] = mcap_value
                             token_data['initial_market_cap_formatted'] = f"${mcap_str}"
                             logging.info(f"Extracted initial market cap: {mcap_str} for {token_data.get('name', 'Unknown')}")
-                        except ValueError:
-                            logging.error(f"Failed to convert market cap value: {clean_mcap}")
             except Exception as e:
                 logging.error(f"Error extracting initial market cap: {e}")
         
@@ -409,7 +435,8 @@ class DigestCog(commands.Cog):
         
         trade_data = self.hourly_trades[contract]
         
-        # Update amounts
+        # Update amounts and determine action
+        action = None
         if 'buy' in token_data:
             trade_data['buys'] += token_data['buy']
             action = 'bought'
@@ -417,17 +444,18 @@ class DigestCog(commands.Cog):
             trade_data['sells'] += token_data['sell']
             action = 'sold'
         
-        # Update user info
-        if 'user' in token_data:
+        # Update user info only if we have an action
+        if action and 'user' in token_data:
             if token_data['user'] not in trade_data['users']:
                 trade_data['users'][token_data['user']] = {
                     'message_link': token_data.get('message_link', ''),
                     'actions': set(),
                     'is_first_trade': token_data.get('is_first_trade', False)
                 }
-            trade_data['users'][token_data['user']]['actions'].add(action)
+            if action:  # Only add action if it was determined
+                trade_data['users'][token_data['user']]['actions'].add(action)
 
-        logging.info(f"Tracked trade: {token_data['user']} {action} {token_data['name']} for ${token_data['buy'] if 'buy' in token_data else token_data['sell']}")
+            logging.info(f"Tracked trade: {token_data['user']} {action} {token_data['name']} for ${token_data['buy'] if 'buy' in token_data else token_data['sell']}")
 
     @commands.command()
     async def digest(self, ctx):
@@ -550,15 +578,31 @@ class DigestCog(commands.Cog):
             
             # Process new token first to ensure market cap is captured
             if token_address not in self.hour_tokens.get(current_hour, {}):
+                # Extract initial market cap from swap info if available
+                initial_mcap = None
+                initial_mcap_formatted = 'N/A'
+                
+                if swap_info:
+                    mc_match = re.search(r'MC:\s*\$([0-9,.]+[KMB]?)', swap_info)
+                    if mc_match:
+                        mcap_str = mc_match.group(1)
+                        initial_mcap = self.parse_market_cap(f"${mcap_str}")
+                        initial_mcap_formatted = f"${mcap_str}"
+                        logging.info(f"Extracted initial market cap from swap info: {mcap_str}")
+                
                 token_data = {
                     'name': token_name,
                     'chart_url': dexscreener_url,
                     'source': 'cielo',
                     'user': user,
-                    'message_embed': message_embed,
-                    'chain': chain or 'unknown'  # Use provided chain or default
+                    'chain': chain or 'unknown',
+                    'initial_market_cap': initial_mcap,
+                    'initial_market_cap_formatted': initial_mcap_formatted,
+                    trade_type: amount  # Add the trade amount directly
                 }
-                self.process_new_token(token_address, token_data)
+                
+                # Add to hour tokens first
+                self.hour_tokens[current_hour][token_address] = token_data
             
             # Update trade tracking
             if token_address not in self.hourly_trades:
@@ -570,12 +614,22 @@ class DigestCog(commands.Cog):
             else:
                 trade_data['sells'] += amount
             
+            # Debug log the message link
+            logging.info(f"Tracking trade with message_link: {message_link}")
+            
             if user not in trade_data['users']:
                 trade_data['users'][user] = {
-                    'message_link': message_link,
+                    'message_link': message_link,  # Make sure this is being set
                     'actions': set(),
                     'is_first_trade': is_first_trade
                 }
+                logging.info(f"Created new user entry for {user} with link {message_link}")
+            else:
+                # Update message link if not already set
+                if not trade_data['users'][user].get('message_link'):
+                    trade_data['users'][user]['message_link'] = message_link
+                    logging.info(f"Updated message link for existing user {user}")
+            
             trade_data['users'][user]['actions'].add(trade_type)
             
             logging.info(f"Tracked {trade_type}: {user} {trade_type} {token_name} for ${amount}")
@@ -591,9 +645,13 @@ class DigestCog(commands.Cog):
             'bought and sold': []
         }
         
+        # Debug logging to verify message links
         for user, user_data in trade_data['users'].items():
+            logging.info(f"Trade data for {user}: message_link={user_data.get('message_link', 'None')}")
+            
             actions = user_data['actions']
-            user_link = f"[{user}]({user_data['message_link']})"
+            # Only create user link if we have a message_link
+            user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
             is_first = user_data.get('is_first_trade', False)
             
             if 'bought' in actions and 'sold' in actions:
