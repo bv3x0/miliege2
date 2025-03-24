@@ -125,7 +125,9 @@ class DigestCog(commands.Cog):
         """Get the current hour key and ensure the hour bucket exists"""
         ny_time = datetime.now(self.ny_tz)
         key = ny_time.strftime("%Y-%m-%d-%H")
+        logging.info(f"Getting current hour key: {key}")
         if key not in self.hour_tokens:
+            logging.info(f"Creating new hour bucket for {key}")
             self.hour_tokens[key] = OrderedDict()
         return key
 
@@ -322,49 +324,52 @@ class DigestCog(commands.Cog):
         """Automatically post digest every hour"""
         try:
             logging.info("Starting hourly digest task")
+            now = datetime.now(self.ny_tz)
+            logging.info(f"Current NY time: {now}")
+            
             channel = self.bot.get_channel(self.channel_id)
             if not channel:
                 logging.error(f"Could not find channel {self.channel_id}")
                 return
 
-            # Add retry logic for critical operations
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    # Process tokens from the hour that just ended
-                    hour_key = self.current_hour_key
-                    
-                    tokens_to_report = self.hour_tokens.get(hour_key, OrderedDict())
-                    
-                    if tokens_to_report:
-                        embeds = await self.create_digest_embed(tokens_to_report, is_hourly=True)
-                        if embeds:
-                            for embed in embeds:
-                                await channel.send(embed=embed)
-                            # Clear data only after successful send
-                            self._clear_hour_data(hour_key)
-                    break  # Success, exit retry loop
-                except discord.HTTPException as e:
-                    if attempt == max_retries - 1:  # Last attempt
-                        raise  # Re-raise if all retries failed
-                    await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
-                
+            # Get the previous hour's key since we want to digest what just finished
+            previous_hour = (now - timedelta(hours=1)).strftime("%Y-%m-%d-%H")
+            logging.info(f"Processing digest for hour: {previous_hour}")
+            
+            tokens_to_report = self.hour_tokens.get(previous_hour, OrderedDict())
+            logging.info(f"Found {len(tokens_to_report)} tokens to report for hour {previous_hour}")
+            
+            if tokens_to_report:
+                embeds = await self.create_digest_embed(tokens_to_report, is_hourly=True)
+                if embeds:
+                    for embed in embeds:
+                        await channel.send(embed=embed)
+                    # Clear data only after successful send
+                    self._clear_hour_data(previous_hour)
+                    logging.info(f"Successfully posted and cleared digest for hour {previous_hour}")
+                else:
+                    logging.warning(f"No embeds created for {len(tokens_to_report)} tokens")
+            else:
+                logging.info(f"No tokens to report for hour {previous_hour}")
+
         except Exception as e:
             logging.error(f"Critical error in hourly digest: {e}", exc_info=True)
-            if self.monitor:
-                self.monitor.record_error()
-            else:
-                self.error_count += 1
 
     @hourly_digest.before_loop
     async def before_hourly_digest(self):
         """Wait until the start of the next hour before starting the digest loop"""
         await self.bot.wait_until_ready()
         logging.info("Waiting for bot to be ready before starting hourly digest")
-        now = datetime.utcnow()
+        
+        # Use NY timezone consistently
+        now = datetime.now(self.ny_tz)
         next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         wait_seconds = (next_hour - now).total_seconds()
-        logging.info(f"Hourly digest scheduled to start in {wait_seconds} seconds (at {next_hour})")
+        
+        logging.info(f"Current NY time: {now}")
+        logging.info(f"Next digest scheduled for NY time: {next_hour}")
+        logging.info(f"Waiting {wait_seconds} seconds until next digest")
+        
         await asyncio.sleep(wait_seconds)
         
     def parse_market_cap(self, mcap_str):
@@ -487,10 +492,14 @@ class DigestCog(commands.Cog):
             logging.info("DigestCog: Token tracker hook already installed")
             return
             
+        # Add debug logging
+        logging.info("DigestCog: Installing token tracker hook")
+        
         # Replace the token_tracker's log_token method with our wrapped version
         original_log_token = self.token_tracker.log_token
         
         def wrapped_log_token(contract, data, source, user=None):
+            logging.info(f"DigestCog hook: Processing token {data.get('name', contract)} from {source}")
             # Call the original method
             result = original_log_token(contract, data, source, user)
             
