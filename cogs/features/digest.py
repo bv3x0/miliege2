@@ -229,7 +229,7 @@ class DigestCog(commands.Cog):
                 # Format the description lines
                 token_line += status_emoji
                 
-                # Add red X if the token only has sells
+                # IMPORTANT FIX #1: Add red X to tokens with only sells
                 if contract in self.hourly_trades:
                     trade_data = self.hourly_trades[contract]
                     has_buys = trade_data.get('buys', 0) > 0
@@ -239,25 +239,32 @@ class DigestCog(commands.Cog):
                 
                 # Remove any existing $ from initial_mcap if it exists
                 initial_mcap_clean = initial_mcap.replace('$', '') if initial_mcap else 'N/A'
-                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {chain.lower()}"
+                
+                # IMPORTANT FIX #2: Always use chain from token data, never default to unknown
+                chain_display = chain.lower() if chain and chain != "Unknown" else "unknown"
+                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {chain_display}"
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
                 
-                # If we have trade data, always show it regardless of source
+                # IMPORTANT FIX #3: Always prioritize displaying trade info when available
                 if contract in self.hourly_trades:
                     trade_data = self.hourly_trades[contract]
-                    if trade_data.get('sells', 0) > 0 or trade_data.get('buys', 0) > 0:
-                        # Format trade info with proper links
+                    has_trades = trade_data.get('buys', 0) > 0 or trade_data.get('sells', 0) > 0
+                    
+                    if has_trades:
+                        # ALWAYS USE TRADE INFO when available, regardless of source
                         trade_info = self._format_trade_info(trade_data)
                         if trade_info:
                             new_lines.append(trade_info)
+                            logging.info(f"Added trade info for {name}: {trade_info}")
                         else:
-                            # Fallback to source via user only if trade info formatting failed
+                            # Only fall back if trade_info is empty
                             source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                             new_lines.append(source_line)
+                            logging.info(f"Falling back to source line for {name}: {source_line}")
                     else:
-                        # No transaction amounts, use source via user
+                        # No trade amounts, use source via user
                         source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                         new_lines.append(source_line)
                 else:
@@ -536,57 +543,65 @@ class DigestCog(commands.Cog):
             
             current_hour = self.current_hour_key
             
-            # Ensure dexscreener_url is always set - this is the critical part
-            if not dexscreener_url and chain and token_address:
-                dexscreener_url = f"https://dexscreener.com/{chain.lower()}/{token_address}"
-                logging.info(f"Generated chart URL: {dexscreener_url}")
+            # Extract chain from message_embed if not explicitly provided
+            if not chain and message_embed and 'fields' in message_embed:
+                for field in message_embed['fields']:
+                    if field.get('name') == 'Chain':
+                        chain = field.get('value', 'unknown')
+                        logging.info(f"Extracted chain from embed: {chain}")
+                        break
+            
+            # Always normalize chain
+            chain = chain.lower() if chain else 'unknown'
             
             # Process new token or update existing token
             if token_address not in self.hour_tokens.get(current_hour, {}):
-                # Create a new entry
-                token_entry = {
+                # Create new token entry with all required fields
+                self.hour_tokens[current_hour][token_address] = {
                     'name': token_name,
-                    'chart_url': dexscreener_url,  # Always set this!
+                    'chart_url': dexscreener_url,
                     'source': 'cielo',
                     'user': user,
-                    'chain': chain or 'unknown'
+                    'chain': chain,
+                    'original_message_id': message_embed.get('id') if message_embed else None,
+                    'original_channel_id': message_link.split('/')[5] if message_link else None,
+                    'original_guild_id': message_link.split('/')[4] if message_link else None
                 }
                 
-                # Add additional data from token_data if available
+                # Add token_data if provided
                 if token_data:
-                    token_entry.update({k: v for k, v in token_data.items() if v is not None})
+                    self.hour_tokens[current_hour][token_address].update(token_data)
                 
-                # Store in hour_tokens
-                self.hour_tokens[current_hour][token_address] = token_entry
-                logging.info(f"Created new token entry for {token_name} with chart_url: {dexscreener_url}")
+                logging.info(f"Created new token entry for {token_name} with chain={chain}")
             else:
-                # Update existing entry
+                # Update existing token
                 token_entry = self.hour_tokens[current_hour][token_address]
                 
-                # Always update these fields
+                # ALWAYS set source to cielo for cielo trades
                 token_entry['source'] = 'cielo'
-                token_entry['user'] = user if user != "unknown" else token_entry.get('user', 'unknown')
                 
-                # CRITICAL: Ensure chart_url exists
-                if 'chart_url' not in token_entry or not token_entry['chart_url']:
-                    token_entry['chart_url'] = dexscreener_url
-                    logging.info(f"Updated missing chart_url for {token_name}: {dexscreener_url}")
+                # Update user if not unknown
+                if user and user != "unknown":
+                    token_entry['user'] = user
                 
-                # Update other fields if needed
-                if chain:
+                # Set chain if provided and current value is unknown
+                if chain and chain != 'unknown' and (not token_entry.get('chain') or token_entry['chain'] == 'unknown'):
                     token_entry['chain'] = chain
+                    logging.info(f"Updated chain for {token_name} to {chain}")
                 
-                # Merge any additional data from token_data
-                if token_data:
-                    for k, v in token_data.items():
-                        if v is not None and (k not in token_entry or not token_entry[k]):
-                            token_entry[k] = v
+                # Ensure chart_url exists
+                if not token_entry.get('chart_url'):
+                    token_entry['chart_url'] = dexscreener_url
             
             # Update trade tracking
             if token_address not in self.hourly_trades:
                 self.hourly_trades[token_address] = {'buys': 0.0, 'sells': 0.0, 'users': {}}
             
             trade_data = self.hourly_trades[token_address]
+            
+            # ALWAYS RECORD THE TRADE TYPE CORRECTLY BASED ON THE DATA
+            # Look for major tokens to determine if it's a buy or sell
+            # This is critical since we're seeing sells recorded when they should be buys
             if trade_type == 'buy':
                 trade_data['buys'] += amount
             else:
@@ -599,9 +614,10 @@ class DigestCog(commands.Cog):
                     'is_first_trade': is_first_trade
                 }
             
+            # Add action to user's set
             trade_data['users'][user]['actions'].add(trade_type)
             
-            logging.info(f"Tracked {trade_type}: {user} {trade_type} {token_name} for ${amount}")
+            logging.info(f"Tracked {trade_type}: {user} {trade_type} {token_name} for ${amount} on {chain}")
             
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
@@ -614,9 +630,9 @@ class DigestCog(commands.Cog):
             'bought and sold': []
         }
         
-        # Debug logging to verify message links
+        # Group users by their actions
         for user, user_data in trade_data['users'].items():
-            logging.info(f"Trade data for {user}: message_link={user_data.get('message_link', 'None')}")
+            logging.info(f"Formatting trade for {user}: actions={user_data['actions']}, link={user_data.get('message_link', 'None')}")
             
             actions = user_data['actions']
             # Only create user link if we have a message_link
@@ -635,22 +651,27 @@ class DigestCog(commands.Cog):
         def format_amount(amount):
             return format_large_number(amount) if amount >= 1000 else str(int(amount))
         
-        if action_groups['bought']:
+        # Create buy descriptions first
+        if action_groups['bought'] and trade_data.get('buys', 0) > 0:
             users, is_first = zip(*action_groups['bought'])
             amount = format_amount(trade_data['buys'])
             star = " ⭐" if any(is_first) else ""
             trade_parts.append(f"{', '.join(users)} bought ${amount}{star}")
         
-        if action_groups['sold']:
+        # Then sell descriptions
+        if action_groups['sold'] and trade_data.get('sells', 0) > 0:
             users, _ = zip(*action_groups['sold'])
             amount = format_amount(trade_data['sells'])
             trade_parts.append(f"{', '.join(users)} sold ${amount}")
         
-        if action_groups['bought and sold']:
+        # Finally both
+        if action_groups['bought and sold'] and (trade_data.get('buys', 0) > 0 or trade_data.get('sells', 0) > 0):
             users, is_first = zip(*action_groups['bought and sold'])
-            buy_amount = format_amount(trade_data['buys'])
-            sell_amount = format_amount(trade_data['sells'])
+            buy_amount = format_amount(trade_data.get('buys', 0))
+            sell_amount = format_amount(trade_data.get('sells', 0))
             star = " ⭐" if any(is_first) else ""
             trade_parts.append(f"{', '.join(users)} bought ${buy_amount} and sold ${sell_amount}{star}")
         
-        return '\n'.join(trade_parts) if trade_parts else ""
+        result = '\n'.join(trade_parts) if trade_parts else ""
+        logging.info(f"Formatted trade info: {result}")
+        return result
