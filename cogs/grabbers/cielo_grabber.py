@@ -654,20 +654,41 @@ class CieloGrabber(commands.Cog):
             from_is_major = from_token.upper() in self.token_tracker.major_tokens
             to_is_major = to_token.upper() in self.token_tracker.major_tokens
             
-            if from_is_major and not to_is_major:
-                # Track buy in digest
-                if self.digest_cog:
-                    # Add initial market cap to token data
-                    token_data = {
-                        'name': to_token,
-                        'initial_market_cap': initial_mcap if mc_match else None,
-                        'initial_market_cap_formatted': initial_mcap_formatted if mc_match else 'N/A',
-                        'message_embed': message.embeds[0].to_dict() if message.embeds else None,
-                        'original_message_id': message.id,
-                        'original_channel_id': message.channel.id,
-                        'original_guild_id': message.guild.id if message.guild else None
-                    }
-                    
+            # Debug logging
+            logging.info(f"Trade detection - from_token: {from_token} (is_major: {from_is_major}), to_token: {to_token} (is_major: {to_is_major})")
+            
+            if self.digest_cog:
+                # Prepare token data for tracking
+                token_data = {
+                    'initial_market_cap': initial_mcap if mc_match else None,
+                    'initial_market_cap_formatted': initial_mcap_formatted if mc_match else 'N/A',
+                    'message_embed': message.embeds[0].to_dict() if message.embeds else None,
+                    'original_message_id': message.id,
+                    'original_channel_id': message.channel.id,
+                    'original_guild_id': message.guild.id if message.guild else None
+                }
+                
+                # SIMPLIFIED TRADE LOGIC:
+                # 1. If to_token is major (SOL, ETH, USDC, etc.) → Track as SELL of from_token
+                # 2. In all other cases → Track as BUY of to_token
+                
+                if to_is_major:
+                    # User is selling a token for a major token (SOL, ETH, USDC, etc.)
+                    token_data['name'] = from_token
+                    self.digest_cog.track_trade(
+                        token_address,
+                        from_token,
+                        user,
+                        dollar_amount,
+                        'sell',
+                        message_link,
+                        dexscreener_url,
+                        token_data=token_data
+                    )
+                    logging.info(f"Tracked as sell: {user} sold {from_token} for {to_token}")
+                else:
+                    # User is buying a non-major token (this includes both major→non-major and non-major→non-major)
+                    token_data['name'] = to_token
                     self.digest_cog.track_trade(
                         token_address,
                         to_token,
@@ -682,32 +703,7 @@ class CieloGrabber(commands.Cog):
                         chain=chain_info,
                         token_data=token_data
                     )
-                    logging.info(f"Called track_trade for buy: {user} bought {to_token}")
-            elif not from_is_major and to_is_major:
-                # Track sell in digest
-                if self.digest_cog:
-                    # Similar changes for sell...
-                    token_data = {
-                        'name': from_token,
-                        'initial_market_cap': initial_mcap if mc_match else None,
-                        'initial_market_cap_formatted': initial_mcap_formatted if mc_match else 'N/A',
-                        'message_embed': message.embeds[0].to_dict() if message.embeds else None,
-                        'original_message_id': message.id,
-                        'original_channel_id': message.channel.id,
-                        'original_guild_id': message.guild.id if message.guild else None
-                    }
-                    
-                    self.digest_cog.track_trade(
-                        token_address,
-                        from_token,
-                        user,
-                        dollar_amount,
-                        'sell',
-                        message_link,
-                        dexscreener_url,
-                        token_data=token_data
-                    )
-                    logging.info(f"Called track_trade for sell: {user} sold {from_token}")
+                    logging.info(f"Tracked as buy: {user} bought {to_token}")
 
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
