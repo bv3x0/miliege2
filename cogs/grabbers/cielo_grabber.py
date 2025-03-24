@@ -575,9 +575,30 @@ class CieloGrabber(commands.Cog):
             if mc_match:
                 mcap_str = mc_match.group(1)
                 logging.info(f"Found initial market cap in swap info: {mcap_str}")
-                initial_mcap = float(mcap_str.replace(',', '')) if isinstance(mcap_str, str) else None
-                initial_mcap_formatted = f"${mcap_str}" if isinstance(mcap_str, str) else "N/A"
-            
+                
+                # Parse market cap with suffix handling
+                try:
+                    clean_mcap = mcap_str.replace(',', '')
+                    multiplier = 1
+                    
+                    if 'M' in clean_mcap.upper():
+                        multiplier = 1000000
+                        clean_mcap = clean_mcap.upper().replace('M', '')
+                    elif 'K' in clean_mcap.upper():
+                        multiplier = 1000
+                        clean_mcap = clean_mcap.upper().replace('K', '')
+                    elif 'B' in clean_mcap.upper():
+                        multiplier = 1000000000
+                        clean_mcap = clean_mcap.upper().replace('B', '')
+                    
+                    initial_mcap = float(clean_mcap) * multiplier
+                    initial_mcap_formatted = f"${mcap_str}"  # Keep original formatted string
+                    logging.info(f"Parsed market cap value: {initial_mcap} from {mcap_str}")
+                except ValueError as e:
+                    logging.error(f"Error parsing market cap value '{mcap_str}': {e}")
+                    initial_mcap = None
+                    initial_mcap_formatted = 'N/A'
+
             # Add debug logging for raw embed data
             if message.embeds:
                 embed = message.embeds[0]
