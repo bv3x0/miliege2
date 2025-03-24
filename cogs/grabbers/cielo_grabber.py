@@ -568,6 +568,16 @@ class CieloGrabber(commands.Cog):
 
     async def _track_trade(self, message, token_address, user, swap_info, dexscreener_url):
         try:
+            # Extract initial market cap from swap info
+            initial_mcap = None
+            initial_mcap_formatted = 'N/A'
+            mc_match = re.search(r'MC:\s*\$([0-9,.]+[KMBkmb]?)', swap_info)
+            if mc_match:
+                mcap_str = mc_match.group(1)
+                logging.info(f"Found initial market cap in swap info: {mcap_str}")
+                initial_mcap = float(mcap_str.replace(',', '')) if isinstance(mcap_str, str) else None
+                initial_mcap_formatted = f"${mcap_str}" if isinstance(mcap_str, str) else "N/A"
+            
             # Add debug logging for raw embed data
             if message.embeds:
                 embed = message.embeds[0]
@@ -606,6 +616,17 @@ class CieloGrabber(commands.Cog):
             if from_is_major and not to_is_major:
                 # Track buy in digest
                 if self.digest_cog:
+                    # Add initial market cap to token data
+                    token_data = {
+                        'name': to_token,
+                        'initial_market_cap': initial_mcap if mc_match else None,
+                        'initial_market_cap_formatted': initial_mcap_formatted if mc_match else 'N/A',
+                        'message_embed': message.embeds[0].to_dict() if message.embeds else None,
+                        'original_message_id': message.id,
+                        'original_channel_id': message.channel.id,
+                        'original_guild_id': message.guild.id if message.guild else None
+                    }
+                    
                     self.digest_cog.track_trade(
                         token_address,
                         to_token,
@@ -617,12 +638,24 @@ class CieloGrabber(commands.Cog):
                         swap_info=swap_info,
                         message_embed=message.embeds[0].to_dict() if message.embeds else None,
                         is_first_trade=is_first_trade,
-                        chain=chain_info
+                        chain=chain_info,
+                        token_data=token_data  # Pass the token data
                     )
                     logging.info(f"Called track_trade for buy: {user} bought {to_token}")
             elif not from_is_major and to_is_major:
                 # Track sell in digest
                 if self.digest_cog:
+                    # Similar changes for sell...
+                    token_data = {
+                        'name': from_token,
+                        'initial_market_cap': initial_mcap if mc_match else None,
+                        'initial_market_cap_formatted': initial_mcap_formatted if mc_match else 'N/A',
+                        'message_embed': message.embeds[0].to_dict() if message.embeds else None,
+                        'original_message_id': message.id,
+                        'original_channel_id': message.channel.id,
+                        'original_guild_id': message.guild.id if message.guild else None
+                    }
+                    
                     self.digest_cog.track_trade(
                         token_address,
                         from_token,
@@ -630,7 +663,8 @@ class CieloGrabber(commands.Cog):
                         dollar_amount,
                         'sell',
                         message_link,
-                        dexscreener_url
+                        dexscreener_url,
+                        token_data=token_data
                     )
                     logging.info(f"Called track_trade for sell: {user} sold {from_token}")
 

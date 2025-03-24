@@ -559,7 +559,8 @@ class DigestCog(commands.Cog):
             logging.info(f"Cleared token data for hour: {hour_key}")
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, 
-                    dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False, chain=None):
+                    dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False, 
+                    chain=None, token_data=None):
         """Track a trade for the digest"""
         try:
             if not token_address or not token_name or not user:
@@ -578,31 +579,18 @@ class DigestCog(commands.Cog):
             
             # Process new token first to ensure market cap is captured
             if token_address not in self.hour_tokens.get(current_hour, {}):
-                # Extract initial market cap from swap info if available
-                initial_mcap = None
-                initial_mcap_formatted = 'N/A'
-                
-                if swap_info:
-                    mc_match = re.search(r'MC:\s*\$([0-9,.]+[KMB]?)', swap_info)
-                    if mc_match:
-                        mcap_str = mc_match.group(1)
-                        initial_mcap = self.parse_market_cap(f"${mcap_str}")
-                        initial_mcap_formatted = f"${mcap_str}"
-                        logging.info(f"Extracted initial market cap from swap info: {mcap_str}")
-                
-                token_data = {
-                    'name': token_name,
-                    'chart_url': dexscreener_url,
-                    'source': 'cielo',
-                    'user': user,
-                    'chain': chain or 'unknown',
-                    'initial_market_cap': initial_mcap,
-                    'initial_market_cap_formatted': initial_mcap_formatted,
-                    trade_type: amount  # Add the trade amount directly
-                }
-                
-                # Add to hour tokens first
-                self.hour_tokens[current_hour][token_address] = token_data
+                # Use the provided token_data if available
+                if token_data:
+                    self.hour_tokens[current_hour][token_address] = token_data
+                else:
+                    # Fallback to creating basic token data
+                    self.hour_tokens[current_hour][token_address] = {
+                        'name': token_name,
+                        'chart_url': dexscreener_url,
+                        'source': 'cielo',
+                        'user': user,
+                        'chain': chain or 'unknown'
+                    }
             
             # Update trade tracking
             if token_address not in self.hourly_trades:
@@ -614,21 +602,12 @@ class DigestCog(commands.Cog):
             else:
                 trade_data['sells'] += amount
             
-            # Debug log the message link
-            logging.info(f"Tracking trade with message_link: {message_link}")
-            
             if user not in trade_data['users']:
                 trade_data['users'][user] = {
-                    'message_link': message_link,  # Make sure this is being set
+                    'message_link': message_link,
                     'actions': set(),
                     'is_first_trade': is_first_trade
                 }
-                logging.info(f"Created new user entry for {user} with link {message_link}")
-            else:
-                # Update message link if not already set
-                if not trade_data['users'][user].get('message_link'):
-                    trade_data['users'][user]['message_link'] = message_link
-                    logging.info(f"Updated message link for existing user {user}")
             
             trade_data['users'][user]['actions'].add(trade_type)
             
