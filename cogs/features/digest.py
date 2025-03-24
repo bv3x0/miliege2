@@ -254,15 +254,35 @@ class DigestCog(commands.Cog):
                     
                     if has_trades:
                         # ALWAYS USE TRADE INFO when available, regardless of source
-                        trade_info = self._format_trade_info(trade_data)
-                        if trade_info:
-                            new_lines.append(trade_info)
-                            logging.info(f"Added trade info for {name}: {trade_info}")
-                        else:
-                            # Only fall back if trade_info is empty
-                            source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
-                            new_lines.append(source_line)
-                            logging.info(f"Falling back to source line for {name}: {source_line}")
+                        try:
+                            trade_info = self._format_trade_info(trade_data)
+                            if trade_info and trade_info.strip():  # Ensure it's not empty or just whitespace
+                                new_lines.append(trade_info)
+                                logging.info(f"Added trade info for {name}: {trade_info}")
+                            else:
+                                # This should never happen now with our improved _format_trade_info, but just in case
+                                if 'sold' in [action for user_data in trade_data['users'].values() for action in user_data['actions']]:
+                                    sell_amt = format_large_number(trade_data.get('sells', 0))
+                                    # Directly format the line with the first user we find who sold
+                                    for user, user_data in trade_data['users'].items():
+                                        if 'sell' in user_data['actions']:
+                                            user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
+                                            new_lines.append(f"{user_link} sold ${sell_amt}")
+                                            logging.info(f"Manually created sell line for {name}: {user} sold ${sell_amt}")
+                                            break
+                                else:
+                                    # Final fallback to source line
+                                    source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+                                    new_lines.append(source_line)
+                                    logging.info(f"Falling back to source line for {name}: {source_line}")
+                        except Exception as e:
+                            logging.error(f"Error in trade formatting for {name}: {e}")
+                            # Emergency fallback - show the raw data
+                            user_list = list(trade_data['users'].keys())
+                            if 'sells' in trade_data and trade_data['sells'] > 0:
+                                sell_amt = format_large_number(trade_data['sells'])
+                                new_lines.append(f"{user_list[0]} sold ${sell_amt}")
+                                logging.info(f"Emergency fallback: {user_list[0]} sold ${sell_amt}")
                     else:
                         # No trade amounts, use source via user
                         source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
@@ -607,17 +627,40 @@ class DigestCog(commands.Cog):
             else:
                 trade_data['sells'] += amount
             
+            # CRITICAL FIX: Always update the message_link for the user with the latest Cielo link
+            # This ensures we use the Cielo message link rather than any older Rick links
             if user not in trade_data['users']:
                 trade_data['users'][user] = {
                     'message_link': message_link,
                     'actions': set(),
                     'is_first_trade': is_first_trade
                 }
+            else:
+                # Always update the message link to the most recent one
+                # Extract message timestamp from the link to ensure we use the newest
+                if message_link and trade_data['users'][user]['message_link']:
+                    try:
+                        # Message links format: https://discord.com/channels/guild/channel/message_id
+                        # Message IDs are snowflakes that increase over time, so higher = newer
+                        current_msg_id = int(trade_data['users'][user]['message_link'].split('/')[-1])
+                        new_msg_id = int(message_link.split('/')[-1])
+                        
+                        # Only update if the new message is newer
+                        if new_msg_id > current_msg_id:
+                            logging.info(f"Updating message link for {user} from {current_msg_id} to {new_msg_id}")
+                            trade_data['users'][user]['message_link'] = message_link
+                    except (ValueError, IndexError) as e:
+                        # If we can't parse the IDs, just use the new link
+                        logging.warning(f"Error comparing message IDs, using new link: {e}")
+                        trade_data['users'][user]['message_link'] = message_link
+                else:
+                    # If we don't have a link yet, use the new one
+                    trade_data['users'][user]['message_link'] = message_link or trade_data['users'][user]['message_link']
             
-            # Add action to user's set
             trade_data['users'][user]['actions'].add(trade_type)
             
             logging.info(f"Tracked {trade_type}: {user} {trade_type} {token_name} for ${amount} on {chain}")
+            logging.info(f"User {user} message link: {trade_data['users'][user]['message_link']}")
             
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
@@ -646,32 +689,52 @@ class DigestCog(commands.Cog):
             elif 'sold' in actions:
                 action_groups['sold'].append((user_link, is_first))
         
+        # Debug what we found
+        logging.info(f"Action groups: bought={len(action_groups['bought'])}, sold={len(action_groups['sold'])}, both={len(action_groups['bought and sold'])}")
+        logging.info(f"Trade amounts: buys=${trade_data.get('buys', 0)}, sells=${trade_data.get('sells', 0)}")
+        
         trade_parts = []
         
+        # Use this helper function to safely format amounts
         def format_amount(amount):
-            return format_large_number(amount) if amount >= 1000 else str(int(amount))
+            try:
+                if amount >= 1000:
+                    return format_large_number(amount)
+                else:
+                    # Round to whole number but keep as string
+                    return str(round(amount))
+            except Exception as e:
+                logging.error(f"Error formatting amount {amount}: {e}")
+                return str(amount)  # Return as string even if error
         
-        # Create buy descriptions first
-        if action_groups['bought'] and trade_data.get('buys', 0) > 0:
-            users, is_first = zip(*action_groups['bought'])
-            amount = format_amount(trade_data['buys'])
-            star = " ⭐" if any(is_first) else ""
-            trade_parts.append(f"{', '.join(users)} bought ${amount}{star}")
+        # IMPORTANT: Simplify conditions - if we have users, show the trade
+        if action_groups['bought']:
+            try:
+                users, is_first = zip(*action_groups['bought'])
+                amount = format_amount(trade_data.get('buys', 0))
+                star = " ⭐" if any(is_first) else ""
+                trade_parts.append(f"{', '.join(users)} bought ${amount}{star}")
+            except Exception as e:
+                logging.error(f"Error formatting buy trade: {e}")
         
-        # Then sell descriptions
-        if action_groups['sold'] and trade_data.get('sells', 0) > 0:
-            users, _ = zip(*action_groups['sold'])
-            amount = format_amount(trade_data['sells'])
-            trade_parts.append(f"{', '.join(users)} sold ${amount}")
+        if action_groups['sold']:
+            try:
+                users, _ = zip(*action_groups['sold'])
+                amount = format_amount(trade_data.get('sells', 0))
+                trade_parts.append(f"{', '.join(users)} sold ${amount}")
+            except Exception as e:
+                logging.error(f"Error formatting sell trade: {e}")
         
-        # Finally both
-        if action_groups['bought and sold'] and (trade_data.get('buys', 0) > 0 or trade_data.get('sells', 0) > 0):
-            users, is_first = zip(*action_groups['bought and sold'])
-            buy_amount = format_amount(trade_data.get('buys', 0))
-            sell_amount = format_amount(trade_data.get('sells', 0))
-            star = " ⭐" if any(is_first) else ""
-            trade_parts.append(f"{', '.join(users)} bought ${buy_amount} and sold ${sell_amount}{star}")
+        if action_groups['bought and sold']:
+            try:
+                users, is_first = zip(*action_groups['bought and sold'])
+                buy_amount = format_amount(trade_data.get('buys', 0))
+                sell_amount = format_amount(trade_data.get('sells', 0))
+                star = " ⭐" if any(is_first) else ""
+                trade_parts.append(f"{', '.join(users)} bought ${buy_amount} and sold ${sell_amount}{star}")
+            except Exception as e:
+                logging.error(f"Error formatting bought and sold trade: {e}")
         
         result = '\n'.join(trade_parts) if trade_parts else ""
-        logging.info(f"Formatted trade info: {result}")
+        logging.info(f"Formatted trade info: '{result}'")
         return result
