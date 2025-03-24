@@ -178,7 +178,9 @@ Embed Count: %d
                 'initial_market_cap_formatted': formatted_mcap,
                 'message_id': str(message.id),
                 'channel_id': str(message.channel.id),
-                'guild_id': str(message.guild.id) if message.guild else None
+                'guild_id': str(message.guild.id) if message.guild else None,
+                'user': trigger_user,
+                'source': 'rick'
             }
             
             # Attempt to get chain information if available
@@ -230,12 +232,7 @@ Embed Count: %d
             
             # Also log to hour-specific tracker in DigestCog if available
             if self.digest_cog:
-                # Make sure the digest cog gets all the necessary information
-                self.digest_cog.process_new_token(contract_address, {
-                    **token_data,
-                    'source': 'rick',
-                    'user': trigger_user
-                })
+                self.digest_cog.process_new_token(contract_address, token_data)
             
             # Create embed with Buy Alert title
             new_embed = discord.Embed(color=Colors.EMBED_BORDER)
