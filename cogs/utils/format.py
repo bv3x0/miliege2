@@ -26,12 +26,12 @@ class Messages:
     SUCCESS: Final = "✅"
 
 def format_large_number(number: Union[int, float, str]) -> str:
-    """Format large numbers with K, M, B suffixes
+    """Format large numbers with k, m, b suffixes
     
     Rules:
-    - Thousands (K): No decimal places ($677K instead of $677.41K)
-    - Millions (M): One decimal place ($2.1M)
-    - Billions (B): One decimal place ($2.5B)
+    - Thousands (k): No decimal places ($677k instead of $677.41k)
+    - Millions (m): One decimal place ($2.1m)
+    - Billions (b): One decimal place ($2.5b)
     """
     try:
         num = float(str(number).replace(',', ''))
@@ -44,11 +44,11 @@ def format_large_number(number: Union[int, float, str]) -> str:
     abs_num = abs(num)
     
     if abs_num >= 1_000_000_000:  # Billions
-        formatted = f"{num / 1_000_000_000:.1f}B"
+        formatted = f"{num / 1_000_000_000:.1f}b"
     elif abs_num >= 1_000_000:     # Millions
-        formatted = f"{num / 1_000_000:.1f}M"
+        formatted = f"{num / 1_000_000:.1f}m"
     elif abs_num >= 1_000:         # Thousands
-        formatted = f"{int(num / 1_000)}K"  # No decimal places for thousands
+        formatted = f"{int(num / 1_000)}k"  # No decimal places for thousands
     else:
         formatted = f"{int(num)}"  # Regular numbers
         
