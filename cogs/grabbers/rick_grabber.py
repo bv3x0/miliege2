@@ -180,7 +180,8 @@ Embed Count: %d
                 'channel_id': str(message.channel.id),
                 'guild_id': str(message.guild.id) if message.guild else None,
                 'user': trigger_user,
-                'source': 'rick'
+                'source': 'rick',
+                'chain': chain
             }
             
             # Attempt to get chain information if available

@@ -211,58 +211,6 @@ class DigestCog(commands.Cog):
                 # Log the values for debugging
                 logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
-                # Check if we have trade data for this token
-                trade_info = ""
-                if contract in self.hourly_trades:
-                    trade_data = self.hourly_trades[contract]
-                    
-                    # Group users by their actions
-                    action_groups = {
-                        'bought': [],
-                        'sold': [],
-                        'bought and sold': []
-                    }
-                    
-                    for user, user_data in trade_data['users'].items():
-                        actions = user_data['actions']
-                        link = user_data['message_link']
-                        user_link = f"[{user}]({link})"
-                        
-                        if 'bought' in actions and 'sold' in actions:
-                            action_groups['bought and sold'].append((user_link, user_data.get('is_first_trade', False)))
-                        elif 'bought' in actions:
-                            action_groups['bought'].append((user_link, user_data.get('is_first_trade', False)))
-                        elif 'sold' in actions:
-                            action_groups['sold'].append((user_link, user_data.get('is_first_trade', False)))
-                    
-                    # Build the trade description
-                    trade_parts = []
-                    
-                    if action_groups['bought']:
-                        users, is_first = zip(*action_groups['bought'])
-                        amount = float(trade_data['buys'])
-                        formatted_amount = format_large_number(amount) if amount >= 1000 else str(int(amount))
-                        star = " ⭐" if any(is_first) else ""
-                        trade_parts.append(f"{', '.join(users)} bought ${formatted_amount}{star}")
-                    
-                    if action_groups['sold']:
-                        users, _ = zip(*action_groups['sold'])
-                        amount = float(trade_data['sells'])
-                        formatted_amount = format_large_number(amount) if amount >= 1000 else str(int(amount))
-                        trade_parts.append(f"{', '.join(users)} sold ${formatted_amount}")
-                    
-                    if action_groups['bought and sold']:
-                        users, is_first = zip(*action_groups['bought and sold'])
-                        buy_amount = float(trade_data['buys'])
-                        sell_amount = float(trade_data['sells'])
-                        formatted_buy = format_large_number(buy_amount) if buy_amount >= 1000 else str(int(buy_amount))
-                        formatted_sell = format_large_number(sell_amount) if sell_amount >= 1000 else str(int(sell_amount))
-                        star = " ⭐" if any(is_first) else ""
-                        trade_parts.append(f"{', '.join(users)} bought ${formatted_buy} and sold ${formatted_sell}{star}")
-                    
-                    if trade_parts:
-                        trade_info = '\n'.join(trade_parts)
-                
                 # Format the description lines
                 token_line = f"### [{name}]({token['chart_url']})"
                 
@@ -285,8 +233,8 @@ class DigestCog(commands.Cog):
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
                 
-                # If we have trade data and it's from Cielo, always show the trade info
-                if contract in self.hourly_trades and source.lower() == 'cielo':
+                # If we have trade data, always show it regardless of source
+                if contract in self.hourly_trades:
                     trade_data = self.hourly_trades[contract]
                     if trade_data.get('sells', 0) > 0 or trade_data.get('buys', 0) > 0:
                         # Format trade info with proper links
@@ -294,15 +242,15 @@ class DigestCog(commands.Cog):
                         if trade_info:
                             new_lines.append(trade_info)
                         else:
-                            # Fallback if trade info formatting failed
+                            # Fallback to source via user only if trade info formatting failed
                             source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                             new_lines.append(source_line)
                     else:
-                        # Fallback for no trade amounts
+                        # No transaction amounts, use source via user
                         source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                         new_lines.append(source_line)
                 else:
-                    # Non-Cielo source or no trade data
+                    # No trade data at all, use source via user
                     source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                     new_lines.append(source_line)
                 
