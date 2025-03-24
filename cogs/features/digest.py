@@ -211,6 +211,12 @@ class DigestCog(commands.Cog):
                 # Log the values for debugging
                 logging.info(f"Digest display for {name}: chain={chain}, source={source}, user={user}")
                 
+                # If we have trade data, log details about it for debugging
+                if contract in self.hourly_trades:
+                    trade_data = self.hourly_trades[contract]
+                    for user, user_data in trade_data['users'].items():
+                        logging.info(f"Trade data for {user}: message_link={user_data.get('message_link', 'None')}")
+                
                 # Format the description lines
                 token_line = f"### [{name}]({token['chart_url']})"
                 
@@ -539,6 +545,29 @@ class DigestCog(commands.Cog):
                         'user': user,
                         'chain': chain or 'unknown'
                     }
+            else:
+                # IMPORTANT: Even if token exists, always update source to cielo for cielo trades
+                # This ensures cielo trades take precedence over rick or other sources
+                self.hour_tokens[current_hour][token_address]['source'] = 'cielo'
+                
+                # Only update user if we're not overriding with "unknown"
+                if user and user != "unknown":
+                    self.hour_tokens[current_hour][token_address]['user'] = user
+                    
+                # Update other relevant fields if provided in token_data
+                if token_data:
+                    # Update chart_url and chain if available
+                    if 'chart_url' in token_data and token_data['chart_url']:
+                        self.hour_tokens[current_hour][token_address]['chart_url'] = token_data['chart_url']
+                    if 'chain' in token_data and token_data['chain']:
+                        self.hour_tokens[current_hour][token_address]['chain'] = token_data['chain']
+                    # Update message IDs for linking
+                    if 'original_message_id' in token_data:
+                        self.hour_tokens[current_hour][token_address]['original_message_id'] = token_data['original_message_id']
+                    if 'original_channel_id' in token_data:
+                        self.hour_tokens[current_hour][token_address]['original_channel_id'] = token_data['original_channel_id']
+                    if 'original_guild_id' in token_data:
+                        self.hour_tokens[current_hour][token_address]['original_guild_id'] = token_data['original_guild_id']
             
             # Update trade tracking
             if token_address not in self.hourly_trades:
