@@ -566,10 +566,23 @@ class DigestCog(commands.Cog):
             # Extract chain from message_embed if not explicitly provided
             if not chain and message_embed and 'fields' in message_embed:
                 for field in message_embed['fields']:
-                    if field.get('name') == 'Chain':
+                    # Case-insensitive check for chain field
+                    if field.get('name', '').lower() == 'chain':
                         chain = field.get('value', 'unknown')
                         logging.info(f"Extracted chain from embed: {chain}")
                         break
+            
+            # If we still don't have a chain, try to extract from dexscreener_url
+            if (not chain or chain == 'unknown') and dexscreener_url:
+                chain_match = re.search(r'dexscreener\.com/([^/]+)/', dexscreener_url)
+                if chain_match:
+                    chain = chain_match.group(1)
+                    logging.info(f"Extracted chain from dexscreener URL: {chain}")
+            
+            # Default to solana for Cielo trades if still unknown
+            if (not chain or chain == 'unknown'):
+                chain = "solana"  # Most Cielo tokens are on Solana
+                logging.info(f"Defaulting to solana chain for Cielo trade")
             
             # Always normalize chain
             chain = chain.lower() if chain else 'unknown'

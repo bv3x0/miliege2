@@ -621,8 +621,28 @@ class CieloGrabber(commands.Cog):
             # Create message link
             message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
 
-            # Extract chain info from message embeds
-            chain_info = next((f.value for f in message.embeds[0].fields if f.name == 'Chain'), 'unknown')
+            # Extract chain info from message embeds - IMPROVED EXTRACTION
+            chain_info = None
+            if message.embeds:
+                embed = message.embeds[0]
+                # Search for Chain field specifically
+                for field in embed.fields:
+                    if field.name.lower() == 'chain':
+                        chain_info = field.value
+                        logging.info(f"Extracted chain from embed field: {chain_info}")
+                        break
+            
+            # If not found in fields, try other methods
+            if not chain_info:
+                # Try to extract from dexscreener_url
+                chain_match = re.search(r'dexscreener\.com/([^/]+)/', dexscreener_url)
+                if chain_match:
+                    chain_info = chain_match.group(1)
+                    logging.info(f"Extracted chain from dexscreener URL: {chain_info}")
+                else:
+                    # Default to solana if we can't determine chain (most Cielo alerts are Solana)
+                    chain_info = "solana"
+                    logging.info(f"Using default chain: {chain_info}")
             
             # If it's a first trade, trigger the new coin alert
             if is_first_trade and self.newcoin_cog:
@@ -660,7 +680,7 @@ class CieloGrabber(commands.Cog):
                         message_embed=message.embeds[0].to_dict() if message.embeds else None,
                         is_first_trade=is_first_trade,
                         chain=chain_info,
-                        token_data=token_data  # Pass the token data
+                        token_data=token_data
                     )
                     logging.info(f"Called track_trade for buy: {user} bought {to_token}")
             elif not from_is_major and to_is_major:
