@@ -297,9 +297,15 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Sort by time in descending order (newest first)
         sorted_trades = sorted(trades, key=lambda x: x["time"], reverse=True)
         
-        # If this is the first time checking, only get the most recent trade
+        # If this is the first time checking, just store the most recent trade ID
+        # but don't return any trades to process
         if not last_trade_id:
-            return sorted_trades[:1]
+            if sorted_trades:
+                # Store the most recent trade ID but don't return any trades
+                # This fixes the issue of processing old trades on startup
+                logging.info(f"Initial check for wallet - storing latest trade ID {sorted_trades[0]['tid']} but not processing any trades")
+                return []
+            return []
         
         # Find all trades newer than the last seen trade ID
         new_trades = []
