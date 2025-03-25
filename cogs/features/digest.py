@@ -699,17 +699,23 @@ class DigestCog(commands.Cog):
             info = token_data['social_info']
             
             # Add website if available
-            if websites := info.get('websites', []):
-                if websites and isinstance(websites[0], dict) and 'url' in websites[0]:
+            websites = info.get('websites', [])
+            if isinstance(websites, list) and websites:
+                if isinstance(websites[0], dict) and 'url' in websites[0]:
                     social_parts.append(f"[web]({websites[0]['url']})")
-                elif websites and isinstance(websites[0], str):
+                elif isinstance(websites[0], str):
                     social_parts.append(f"[web]({websites[0]})")
+            elif websites := info.get('website'):  # Legacy format
+                social_parts.append(f"[web]({websites})")
             
-            # Add only X/Twitter
-            if socials := info.get('socials', []):
-                for social in socials:
-                    if isinstance(social, dict) and 'platform' in social and social['platform'].lower() == 'twitter':
+            # Add X/Twitter
+            socials_list = info.get('socials', [])
+            if isinstance(socials_list, list):
+                for social in socials_list:
+                    if isinstance(social, dict) and social.get('platform', '').lower() == 'twitter':
                         social_parts.append(f"[𝕏]({social['url']})")
-                        break  # Only get the first Twitter link
+                        break
+            elif twitter := info.get('twitter'):  # Legacy format
+                social_parts.append(f"[𝕏]({twitter})")
         
         return social_parts if social_parts else ["no socials"]
