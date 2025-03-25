@@ -13,20 +13,15 @@ from cogs.utils import (
 )
 from collections import defaultdict, OrderedDict
 
-# Define the new database model for tracked wallets
-class TrackedWallet(Base):
-    __tablename__ = 'tracked_wallets'
-    
-    id = Column(Integer, primary_key=True)
-    address = Column(String(255), unique=True, index=True, nullable=False)
-    name = Column(String(255))  # Optional nickname for the wallet
-    last_checked_time = Column(DateTime, default=datetime.now)
-    last_trade_id = Column(String(255))  # To track the last seen trade
-    added_by = Column(String(100))
-    added_at = Column(DateTime, default=datetime.now)
-    
-    def __repr__(self):
-        return f"<TrackedWallet(address='{self.address}', name='{self.name}')>"
+# Replace the SQLAlchemy model with a simple class
+class TrackedWallet:
+    """Simple class to store tracked wallet information"""
+    def __init__(self, address, name=None, is_active=True):
+        self.address = address
+        self.name = name or address[:6]  # Use first 6 chars as name if not provided
+        self.is_active = is_active
+        self.added_at = datetime.now()
+        self.last_checked = None
 
 class HyperliquidWalletGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, channel_id=None):
@@ -38,6 +33,9 @@ class HyperliquidWalletGrabber(commands.Cog):
         self.session = session
         self.digest_cog = digest_cog
         self.channel_id = channel_id  # Channel to send alerts to
+        
+        # Store wallets in memory instead of database
+        self.wallets = []
         
         # Add wallet lock for concurrent operations
         self.wallet_locks = {}  # Dictionary to store locks per wallet
@@ -86,6 +84,9 @@ class HyperliquidWalletGrabber(commands.Cog):
             "@10000": "USDC",
         }
         
+        # Load tracked wallets from JSON file
+        self._load_wallets()
+        
         # Start the background tasks
         self.check_wallets.start()
         self.send_digest.start()
@@ -93,6 +94,77 @@ class HyperliquidWalletGrabber(commands.Cog):
         # Initialize asset mappings
         self.bot.loop.create_task(self._init_asset_mappings())
     
+    def _load_wallets(self):
+        """Load tracked wallets from a JSON file"""
+        import json
+        import os
+        try:
+            if os.path.exists('data/wallets.json'):
+                with open('data/wallets.json', 'r') as f:
+                    wallet_data = json.load(f)
+                    for wallet in wallet_data:
+                        self.wallets.append(TrackedWallet(
+                            address=wallet['address'],
+                            name=wallet.get('name'),
+                            is_active=wallet.get('is_active', True)
+                        ))
+                logging.info(f"Loaded {len(self.wallets)} tracked wallets from file")
+            else:
+                logging.info("No wallet file found, starting with empty wallet list")
+        except Exception as e:
+            logging.error(f"Error loading wallets: {e}")
+            
+    def _save_wallets(self):
+        """Save tracked wallets to a JSON file"""
+        import json
+        import os
+        try:
+            # Create data directory if it doesn't exist
+            os.makedirs('data', exist_ok=True)
+            
+            wallet_data = [
+                {
+                    'address': w.address,
+                    'name': w.name,
+                    'is_active': w.is_active
+                }
+                for w in self.wallets
+            ]
+            
+            with open('data/wallets.json', 'w') as f:
+                json.dump(wallet_data, f)
+            
+            logging.info(f"Saved {len(self.wallets)} wallets to file")
+        except Exception as e:
+            logging.error(f"Error saving wallets: {e}")
+
+    async def add_wallet(self, address, name=None):
+        """Add a wallet to track"""
+        # Check if wallet already exists
+        for wallet in self.wallets:
+            if wallet.address.lower() == address.lower():
+                # Update existing wallet
+                wallet.is_active = True
+                if name:
+                    wallet.name = name
+                self._save_wallets()
+                return wallet
+        
+        # Create new wallet
+        new_wallet = TrackedWallet(address, name)
+        self.wallets.append(new_wallet)
+        self._save_wallets()
+        return new_wallet
+
+    async def remove_wallet(self, address):
+        """Remove a wallet from tracking"""
+        for i, wallet in enumerate(self.wallets):
+            if wallet.address.lower() == address.lower():
+                del self.wallets[i]
+                self._save_wallets()
+                return True
+        return False
+
     async def _init_asset_mappings(self):
         """Initialize asset ID to name mappings from the Hyperliquid API."""
         try:
@@ -129,22 +201,15 @@ class HyperliquidWalletGrabber(commands.Cog):
         """Check all tracked wallets for new trades."""
         try:
             # Add debug logging for wallet checks
-            wallets = self.db_session.query(TrackedWallet).all()
-            wallet_count = len(wallets)
+            wallet_count = len(self.wallets)
             logging.info(f"Checking {wallet_count} Hyperliquid wallets for new trades")
             
             if wallet_count == 0:
                 logging.debug("No wallets to check, skipping wallet check cycle")
                 return
                 
-            for wallet in wallets:
+            for wallet in self.wallets:
                 try:
-                    # Verify wallet still exists before checking
-                    wallet_check = self.db_session.query(TrackedWallet).filter_by(id=wallet.id).first()
-                    if not wallet_check:
-                        logging.warning(f"Wallet {wallet.address} was deleted during check cycle, skipping")
-                        continue
-                        
                     await self._check_wallet_trades(wallet)
                     # Add a small delay between wallet checks to avoid rate limiting
                     await asyncio.sleep(1)
@@ -171,69 +236,52 @@ class HyperliquidWalletGrabber(commands.Cog):
         
         async with self.wallet_locks[wallet.address]:
             try:
-                # Create a new session for this operation
-                session = self.session_factory()
-                try:
-                    # Verify wallet still exists before checking
-                    wallet_check = session.query(TrackedWallet).filter_by(id=wallet.id).first()
-                    if not wallet_check:
-                        logging.warning(f"Wallet {wallet.address} was deleted during check cycle")
-                        return
-                    
-                    # Use HyperliquidAPI instead of SDK
-                    trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
-                    positions_data = await HyperliquidAPI.get_user_state(self.session, wallet.address)
-                    
-                    # Initialize positions_by_asset here, before we use it
-                    positions_by_asset = {}
-                    if positions_data and "assetPositions" in positions_data:
-                        for position in positions_data["assetPositions"]:
-                            if "position" in position and "coin" in position["position"]:
-                                coin = position["position"]["coin"]
-                                positions_by_asset[coin] = position
-                    
-                    # Add debug logging for trade filtering
-                    if trades_data:
-                        logging.debug(f"Processing {len(trades_data)} total trades for wallet {wallet.address}")
-                        logging.debug(f"Last trade ID was: {wallet_check.last_trade_id}")
-                    
-                    # Filter out trades we've already seen
-                    new_trades = self._filter_new_trades(trades_data, wallet_check.last_trade_id)
-                    
-                    if new_trades:
-                        logging.info(f"Found {len(new_trades)} new trades for wallet {wallet.address}")
-                        
-                        # Update the last seen trade ID (should be the most recent trade)
-                        wallet_check.last_trade_id = str(new_trades[0]["tid"])
-                        session.commit()
-                        
-                        # Group trades by coin to process them together
-                        trades_by_coin = {}
-                        for trade in new_trades:
-                            coin = trade["coin"]
-                            if coin not in trades_by_coin:
-                                trades_by_coin[coin] = []
-                            trades_by_coin[coin].append(trade)
-                        
-                        # Process trades by coin
-                        for coin, coin_trades in trades_by_coin.items():
-                            # Get position data for this asset if available
-                            position_data = positions_by_asset.get(coin, {})
-                            
-                            # Add each trade to the digest
-                            for trade in coin_trades:
-                                self._add_trade_to_digest(wallet_check, trade, position_data)
-                                
-                            logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
-                    else:
-                        session.commit()  # Just update the last checked time
-                except Exception as e:
-                    logging.error(f"Error processing wallet {wallet.address}: {e}", exc_info=True)
-                    session.rollback()
-                    raise
-                finally:
-                    session.close()
+                # Use HyperliquidAPI instead of SDK
+                trades_data = await HyperliquidAPI.get_user_fills(self.session, wallet.address)
+                positions_data = await HyperliquidAPI.get_user_state(self.session, wallet.address)
                 
+                # Initialize positions_by_asset here, before we use it
+                positions_by_asset = {}
+                if positions_data and "assetPositions" in positions_data:
+                    for position in positions_data["assetPositions"]:
+                        if "position" in position and "coin" in position["position"]:
+                            coin = position["position"]["coin"]
+                            positions_by_asset[coin] = position
+                
+                # Add debug logging for trade filtering
+                if trades_data:
+                    logging.debug(f"Processing {len(trades_data)} total trades for wallet {wallet.address}")
+                    logging.debug(f"Last trade ID was: {wallet.last_checked}")
+                
+                # Filter out trades we've already seen
+                new_trades = self._filter_new_trades(trades_data, wallet.last_checked)
+                
+                if new_trades:
+                    logging.info(f"Found {len(new_trades)} new trades for wallet {wallet.address}")
+                    
+                    # Update the last seen trade ID (should be the most recent trade)
+                    wallet.last_checked = str(new_trades[0]["tid"])
+                    
+                    # Group trades by coin to process them together
+                    trades_by_coin = {}
+                    for trade in new_trades:
+                        coin = trade["coin"]
+                        if coin not in trades_by_coin:
+                            trades_by_coin[coin] = []
+                        trades_by_coin[coin].append(trade)
+                    
+                    # Process trades by coin
+                    for coin, coin_trades in trades_by_coin.items():
+                        # Get position data for this asset if available
+                        position_data = positions_by_asset.get(coin, {})
+                        
+                        # Add each trade to the digest
+                        for trade in coin_trades:
+                            self._add_trade_to_digest(wallet, trade, position_data)
+                            
+                        logging.debug(f"Processed {len(coin_trades)} trades for {coin} from wallet {wallet.address}")
+                else:
+                    pass  # Just update the last checked time
             except Exception as e:
                 logging.error(f"Error checking wallet {wallet.address}: {e}", exc_info=True)
                 self.monitor.record_error()
@@ -551,7 +599,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         description="Add a wallet address to track trades on Hyperliquid. Format: !add_wallet 0x123...abc [name]",
         help="Adds a wallet to the Hyperliquid tracking list. The address must be a 42-character hex string starting with 0x. You can optionally provide a name for the wallet.\n\nExample: !add_wallet 0x1234567890abcdef1234567890abcdef12345678 Trader1"
     )
-    async def add_wallet(self, ctx, address: str, *, name: str = None):
+    async def add_wallet_command(self, ctx, address: str, *, name: str = None):
         """Add a wallet to track on Hyperliquid."""
         try:
             # Validate address format
@@ -559,22 +607,8 @@ class HyperliquidWalletGrabber(commands.Cog):
                 await ctx.send("❌ Invalid wallet address format. Must be a 42-character hex string starting with 0x.")
                 return
             
-            # Check if wallet is already tracked
-            existing = self.db_session.query(TrackedWallet).filter_by(address=address).first()
-            if existing:
-                await ctx.send(f"❌ Wallet {address} is already being tracked" + 
-                              (f" as '{existing.name}'" if existing.name else ""))
-                return
-            
             # Add to database
-            wallet = TrackedWallet(
-                address=address,
-                name=name,
-                added_by=ctx.author.name,
-                added_at=datetime.now()
-            )
-            self.db_session.add(wallet)
-            self.db_session.commit()
+            wallet = await self.add_wallet(address, name)
             
             await ctx.send(f"✅ Now tracking Hyperliquid wallet {address}" + 
                           (f" as '{name}'" if name else ""))
@@ -590,56 +624,21 @@ class HyperliquidWalletGrabber(commands.Cog):
         description="Remove a wallet address from the Hyperliquid tracking list. Format: !remove_wallet 0x123...abc",
         help="Removes a wallet from the Hyperliquid tracking list.\n\nExample: !remove_wallet 0x1234567890abcdef1234567890abcdef12345678"
     )
-    async def remove_wallet(self, ctx, address: str):
+    async def remove_wallet_command(self, ctx, address: str):
         """Remove a wallet from tracking."""
         try:
-            # Temporarily pause the background task if it's running
-            was_running = False
-            if self.check_wallets.is_running():
-                was_running = True
-                self.check_wallets.cancel()
-                logging.info(f"Paused wallet checking task to remove wallet {address}")
-                await asyncio.sleep(1)  # Give it a moment to stop
+            # Remove the wallet
+            removed = await self.remove_wallet(address)
             
-            # Find the wallet in the database
-            wallet = self.db_session.query(TrackedWallet).filter_by(address=address).first()
-            if wallet:
-                wallet_id = wallet.id  # Store ID for verification
-                wallet_address = wallet.address  # Store address for logging
-                
-                # Delete the wallet
-                self.db_session.delete(wallet)
-                self.db_session.commit()
-                logging.info(f"Deleted wallet {wallet_address} (ID: {wallet_id}) from database")
-                
-                # Verify the wallet was actually deleted
-                verification = self.db_session.query(TrackedWallet).filter_by(address=address).first()
-                if verification:
-                    logging.error(f"Failed to delete wallet {address} - still exists in database")
-                    await ctx.send("❌ Failed to remove wallet. Please try again or restart the bot.")
-                else:
-                    logging.info(f"Successfully verified wallet {address} was removed from database")
-                    await ctx.send(f"✅ Stopped tracking Hyperliquid wallet {address}")
+            if removed:
+                await ctx.send(f"✅ Stopped tracking Hyperliquid wallet {address}")
             else:
                 await ctx.send("❌ Wallet not found in tracking list")
-            
-            # Restart the background task if it was running
-            if was_running:
-                self.check_wallets.start()
-                logging.info("Resumed wallet checking task")
         
         except Exception as e:
             logging.error(f"Error removing wallet: {e}", exc_info=True)
             await ctx.send("❌ An error occurred while removing the wallet.")
             self.monitor.record_error()
-            
-            # Make sure the task is restarted even if there was an error
-            if 'was_running' in locals() and was_running and not self.check_wallets.is_running():
-                try:
-                    self.check_wallets.start()
-                    logging.info("Resumed wallet checking task after error")
-                except Exception as restart_error:
-                    logging.error(f"Failed to restart wallet checking task: {restart_error}")
     
     @commands.command(
         name="list_wallets",
@@ -647,20 +646,19 @@ class HyperliquidWalletGrabber(commands.Cog):
         description="Display a list of all wallets being tracked on Hyperliquid",
         help="Shows a list of all wallets currently being tracked on Hyperliquid, including their names (if provided), who added them, and when they were last checked."
     )
-    async def list_wallets(self, ctx):
+    async def list_wallets_command(self, ctx):
         """List all tracked Hyperliquid wallets."""
         try:
-            wallets = self.db_session.query(TrackedWallet).all()
-            if not wallets:
+            if not self.wallets:
                 await ctx.send("No Hyperliquid wallets are currently being tracked.")
                 return
             
             embed = discord.Embed(title="Tracked Hyperliquid Wallets", color=Colors.EMBED_BORDER)
-            for wallet in wallets:
+            for wallet in self.wallets:
                 name = f"{wallet.name} " if wallet.name else ""
                 embed.add_field(
                     name=f"{name}({wallet.address})",
-                    value=f"Added by: {wallet.added_by}\nLast checked: {wallet.last_checked_time.strftime('%Y-%m-%d %H:%M:%S')}",
+                    value=f"Added at: {wallet.added_at.strftime('%Y-%m-%d %H:%M:%S')}",
                     inline=False
                 )
             
@@ -706,36 +704,10 @@ class HyperliquidWalletGrabber(commands.Cog):
                 await ctx.send("❌ This command requires administrator permissions.")
                 return
                 
-            # Stop the background task if it's running
-            was_running = False
-            if self.check_wallets.is_running():
-                was_running = True
-                self.check_wallets.cancel()
-                logging.info("Stopped wallet checking task for refresh")
-                await asyncio.sleep(1)  # Give it a moment to stop
-            
-            # Refresh the database session
-            try:
-                # Close the current session
-                self.db_session.close()
-                # Get a fresh session from the bot
-                self.db_session = self.bot.Session()
-                logging.info("Refreshed database session for wallet tracker")
-            except Exception as db_error:
-                logging.error(f"Error refreshing database session: {db_error}", exc_info=True)
-                await ctx.send("❌ Error refreshing database session. Check logs for details.")
-                self.monitor.record_error()
-                return
-            
             # Restart the background task
-            try:
-                self.check_wallets.start()
-                logging.info("Restarted wallet checking task after refresh")
-                await ctx.send("✅ Successfully refreshed wallet tracker")
-            except Exception as restart_error:
-                logging.error(f"Error restarting wallet checking task: {restart_error}", exc_info=True)
-                await ctx.send("❌ Error restarting wallet checking task. Check logs for details.")
-                self.monitor.record_error()
+            self.check_wallets.start()
+            logging.info("Restarted wallet checking task after refresh")
+            await ctx.send("✅ Successfully refreshed wallet tracker")
         
         except Exception as e:
             logging.error(f"Error refreshing wallet tracker: {e}", exc_info=True)
