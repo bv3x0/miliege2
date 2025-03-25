@@ -214,9 +214,9 @@ class DigestCog(commands.Cog):
                 social_links = self._format_social_links(token)
                 social_links_str = ""
                 if social_links and social_links != ["no socials"]:
-                    social_links_str = f" ⋅ {' '.join(social_links)}"
+                    social_links_str = f"{' ⋅ '.join(social_links)} ⋅ "
                 
-                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {chain_display}{social_links_str}"
+                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {social_links_str}{chain_display}"
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
