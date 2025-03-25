@@ -456,8 +456,13 @@ class DigestCog(commands.Cog):
             except Exception as e:
                 logging.error(f"Error extracting initial market cap: {e}")
         
-        # Add to hour tokens
-        if contract not in self.hour_tokens.get(current_hour, {}):
+        # Preserve social info if it exists
+        if 'info' in token_data:
+            self.hour_tokens[current_hour][contract] = {
+                **token_data,
+                'social_info': self.token_tracker.tokens.get(contract, {}).get('social_info', {})
+            }
+        else:
             self.hour_tokens[current_hour][contract] = token_data
         
         # Track the trade data with per-user amounts
@@ -753,3 +758,23 @@ class DigestCog(commands.Cog):
                 user_trades.append(f"{user_link} {', '.join(trade_parts)}{star}")
         
         return "\n".join(user_trades) if user_trades else ""
+
+    def _format_social_links(self, token_data):
+        """Format social links for display in digest"""
+        social_parts = []
+        
+        if 'social_info' in token_data:
+            info = token_data['social_info']
+            
+            # Add website if available
+            if websites := info.get('websites', []):
+                social_parts.append(f"[web]({websites[0]})")
+            
+            # Add only X/Twitter
+            if socials := info.get('socials', []):
+                for social in socials:
+                    if social['platform'].lower() == 'twitter':
+                        social_parts.append(f"[𝕏]({social['url']})")
+                        break  # Only get the first Twitter link
+        
+        return social_parts if social_parts else ["no socials"]

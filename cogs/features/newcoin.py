@@ -128,6 +128,11 @@ class NewCoinCog(commands.Cog):
 
     def _extract_token_data(self, pair):
         """Extract relevant token data from pair information"""
+        # Add debug logging for socials
+        info = pair.get('info', {})
+        logging.info(f"Token info data: {info}")
+        logging.info(f"Social links data: websites={info.get('websites', [])}, socials={info.get('socials', [])}")
+        
         return {
             'name': pair.get('baseToken', {}).get('name', 'Unknown Token'),
             'symbol': pair.get('baseToken', {}).get('symbol', ''),
@@ -135,7 +140,7 @@ class NewCoinCog(commands.Cog):
             'market_cap': pair.get('fdv', 'N/A'),
             'price_change_24h': pair.get('priceChange', {}).get('h24', 'N/A'),
             'pair_created_at': pair.get('pairCreatedAt'),
-            'socials': pair.get('info', {})
+            'socials': info  # Pass the entire info object
         }
 
     def _create_description(self, data, chain):
@@ -200,19 +205,24 @@ class NewCoinCog(commands.Cog):
         """Format social media links for display"""
         social_parts = []
         
-        # Map of social media keys to display text
-        social_map = {
-            'twitter': 'X',
-            'telegram': 'TG',
-            'website': 'web'
-        }
+        # Add website if available
+        websites = socials.get('websites', [])
+        if isinstance(websites, list) and websites:
+            social_parts.append(f"[web]({websites[0]})")
+        elif websites := socials.get('website'):  # Legacy format
+            social_parts.append(f"[web]({websites})")
+            
+        # Add X/Twitter
+        socials_list = socials.get('socials', [])
+        if isinstance(socials_list, list):
+            for social in socials_list:
+                if isinstance(social, dict) and social.get('platform', '').lower() == 'twitter':
+                    social_parts.append(f"[𝕏]({social['url']})")
+                    break
+        elif twitter := socials.get('twitter'):  # Legacy format
+            social_parts.append(f"[𝕏]({twitter})")
         
-        for platform, url in socials.items():
-            if platform in social_map and url:
-                display_name = social_map[platform]
-                social_parts.append(f"[{display_name}]({url})")
-        
-        return social_parts
+        return social_parts if social_parts else ["no socials"]
 
     async def _handle_no_data(self, channel, token_address, user, swap_info, chain, dexscreener_url):
         """Handle case when no data is available from DexScreener"""

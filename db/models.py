@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -25,6 +25,7 @@ class Token(Base):
     credited_user = Column(String(100))
     first_seen = Column(DateTime, default=datetime.now)
     last_updated = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    social_info = Column(JSON)  # Add this field to store social links
     
     # Relationships
     market_cap_updates = relationship("MarketCapUpdate", back_populates="token", cascade="all, delete-orphan")

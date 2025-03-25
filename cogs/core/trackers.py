@@ -113,13 +113,47 @@ class TokenTracker:
         try:
             current_time = datetime.now()
             
+            # Extract social links if present in the data
+            social_info = {}
+            if 'info' in data:
+                info = data['info']
+                # Store websites
+                if 'websites' in info and isinstance(info['websites'], list):
+                    social_info['websites'] = [
+                        website['url'] for website in info['websites'] 
+                        if isinstance(website, dict) and 'url' in website
+                    ]
+                
+                # Store social links
+                if 'socials' in info and isinstance(info['socials'], list):
+                    social_info['socials'] = [
+                        {
+                            'platform': social['platform'],
+                            'url': social['url']
+                        }
+                        for social in info['socials']
+                        if isinstance(social, dict) and 'platform' in social and 'url' in social
+                    ]
+                
+                # Legacy format fallback
+                if not social_info.get('websites') and 'website' in info:
+                    social_info['websites'] = [info['website']]
+                if not social_info.get('socials'):
+                    legacy_socials = []
+                    if 'twitter' in info:
+                        legacy_socials.append({'platform': 'twitter', 'url': info['twitter']})
+                    if 'telegram' in info:
+                        legacy_socials.append({'platform': 'telegram', 'url': info['telegram']})
+                    if legacy_socials:
+                        social_info['socials'] = legacy_socials
+            
             # Remove oldest tokens if max size reached
             while len(self.tokens) >= self.max_tokens:
                 self.tokens.popitem(last=False)
             
             # Update or create token data
             if contract in self.tokens:
-                # Update timestamp but preserve original source, user, and initial market cap
+                # Update timestamp but preserve original source, user, and initial data
                 self.tokens[contract].update({
                     **data,
                     'timestamp': current_time,
@@ -127,6 +161,7 @@ class TokenTracker:
                     'user': self.tokens[contract]['user'],
                     'initial_market_cap': self.tokens[contract].get('initial_market_cap'),
                     'initial_market_cap_formatted': self.tokens[contract].get('initial_market_cap_formatted'),
+                    'social_info': social_info if social_info else self.tokens[contract].get('social_info', {})
                 })
             else:
                 # First alert for this token
@@ -134,43 +169,9 @@ class TokenTracker:
                     **data,
                     'timestamp': current_time,
                     'source': source,
-                    'user': user
+                    'user': user,
+                    'social_info': social_info
                 }
-            
-            # If tracking trades, ensure we use per-user amounts
-            if 'buy' in data or 'sell' in data:
-                if contract not in self.tokens:
-                    self.tokens[contract] = {
-                        **data,
-                        'timestamp': current_time,
-                        'source': source,
-                        'user': user,
-                        'users': {
-                            user: {
-                                'buys': data.get('buy', 0),
-                                'sells': data.get('sell', 0),
-                                'timestamp': current_time
-                            }
-                        }
-                    }
-                else:
-                    # Update or add user trade data
-                    if 'users' not in self.tokens[contract]:
-                        self.tokens[contract]['users'] = {}
-                    
-                    if user not in self.tokens[contract]['users']:
-                        self.tokens[contract]['users'][user] = {
-                            'buys': 0,
-                            'sells': 0,
-                            'timestamp': current_time
-                        }
-                    
-                    if 'buy' in data:
-                        self.tokens[contract]['users'][user]['buys'] += data['buy']
-                    if 'sell' in data:
-                        self.tokens[contract]['users'][user]['sells'] += data['sell']
-                    
-                    self.tokens[contract]['users'][user]['timestamp'] = current_time
             
             # Update database if session available
             if self.db_session:

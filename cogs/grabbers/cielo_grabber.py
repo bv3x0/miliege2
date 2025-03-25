@@ -410,7 +410,8 @@ class CieloGrabber(commands.Cog):
                         'guild_id': message.guild.id if message.guild else None,
                         'original_message_id': original_message_id,
                         'original_channel_id': original_channel_id,
-                        'original_guild_id': original_guild_id
+                        'original_guild_id': original_guild_id,
+                        'info': pair.get('info', {})
                     }
                     
                     try:
