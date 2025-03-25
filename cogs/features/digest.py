@@ -136,22 +136,62 @@ class DigestCog(commands.Cog):
         if not tokens:
             return None
 
-        recent_tokens = list(tokens.items())[-10:]  # Last 10 tokens
-        
-        # Add debug logging
-        logging.info(f"Creating digest embed with {len(tokens)} total tokens, showing last {len(recent_tokens)}")
-        
-        for contract, token in recent_tokens:
-            logging.info(f"Processing token: {token.get('name')} ({contract})")
+        # Convert tokens to list and calculate sorting metrics
+        token_list = []
+        for contract, token in tokens.items():
+            # Calculate status score (4=up, 3=normal, 2=x, 1=gravestone)
+            status_score = 3  # Default score for normal tokens
+            
+            # Get current and initial mcap for percentage calculation
+            try:
+                async with aiohttp.ClientSession() as session:
+                    dex_data = await DexScreenerAPI.get_token_info(session, contract)
+                    current_mcap = 'N/A'
+                    if dex_data and dex_data.get('pairs'):
+                        pair = dex_data['pairs'][0]
+                        if 'fdv' in pair:
+                            current_mcap = f"${format_large_number(float(pair['fdv']))}"
+            
+                current_mcap_value = self.parse_market_cap(current_mcap)
+                initial_mcap_value = token.get('initial_market_cap')
+                
+                if current_mcap_value and initial_mcap_value and initial_mcap_value > 0:
+                    percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
+                    if percent_change >= 40:
+                        status_score = 4  # :up:
+                    elif percent_change <= -40:
+                        status_score = 1  # 🪦
+            except Exception as e:
+                logging.error(f"Error calculating percent change: {e}")
+
+            # Check for sell-only tokens
             if contract in self.hourly_trades:
                 trade_data = self.hourly_trades[contract]
-                logging.info(f"Found trade data: {trade_data}")
-                logging.info(f"Total buys: ${sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())}")
-                logging.info(f"Total sells: ${sum(user_data.get('sells', 0) for user_data in trade_data['users'].values())}")
-                logging.info(f"Users: {list(trade_data.get('users', {}).keys())}")
-            else:
-                logging.info(f"No trade data found for token {contract}")
+                total_buys = sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())
+                total_sells = sum(user_data.get('sells', 0) for user_data in trade_data['users'].values())
+                if total_sells > 0 and total_buys == 0:
+                    status_score = 2  # ❌
 
+            # Calculate total buy amount
+            total_buys = 0
+            if contract in self.hourly_trades:
+                trade_data = self.hourly_trades[contract]
+                total_buys = sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())
+
+            token_list.append({
+                'contract': contract,
+                'token': token,
+                'status_score': status_score,
+                'total_buys': total_buys
+            })
+
+        # Sort tokens by status_score (descending) and total_buys (descending)
+        token_list.sort(key=lambda x: (-x['status_score'], -x['total_buys']))
+
+        # Take last 10 tokens after sorting
+        recent_tokens = [(t['contract'], t['token']) for t in token_list[-10:]]
+
+        # Create embeds with the sorted tokens
         embeds = []
         current_description_lines = []
         
