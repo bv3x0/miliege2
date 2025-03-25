@@ -700,12 +700,15 @@ class DigestCog(commands.Cog):
             
             # Add website if available
             if websites := info.get('websites', []):
-                social_parts.append(f"[web]({websites[0]})")
+                if websites and isinstance(websites[0], dict) and 'url' in websites[0]:
+                    social_parts.append(f"[web]({websites[0]['url']})")
+                elif websites and isinstance(websites[0], str):
+                    social_parts.append(f"[web]({websites[0]})")
             
             # Add only X/Twitter
             if socials := info.get('socials', []):
                 for social in socials:
-                    if social['platform'].lower() == 'twitter':
+                    if isinstance(social, dict) and 'platform' in social and social['platform'].lower() == 'twitter':
                         social_parts.append(f"[𝕏]({social['url']})")
                         break  # Only get the first Twitter link
         

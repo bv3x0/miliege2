@@ -208,7 +208,10 @@ class NewCoinCog(commands.Cog):
         # Add website if available
         websites = socials.get('websites', [])
         if isinstance(websites, list) and websites:
-            social_parts.append(f"[web]({websites[0]})")
+            if isinstance(websites[0], dict) and 'url' in websites[0]:
+                social_parts.append(f"[web]({websites[0]['url']})")
+            else:
+                social_parts.append(f"[web]({websites[0]})")
         elif websites := socials.get('website'):  # Legacy format
             social_parts.append(f"[web]({websites})")
             

@@ -195,6 +195,9 @@ class CieloGrabber(commands.Cog):
                                 if isinstance(website, dict) and 'url' in website:
                                     social_parts.append(f"[web]({website['url']})")
                                     break  # Just get the first website
+                                elif isinstance(website, str):
+                                    social_parts.append(f"[web]({website})")
+                                    break
                         
                         # Then check for socials in the new format
                         socials_new = pair.get('info', {}).get('socials', [])
