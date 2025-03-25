@@ -99,6 +99,9 @@ class HyperliquidWalletGrabber(commands.Cog):
         import json
         import os
         try:
+            # Create data directory if it doesn't exist
+            os.makedirs('data', exist_ok=True)
+            
             if os.path.exists('data/wallets.json'):
                 with open('data/wallets.json', 'r') as f:
                     wallet_data = json.load(f)
@@ -147,13 +150,13 @@ class HyperliquidWalletGrabber(commands.Cog):
                 wallet.is_active = True
                 if name:
                     wallet.name = name
-                self._save_wallets()
+                self._save_wallets()  # Save after updating
                 return wallet
         
         # Create new wallet
         new_wallet = TrackedWallet(address, name)
         self.wallets.append(new_wallet)
-        self._save_wallets()
+        self._save_wallets()  # Save after adding
         return new_wallet
 
     async def remove_wallet(self, address):
@@ -161,7 +164,7 @@ class HyperliquidWalletGrabber(commands.Cog):
         for i, wallet in enumerate(self.wallets):
             if wallet.address.lower() == address.lower():
                 del self.wallets[i]
-                self._save_wallets()
+                self._save_wallets()  # Save after removing
                 return True
         return False
 
