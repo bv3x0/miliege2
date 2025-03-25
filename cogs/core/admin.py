@@ -16,7 +16,7 @@ class AdminCommands(commands.Cog):
             'cielo_grabber_bot': True
         }
         
-    @app_commands.command(name="listwallet", description="List all tracked Hyperliquid wallets")
+    @app_commands.command(name="list", description="List all tracked Hyperliquid wallets")
     async def list_wallets(self, interaction: discord.Interaction):
         """List all tracked Hyperliquid wallets"""
         try:
@@ -55,7 +55,6 @@ class AdminCommands(commands.Cog):
             logging.error(f"Error listing wallets via slash command: {e}", exc_info=True)
             await interaction.response.send_message("❌ An error occurred while retrieving the wallet list.", ephemeral=True)
         
-    # Simplified wallet commands with shorter names
     @app_commands.command(name="add", description="Track a new Hyperliquid wallet")
     @app_commands.describe(
         wallet="Wallet address (0x...)",
