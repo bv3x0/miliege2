@@ -20,14 +20,18 @@ class AdminCommands(commands.Cog):
     async def list_wallets(self, interaction: discord.Interaction):
         """List all tracked Hyperliquid wallets"""
         try:
+            logging.info("List wallets command called")
             # Get the HyperliquidWalletGrabber cog
             wallet_grabber = self.bot.get_cog('HyperliquidWalletGrabber')
+            logging.info(f"Got wallet grabber: {wallet_grabber is not None}")
+            
             if not wallet_grabber:
                 await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
                 return
 
             # Get wallets directly from the cog's memory
             wallets = wallet_grabber.wallets
+            logging.info(f"Found {len(wallets)} wallets")
             
             if not wallets:
                 await interaction.response.send_message("No wallets are currently being tracked.", ephemeral=True)
@@ -261,3 +265,13 @@ class AdminCommands(commands.Cog):
             await interaction.response.send_message(embed=embed)
         else:
             await interaction.response.send_message("❌ CieloGrabber cog not found")
+
+    @commands.command()
+    @commands.is_owner()
+    async def sync(self, ctx):
+        """Sync application commands"""
+        try:
+            synced = await self.bot.tree.sync()
+            await ctx.send(f"✅ Synced {len(synced)} command(s)")
+        except Exception as e:
+            await ctx.send(f"❌ Failed to sync commands: {e}")
