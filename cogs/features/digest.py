@@ -284,7 +284,14 @@ class DigestCog(commands.Cog):
                 
                 # IMPORTANT FIX #2: Always use chain from token data, never default to unknown
                 chain_display = chain.lower() if chain and chain != "Unknown" else "unknown"
-                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {chain_display}"
+                
+                # Format social links and add them to stats line if available
+                social_links = self._format_social_links(token)
+                social_links_str = ""
+                if social_links and social_links != ["no socials"]:
+                    social_links_str = f" ⋅ {' '.join(social_links)}"
+                
+                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {chain_display}{social_links_str}"
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
