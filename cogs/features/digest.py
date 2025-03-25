@@ -270,8 +270,7 @@ class DigestCog(commands.Cog):
                                     if 'sell' in user_data['actions']:
                                         sell_amt = format_large_number(user_data.get('sells', 0))
                                         user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
-                                        new_lines.append(f"{user_link} sold ${sell_amt}")
-                                        logging.info(f"Fallback sell line for {name}: {user} sold ${sell_amt}")
+                                        new_lines.append(f"{user_link}: sell ${sell_amt}")
                                         break
                             elif total_buys:
                                 # Look for users who bought and show the first one
@@ -279,8 +278,7 @@ class DigestCog(commands.Cog):
                                     if 'buy' in user_data['actions']:
                                         buy_amt = format_large_number(user_data.get('buys', 0))
                                         user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
-                                        new_lines.append(f"{user_link} bought ${buy_amt}")
-                                        logging.info(f"Fallback buy line for {name}: {user} bought ${buy_amt}")
+                                        new_lines.append(f"{user_link}: buy ${buy_amt}")
                                         break
                             else:
                                 # Last resort - just use the source via user
@@ -646,51 +644,42 @@ class DigestCog(commands.Cog):
                 if not token_entry.get('chart_url'):
                     token_entry['chart_url'] = dexscreener_url
             
-            # Update trade tracking
+            # Update trade tracking - SIMPLIFIED VERSION
             if token_address not in self.hourly_trades:
-                self.hourly_trades[token_address] = {'buys': 0.0, 'sells': 0.0, 'users': {}}
+                self.hourly_trades[token_address] = {'users': {}}
             
             trade_data = self.hourly_trades[token_address]
             
-            # ALWAYS RECORD THE TRADE TYPE CORRECTLY BASED ON THE DATA
-            # Look for major tokens to determine if it's a buy or sell
-            # This is critical since we're seeing sells recorded when they should be buys
-            if trade_type == 'buy':
-                trade_data['buys'] += amount
-            else:
-                trade_data['sells'] += amount
-            
-            # CRITICAL FIX: Always update the message_link for the user with the latest Cielo link
-            # This ensures we use the Cielo message link rather than any older Rick links
+            # Initialize or update user data
             if user not in trade_data['users']:
                 trade_data['users'][user] = {
                     'message_link': message_link,
                     'actions': set(),
-                    'is_first_trade': is_first_trade
+                    'is_first_trade': is_first_trade,
+                    'buys': 0.0,
+                    'sells': 0.0
                 }
-            else:
-                # Always update the message link to the most recent one
-                # Extract message timestamp from the link to ensure we use the newest
-                if message_link and trade_data['users'][user]['message_link']:
-                    try:
-                        # Message links format: https://discord.com/channels/guild/channel/message_id
-                        # Message IDs are snowflakes that increase over time, so higher = newer
-                        current_msg_id = int(trade_data['users'][user]['message_link'].split('/')[-1])
-                        new_msg_id = int(message_link.split('/')[-1])
-                        
-                        # Only update if the new message is newer
-                        if new_msg_id > current_msg_id:
-                            logging.info(f"Updating message link for {user} from {current_msg_id} to {new_msg_id}")
-                            trade_data['users'][user]['message_link'] = message_link
-                    except (ValueError, IndexError) as e:
-                        # If we can't parse the IDs, just use the new link
-                        logging.warning(f"Error comparing message IDs, using new link: {e}")
-                        trade_data['users'][user]['message_link'] = message_link
-                else:
-                    # If we don't have a link yet, use the new one
-                    trade_data['users'][user]['message_link'] = message_link or trade_data['users'][user]['message_link']
             
-            trade_data['users'][user]['actions'].add(trade_type)
+            # Update the specific user's amounts and actions
+            if trade_type == 'buy':
+                trade_data['users'][user]['buys'] += amount
+                trade_data['users'][user]['actions'].add('buy')
+            else:  # sell
+                trade_data['users'][user]['sells'] += amount
+                trade_data['users'][user]['actions'].add('sell')
+            
+            # Update message link if newer
+            if message_link and trade_data['users'][user]['message_link']:
+                try:
+                    current_msg_id = int(trade_data['users'][user]['message_link'].split('/')[-1])
+                    new_msg_id = int(message_link.split('/')[-1])
+                    if new_msg_id > current_msg_id:
+                        trade_data['users'][user]['message_link'] = message_link
+                except (ValueError, IndexError) as e:
+                    logging.warning(f"Error comparing message IDs, using new link: {e}")
+                    trade_data['users'][user]['message_link'] = message_link
+            else:
+                trade_data['users'][user]['message_link'] = message_link or trade_data['users'][user]['message_link']
             
             logging.info(f"Tracked {trade_type}: {user} {trade_type} {token_name} for ${amount} on {chain}")
             logging.info(f"User {user} message link: {trade_data['users'][user]['message_link']}")
@@ -700,58 +689,27 @@ class DigestCog(commands.Cog):
 
     def _format_trade_info(self, trade_data):
         """Format trade information for a token"""
-        # Initialize lists for each action type
-        buys = []
-        sells = []
-        both = []
+        # Group users by their trades
+        user_trades = []
         
-        # Group users by their actions
         for user, user_data in trade_data['users'].items():
-            logging.info(f"Formatting trade for {user}: actions={user_data['actions']}, link={user_data.get('message_link', 'None')}")
-            
             # Create user link if we have a message_link
             user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
-            is_first = user_data.get('is_first_trade', False)
-            
-            # Use per-user amounts instead of global amounts
             buy_amount = user_data.get('buys', 0)
             sell_amount = user_data.get('sells', 0)
+            is_first = user_data.get('is_first_trade', False)
             
-            # Add user to appropriate list based on their actions with their specific amounts
-            if 'bought' in user_data['actions'] and 'sold' in user_data['actions']:
-                both.append((user_link, is_first, buy_amount, sell_amount))
-            elif 'bought' in user_data['actions']:
-                buys.append((user_link, is_first, buy_amount))
-            elif 'sold' in user_data['actions']:
-                sells.append((user_link, is_first, sell_amount))
+            # Format amounts
+            trade_parts = []
+            if buy_amount > 0:
+                formatted_buy = format_large_number(buy_amount)
+                trade_parts.append(f"buy ${formatted_buy}")
+            if sell_amount > 0:
+                formatted_sell = format_large_number(sell_amount)
+                trade_parts.append(f"sell ${formatted_sell}")
+            
+            if trade_parts:
+                star = " ⭐" if is_first else ""
+                user_trades.append(f"{user_link}: {', '.join(trade_parts)}{star}")
         
-        trade_parts = []
-        
-        def format_amount(amount):
-            try:
-                if amount >= 1000:
-                    return format_large_number(amount)
-                else:
-                    return str(round(amount))
-            except Exception as e:
-                logging.error(f"Error formatting amount {amount}: {e}")
-                return str(amount)
-        
-        # Format each user's actions with their specific amounts
-        for user_link, is_first, amount in sells:
-            formatted_amount = format_amount(amount)
-            star = " ⭐" if is_first else ""
-            trade_parts.append(f"{user_link} sold ${formatted_amount}{star}")
-        
-        for user_link, is_first, amount in buys:
-            formatted_amount = format_amount(amount)
-            star = " ⭐" if is_first else ""
-            trade_parts.append(f"{user_link} bought ${formatted_amount}{star}")
-        
-        for user_link, is_first, buy_amount, sell_amount in both:
-            formatted_buy = format_amount(buy_amount)
-            formatted_sell = format_amount(sell_amount)
-            star = " ⭐" if is_first else ""
-            trade_parts.append(f"{user_link} bought ${formatted_buy} and sold ${formatted_sell}{star}")
-        
-        return "\n".join(trade_parts) if trade_parts else ""
+        return "\n".join(user_trades) if user_trades else ""
