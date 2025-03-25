@@ -137,6 +137,41 @@ class TokenTracker:
                     'user': user
                 }
             
+            # If tracking trades, ensure we use per-user amounts
+            if 'buy' in data or 'sell' in data:
+                if contract not in self.tokens:
+                    self.tokens[contract] = {
+                        **data,
+                        'timestamp': current_time,
+                        'source': source,
+                        'user': user,
+                        'users': {
+                            user: {
+                                'buys': data.get('buy', 0),
+                                'sells': data.get('sell', 0),
+                                'timestamp': current_time
+                            }
+                        }
+                    }
+                else:
+                    # Update or add user trade data
+                    if 'users' not in self.tokens[contract]:
+                        self.tokens[contract]['users'] = {}
+                    
+                    if user not in self.tokens[contract]['users']:
+                        self.tokens[contract]['users'][user] = {
+                            'buys': 0,
+                            'sells': 0,
+                            'timestamp': current_time
+                        }
+                    
+                    if 'buy' in data:
+                        self.tokens[contract]['users'][user]['buys'] += data['buy']
+                    if 'sell' in data:
+                        self.tokens[contract]['users'][user]['sells'] += data['sell']
+                    
+                    self.tokens[contract]['users'][user]['timestamp'] = current_time
+            
             # Update database if session available
             if self.db_session:
                 self._update_database(contract, self.tokens[contract])

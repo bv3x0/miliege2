@@ -668,13 +668,12 @@ class CieloGrabber(commands.Cog):
                     'original_guild_id': message.guild.id if message.guild else None
                 }
                 
-                # SIMPLIFIED TRADE LOGIC:
-                # 1. If to_token is major (SOL, ETH, USDC, etc.) → Track as SELL of from_token
-                # 2. In all other cases → Track as BUY of to_token
-                
                 if to_is_major:
-                    # User is selling a token for a major token (SOL, ETH, USDC, etc.)
-                    token_data['name'] = from_token
+                    # User is selling a token for a major token
+                    token_data.update({
+                        'name': from_token,
+                        'sell': dollar_amount  # Changed from global to per-trade amount
+                    })
                     self.digest_cog.track_trade(
                         token_address,
                         from_token,
@@ -685,10 +684,12 @@ class CieloGrabber(commands.Cog):
                         dexscreener_url,
                         token_data=token_data
                     )
-                    logging.info(f"Tracked as sell: {user} sold {from_token} for {to_token}")
                 else:
-                    # User is buying a non-major token (this includes both major→non-major and non-major→non-major)
-                    token_data['name'] = to_token
+                    # User is buying a non-major token
+                    token_data.update({
+                        'name': to_token,
+                        'buy': dollar_amount  # Changed from global to per-trade amount
+                    })
                     self.digest_cog.track_trade(
                         token_address,
                         to_token,
@@ -703,7 +704,6 @@ class CieloGrabber(commands.Cog):
                         chain=chain_info,
                         token_data=token_data
                     )
-                    logging.info(f"Tracked as buy: {user} bought {to_token}")
 
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)

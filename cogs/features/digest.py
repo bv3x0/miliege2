@@ -146,8 +146,8 @@ class DigestCog(commands.Cog):
             if contract in self.hourly_trades:
                 trade_data = self.hourly_trades[contract]
                 logging.info(f"Found trade data: {trade_data}")
-                logging.info(f"Total buys: ${trade_data.get('buys', 0)}")
-                logging.info(f"Total sells: ${trade_data.get('sells', 0)}")
+                logging.info(f"Total buys: ${sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())}")
+                logging.info(f"Total sells: ${sum(user_data.get('sells', 0) for user_data in trade_data['users'].values())}")
                 logging.info(f"Users: {list(trade_data.get('users', {}).keys())}")
             else:
                 logging.info(f"No trade data found for token {contract}")
@@ -234,9 +234,9 @@ class DigestCog(commands.Cog):
                 # IMPORTANT FIX #1: Add red X to tokens with only sells
                 if contract in self.hourly_trades:
                     trade_data = self.hourly_trades[contract]
-                    has_buys = trade_data.get('buys', 0) > 0
-                    has_sells = trade_data.get('sells', 0) > 0
-                    if has_sells and not has_buys:
+                    total_buys = sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())
+                    total_sells = sum(user_data.get('sells', 0) for user_data in trade_data['users'].values())
+                    if total_sells > 0 and total_buys == 0:
                         token_line += " ❌"
                 
                 # Remove any existing $ from initial_mcap if it exists
@@ -252,7 +252,7 @@ class DigestCog(commands.Cog):
                 # IMPORTANT FIX #3: Always prioritize displaying trade info when available
                 if contract in self.hourly_trades:
                     trade_data = self.hourly_trades[contract]
-                    has_trades = trade_data.get('buys', 0) > 0 or trade_data.get('sells', 0) > 0
+                    has_trades = sum(user_data.get('buys', 0) > 0 or user_data.get('sells', 0) > 0 for user_data in trade_data['users'].values()) > 0
                     
                     if has_trades:
                         # First try the structured formatting
@@ -264,20 +264,20 @@ class DigestCog(commands.Cog):
                         else:
                             # If that fails, directly create trade info for the main users
                             # CRITICAL FALLBACK - Create explicit trade info
-                            if has_sells:
+                            if total_sells:
                                 # Look for users who sold and show the first one
                                 for user, user_data in trade_data['users'].items():
                                     if 'sell' in user_data['actions']:
-                                        sell_amt = format_large_number(trade_data.get('sells', 0))
+                                        sell_amt = format_large_number(user_data.get('sells', 0))
                                         user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
                                         new_lines.append(f"{user_link} sold ${sell_amt}")
                                         logging.info(f"Fallback sell line for {name}: {user} sold ${sell_amt}")
                                         break
-                            elif has_buys:
+                            elif total_buys:
                                 # Look for users who bought and show the first one
                                 for user, user_data in trade_data['users'].items():
                                     if 'buy' in user_data['actions']:
-                                        buy_amt = format_large_number(trade_data.get('buys', 0))
+                                        buy_amt = format_large_number(user_data.get('buys', 0))
                                         user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
                                         new_lines.append(f"{user_link} bought ${buy_amt}")
                                         logging.info(f"Fallback buy line for {name}: {user} bought ${buy_amt}")
@@ -422,33 +422,42 @@ class DigestCog(commands.Cog):
         if contract not in self.hour_tokens.get(current_hour, {}):
             self.hour_tokens[current_hour][contract] = token_data
         
-        # Track the trade data
+        # Track the trade data with per-user amounts
         if contract not in self.hourly_trades:
-            self.hourly_trades[contract] = {'buys': 0.0, 'sells': 0.0, 'users': {}}
+            self.hourly_trades[contract] = {'users': {}}
         
         trade_data = self.hourly_trades[contract]
         
         # Update amounts and determine action
         action = None
         if 'buy' in token_data:
-            trade_data['buys'] += token_data['buy']
+            amount = token_data['buy']
             action = 'bought'
         elif 'sell' in token_data:
-            trade_data['sells'] += token_data['sell']
+            amount = token_data['sell']
             action = 'sold'
         
         # Update user info only if we have an action
         if action and 'user' in token_data:
-            if token_data['user'] not in trade_data['users']:
-                trade_data['users'][token_data['user']] = {
+            user = token_data['user']
+            if user not in trade_data['users']:
+                trade_data['users'][user] = {
                     'message_link': token_data.get('message_link', ''),
                     'actions': set(),
-                    'is_first_trade': token_data.get('is_first_trade', False)
+                    'is_first_trade': token_data.get('is_first_trade', False),
+                    'buys': 0.0,
+                    'sells': 0.0  # Add per-user amount tracking
                 }
-            if action:  # Only add action if it was determined
-                trade_data['users'][token_data['user']]['actions'].add(action)
+            
+            # Update the specific user's amounts
+            if action == 'bought':
+                trade_data['users'][user]['buys'] += amount
+            else:  # sold
+                trade_data['users'][user]['sells'] += amount
+            
+            trade_data['users'][user]['actions'].add(action)
 
-            logging.info(f"Tracked trade: {token_data['user']} {action} {token_data['name']} for ${token_data['buy'] if 'buy' in token_data else token_data['sell']}")
+            logging.info(f"Tracked trade: {user} {action} {token_data['name']} for ${amount}")
 
     @commands.command()
     async def digest(self, ctx):
@@ -704,23 +713,17 @@ class DigestCog(commands.Cog):
             user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
             is_first = user_data.get('is_first_trade', False)
             
-            # Normalize actions
-            normalized_actions = set()
-            for action in user_data['actions']:
-                if action == 'buy':
-                    normalized_actions.add('bought')
-                elif action == 'sell':
-                    normalized_actions.add('sold')
-                else:
-                    normalized_actions.add(action)
+            # Use per-user amounts instead of global amounts
+            buy_amount = user_data.get('buys', 0)
+            sell_amount = user_data.get('sells', 0)
             
-            # Add user to appropriate list based on their actions
-            if 'bought' in normalized_actions and 'sold' in normalized_actions:
-                both.append((user_link, is_first))
-            elif 'bought' in normalized_actions:
-                buys.append((user_link, is_first))
-            elif 'sold' in normalized_actions:
-                sells.append((user_link, is_first))
+            # Add user to appropriate list based on their actions with their specific amounts
+            if 'bought' in user_data['actions'] and 'sold' in user_data['actions']:
+                both.append((user_link, is_first, buy_amount, sell_amount))
+            elif 'bought' in user_data['actions']:
+                buys.append((user_link, is_first, buy_amount))
+            elif 'sold' in user_data['actions']:
+                sells.append((user_link, is_first, sell_amount))
         
         trade_parts = []
         
@@ -734,21 +737,21 @@ class DigestCog(commands.Cog):
                 logging.error(f"Error formatting amount {amount}: {e}")
                 return str(amount)
         
-        # Format each user's actions on separate lines
-        for user_link, is_first in sells:
-            amount = format_amount(trade_data.get('sells', 0))
+        # Format each user's actions with their specific amounts
+        for user_link, is_first, amount in sells:
+            formatted_amount = format_amount(amount)
             star = " ⭐" if is_first else ""
-            trade_parts.append(f"{user_link} sold ${amount}{star}")
+            trade_parts.append(f"{user_link} sold ${formatted_amount}{star}")
         
-        for user_link, is_first in buys:
-            amount = format_amount(trade_data.get('buys', 0))
+        for user_link, is_first, amount in buys:
+            formatted_amount = format_amount(amount)
             star = " ⭐" if is_first else ""
-            trade_parts.append(f"{user_link} bought ${amount}{star}")
+            trade_parts.append(f"{user_link} bought ${formatted_amount}{star}")
         
-        for user_link, is_first in both:
-            buy_amount = format_amount(trade_data.get('buys', 0))
-            sell_amount = format_amount(trade_data.get('sells', 0))
+        for user_link, is_first, buy_amount, sell_amount in both:
+            formatted_buy = format_amount(buy_amount)
+            formatted_sell = format_amount(sell_amount)
             star = " ⭐" if is_first else ""
-            trade_parts.append(f"{user_link} bought ${buy_amount} and sold ${sell_amount}{star}")
+            trade_parts.append(f"{user_link} bought ${formatted_buy} and sold ${formatted_sell}{star}")
         
         return "\n".join(trade_parts) if trade_parts else ""
