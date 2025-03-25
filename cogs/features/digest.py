@@ -691,24 +691,22 @@ class DigestCog(commands.Cog):
 
     def _format_trade_info(self, trade_data):
         """Format trade information for a token"""
-        action_groups = {
-            'bought': [],
-            'sold': [],
-            'bought and sold': []
-        }
+        # Initialize lists for each action type
+        buys = []
+        sells = []
+        both = []
         
         # Group users by their actions
         for user, user_data in trade_data['users'].items():
             logging.info(f"Formatting trade for {user}: actions={user_data['actions']}, link={user_data.get('message_link', 'None')}")
             
-            actions = user_data['actions']
-            # Only create user link if we have a message_link
+            # Create user link if we have a message_link
             user_link = f"[{user}]({user_data['message_link']})" if user_data.get('message_link') else user
             is_first = user_data.get('is_first_trade', False)
             
-            # FIX: Normalize action names - convert 'buy'/'sell' to 'bought'/'sold'
+            # Normalize actions
             normalized_actions = set()
-            for action in actions:
+            for action in user_data['actions']:
                 if action == 'buy':
                     normalized_actions.add('bought')
                 elif action == 'sell':
@@ -716,63 +714,41 @@ class DigestCog(commands.Cog):
                 else:
                     normalized_actions.add(action)
             
+            # Add user to appropriate list based on their actions
             if 'bought' in normalized_actions and 'sold' in normalized_actions:
-                action_groups['bought and sold'].append((user_link, is_first))
+                both.append((user_link, is_first))
             elif 'bought' in normalized_actions:
-                action_groups['bought'].append((user_link, is_first))
+                buys.append((user_link, is_first))
             elif 'sold' in normalized_actions:
-                action_groups['sold'].append((user_link, is_first))
-            
-            # DEBUG: Log the normalized actions to verify
-            logging.info(f"User {user} original actions: {actions}, normalized: {normalized_actions}")
-        
-        # Debug what we found
-        logging.info(f"Action groups: bought={len(action_groups['bought'])}, sold={len(action_groups['sold'])}, both={len(action_groups['bought and sold'])}")
-        logging.info(f"Trade amounts: buys=${trade_data.get('buys', 0)}, sells=${trade_data.get('sells', 0)}")
+                sells.append((user_link, is_first))
         
         trade_parts = []
         
-        # Use this helper function to safely format amounts
         def format_amount(amount):
             try:
                 if amount >= 1000:
                     return format_large_number(amount)
                 else:
-                    # Round to whole number but keep as string
                     return str(round(amount))
             except Exception as e:
                 logging.error(f"Error formatting amount {amount}: {e}")
-                return str(amount)  # Return as string even if error
+                return str(amount)
         
-        # IMPORTANT: If we have users who sold, always show them
-        if action_groups['sold']:
-            try:
-                users, _ = zip(*action_groups['sold'])
-                amount = format_amount(trade_data.get('sells', 0))
-                trade_parts.append(f"{', '.join(users)} sold ${amount}")
-                logging.info(f"Added sold trade info: {users} sold ${amount}")
-            except Exception as e:
-                logging.error(f"Error formatting sell trade: {e}")
+        # Format each user's actions on separate lines
+        for user_link, is_first in sells:
+            amount = format_amount(trade_data.get('sells', 0))
+            star = " ⭐" if is_first else ""
+            trade_parts.append(f"{user_link} sold ${amount}{star}")
         
-        if action_groups['bought']:
-            try:
-                users, is_first = zip(*action_groups['bought'])
-                amount = format_amount(trade_data.get('buys', 0))
-                star = " ⭐" if any(is_first) else ""
-                trade_parts.append(f"{', '.join(users)} bought ${amount}{star}")
-            except Exception as e:
-                logging.error(f"Error formatting buy trade: {e}")
+        for user_link, is_first in buys:
+            amount = format_amount(trade_data.get('buys', 0))
+            star = " ⭐" if is_first else ""
+            trade_parts.append(f"{user_link} bought ${amount}{star}")
         
-        if action_groups['bought and sold']:
-            try:
-                users, is_first = zip(*action_groups['bought and sold'])
-                buy_amount = format_amount(trade_data.get('buys', 0))
-                sell_amount = format_amount(trade_data.get('sells', 0))
-                star = " ⭐" if any(is_first) else ""
-                trade_parts.append(f"{', '.join(users)} bought ${buy_amount} and sold ${sell_amount}{star}")
-            except Exception as e:
-                logging.error(f"Error formatting bought and sold trade: {e}")
+        for user_link, is_first in both:
+            buy_amount = format_amount(trade_data.get('buys', 0))
+            sell_amount = format_amount(trade_data.get('sells', 0))
+            star = " ⭐" if is_first else ""
+            trade_parts.append(f"{user_link} bought ${buy_amount} and sold ${sell_amount}{star}")
         
-        result = '\n'.join(trade_parts) if trade_parts else ""
-        logging.info(f"Formatted trade info: '{result}'")
-        return result
+        return "\n".join(trade_parts) if trade_parts else ""
