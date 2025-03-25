@@ -703,13 +703,13 @@ class DigestCog(commands.Cog):
             trade_parts = []
             if buy_amount > 0:
                 formatted_buy = format_large_number(buy_amount)
-                trade_parts.append(f"buy ${formatted_buy}")
+                trade_parts.append(f"${formatted_buy} buy")
             if sell_amount > 0:
                 formatted_sell = format_large_number(sell_amount)
-                trade_parts.append(f"sell ${formatted_sell}")
+                trade_parts.append(f"${formatted_sell} sell")
             
             if trade_parts:
                 star = " ⭐" if is_first else ""
-                user_trades.append(f"{user_link}: {', '.join(trade_parts)}{star}")
+                user_trades.append(f"{user_link} {', '.join(trade_parts)}{star}")
         
         return "\n".join(user_trades) if user_trades else ""
