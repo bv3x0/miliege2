@@ -15,13 +15,11 @@ from cogs.features.fun import FunCommands
 from cogs.grabbers.rick_grabber import RickGrabber
 from cogs.core.admin import AdminCommands
 import aiohttp
-from db.engine import Database
-from db.models import Token
-from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber, TrackedWallet
 from discord import app_commands
 from cogs.utils.config import settings
 import json
 from cogs.features.newcoin import NewCoinCog
+from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber
 
 # Create logs directory if it doesn't exist
 if not os.path.exists('logs'):
@@ -51,7 +49,6 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 token = os.getenv('DISCORD_BOT_TOKEN')
 daily_digest_channel_id = os.getenv('DAILY_DIGEST_CHANNEL_ID')
-database_url = os.getenv('DATABASE_URL')  # Optional, will use default if not set
 
 # Validate configuration
 if not token:
@@ -80,16 +77,9 @@ class DiscordBot(commands.Bot):
         logging.debug(f"Intents configured: {intents.value}")
         super().__init__(command_prefix='!', intents=intents, help_command=None)
         
-        # Initialize database
-        self.db = Database(database_url)
-        self.db.create_tables()
-        
-        # Create a single session to be shared
-        self.db_session = self.db.session_factory()
-        
         self.monitor = BotMonitor()
         # Pass the session
-        self.token_tracker = TokenTracker(session_factory=self.db_session)
+        self.token_tracker = TokenTracker(max_tokens=50, max_age_hours=24)
         self.session = None
 
     async def on_message(self, message):
@@ -150,8 +140,6 @@ class DiscordBot(commands.Bot):
         # Initialize cogs in order
         # 1. Core features that don't depend on other cogs
         digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
-        # Explicitly set the database session for DigestCog
-        digest_cog.db_session = self.db_session
         await self.add_cog(digest_cog)
         
         # 2. New coin alerts feature
@@ -262,14 +250,6 @@ class DiscordBot(commands.Bot):
             token_count = len(self.token_tracker.tokens)
             embed.add_field(name="Tracked Tokens", value=str(token_count))
             
-            # Add database stats if available
-            if hasattr(self, 'Session'):
-                try:
-                    db_token_count = self.Session().query(Token).count()
-                    embed.add_field(name="Database Tokens", value=str(db_token_count))
-                except Exception as e:
-                    logger.error(f"Error getting database stats: {e}")
-            
             await ctx.send(embed=embed)
         except Exception as e:
             logger.error(f"Error in status command: {e}")
@@ -356,16 +336,6 @@ class DiscordBot(commands.Bot):
     async def close(self):
         """Cleanup when the bot is shutting down"""
         try:
-            # Close the database session
-            if hasattr(self, 'db_session'):
-                self.db_session.close()
-                logging.info("Closed database session")
-            
-            # Close the database connection
-            if hasattr(self, 'db'):
-                self.db.close()
-                logging.info("Closed database connection")
-            
             # Close the aiohttp session
             if self.session:
                 await self.session.close()

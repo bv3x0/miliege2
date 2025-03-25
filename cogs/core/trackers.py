@@ -11,9 +11,6 @@ from cogs.utils import (
     UI,
     Colors
 )
-from db.models import Token, MarketCapUpdate
-from sqlalchemy.exc import SQLAlchemyError # type: ignore
-from sqlalchemy import desc # type: ignore
 
 class BotMonitor:
     def __init__(self):
@@ -41,19 +38,11 @@ class BotMonitor:
         self.errors_since_restart = 0
 
 class TokenTracker:
-    def __init__(self, session_factory=None, max_tokens: int = 50, max_age_hours: int = 24):
+    def __init__(self, max_tokens: int = 50, max_age_hours: int = 24):
         self.tokens = OrderedDict()
         self.max_tokens = max_tokens
         self.max_age_hours = max_age_hours
         self.update_lock = asyncio.Lock()
-        
-        # Store both the session and factory
-        self.session_factory = session_factory
-        self.db_session = session_factory  # Add this line - store the session directly
-        
-        # Load tokens from database if session is provided
-        if session_factory:
-            self._load_tokens_from_db()
         
         # Add major tokens set
         self.major_tokens = {
@@ -68,52 +57,14 @@ class TokenTracker:
             'AVAX',         # Avalanche
             'ARB'           # Arbitrum
         }
-        
-        # Add common variations
-        self.major_tokens.update({f'W{t}' for t in self.major_tokens})  # Add wrapped versions
-    
-    def _load_tokens_from_db(self):
-        """Load the most recent tokens from database into memory cache."""
-        try:
-            if not self.session_factory:
-                logging.warning("Database session not available, skipping token load")
-                return
-                
-            # Get the most recent tokens up to max_tokens
-            # Remove the lock since this is synchronous code
-            tokens = self.session_factory.query(Token).order_by(desc(Token.last_updated)).limit(self.max_tokens).all()
-            
-            # Reset the in-memory cache
-            self.tokens = OrderedDict()
-            
-            # Populate cache from database records
-            for token in tokens:
-                self.tokens[token.contract_address] = {
-                    'name': token.name,
-                    'chart_url': token.chart_url,
-                    'chain': token.chain,
-                    'initial_market_cap': token.initial_market_cap,
-                    'initial_market_cap_formatted': token.initial_market_cap_formatted,
-                    'market_cap': token.current_market_cap_formatted,
-                    'timestamp': token.last_updated,
-                    'source': token.source,
-                    'user': token.credited_user,
-                    'message_id': token.message_id,
-                    'channel_id': token.channel_id,
-                    'guild_id': token.guild_id
-                }
-            
-            logging.info(f"Loaded {len(self.tokens)} tokens from database")
-        
-        except Exception as e:
-            logging.error(f"Error loading tokens from database: {e}")
+        self.major_tokens.update({f'W{t}' for t in self.major_tokens})
 
     def log_token(self, contract: str, data: Dict[str, Any], source: str, user: str = None) -> None:
-        """Log a token, maintaining only the most recent tokens but preserving first alert data."""
+        """Log a token, maintaining only the most recent tokens."""
         try:
             current_time = datetime.now()
             
-            # Extract social links if present in the data
+            # Extract social links if present
             social_info = {}
             if 'info' in data:
                 info = data['info']
@@ -134,18 +85,6 @@ class TokenTracker:
                         for social in info['socials']
                         if isinstance(social, dict) and 'platform' in social and 'url' in social
                     ]
-                
-                # Legacy format fallback
-                if not social_info.get('websites') and 'website' in info:
-                    social_info['websites'] = [info['website']]
-                if not social_info.get('socials'):
-                    legacy_socials = []
-                    if 'twitter' in info:
-                        legacy_socials.append({'platform': 'twitter', 'url': info['twitter']})
-                    if 'telegram' in info:
-                        legacy_socials.append({'platform': 'telegram', 'url': info['telegram']})
-                    if legacy_socials:
-                        social_info['socials'] = legacy_socials
             
             # Remove oldest tokens if max size reached
             while len(self.tokens) >= self.max_tokens:
@@ -153,7 +92,7 @@ class TokenTracker:
             
             # Update or create token data
             if contract in self.tokens:
-                # Update timestamp but preserve original source, user, and initial data
+                # Update timestamp but preserve original source and user
                 self.tokens[contract].update({
                     **data,
                     'timestamp': current_time,
@@ -173,38 +112,8 @@ class TokenTracker:
                     'social_info': social_info
                 }
             
-            # Update database if session available
-            if self.db_session:
-                self._update_database(contract, self.tokens[contract])
-            
         except Exception as e:
             logging.error(f"Error logging token {contract}: {e}", exc_info=True)
-
-    def _update_database(self, contract: str, token_data: Dict[str, Any]):
-        """Update token information in database"""
-        try:
-            db_token = self.db_session.query(Token).filter_by(contract_address=contract).first()
-            
-            if db_token:
-                # Update existing token while preserving initial values
-                for key, value in token_data.items():
-                    if key not in ['initial_market_cap', 'initial_market_cap_formatted'] or not getattr(db_token, key):
-                        if hasattr(db_token, key):
-                            setattr(db_token, key, value)
-            else:
-                # Create new token record
-                new_token = Token(
-                    contract_address=contract,
-                    **{k: v for k, v in token_data.items() if hasattr(Token, k)}
-                )
-                self.db_session.add(new_token)
-            
-            self.db_session.commit()
-            
-        except Exception as e:
-            logging.error(f"Database error updating token {contract}: {e}")
-            if self.db_session:
-                self.db_session.rollback()
 
     def log_buy(self, token_name, buyer_id):
         if token_name not in self.buy_counts:
@@ -257,29 +166,6 @@ class TokenTracker:
                             token_data['market_cap'] = market_cap_formatted
                             token_data['market_cap_value'] = market_cap_value
                             self.tokens[contract]['timestamp'] = now
-                            
-                            # Update database if session available
-                            if self.session_factory:
-                                try:
-                                    db_token = self.session_factory.query(Token).filter_by(contract_address=contract).first()
-                                    if db_token:
-                                        db_token.current_market_cap = market_cap_value
-                                        db_token.current_market_cap_formatted = market_cap_formatted
-                                        db_token.last_updated = now
-                                        
-                                        # Create market cap update record
-                                        market_update = MarketCapUpdate(
-                                            token_id=db_token.id,
-                                            market_cap=market_cap_value,
-                                            market_cap_formatted=market_cap_formatted,
-                                            timestamp=now
-                                        )
-                                        self.session_factory.add(market_update)
-                                        self.session_factory.commit()
-                                except SQLAlchemyError as e:
-                                    logging.error(f"Database error updating market cap for {contract}: {e}")
-                                    if self.session_factory:
-                                        self.session_factory.rollback()
                             
                             update_count += 1
                             logging.info(f"Updated market cap for {token_data['name']}")

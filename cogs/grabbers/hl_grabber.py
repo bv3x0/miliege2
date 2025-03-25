@@ -11,8 +11,6 @@ from cogs.utils import (
     Colors,
     HyperliquidAPI
 )
-from db.models import Base, Token
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text # type: ignore
 from collections import defaultdict, OrderedDict
 
 # Define the new database model for tracked wallets
@@ -39,14 +37,10 @@ class HyperliquidWalletGrabber(commands.Cog):
         self.monitor = monitor
         self.session = session
         self.digest_cog = digest_cog
-        self.db_session = bot.db_session
         self.channel_id = channel_id  # Channel to send alerts to
         
         # Add wallet lock for concurrent operations
         self.wallet_locks = {}  # Dictionary to store locks per wallet
-        
-        # Get the session factory
-        self.session_factory = bot.db.session_factory
         
         # Flag to enable/disable alerts
         self.is_enabled = True

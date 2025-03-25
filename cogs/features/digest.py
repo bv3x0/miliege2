@@ -7,9 +7,6 @@ from cogs.utils import safe_api_call, format_large_number, Colors # type: ignore
 from datetime import datetime, timedelta
 import pytz
 import asyncio
-from sqlalchemy.exc import SQLAlchemyError # type: ignore
-from sqlalchemy import desc # type: ignore
-from db.models import Token
 import re
 from cogs.utils.format import format_token_header, Colors  # Fix import path
 from cogs.utils import (
@@ -27,14 +24,6 @@ class DigestCog(commands.Cog):
         # Store tokens by hour for better separation
         self.hour_tokens = OrderedDict()
         
-        # Load tokens from database if token_tracker has a db_session
-        self.db_session = None
-        if hasattr(token_tracker, 'db_session') and token_tracker.db_session:
-            self.db_session = token_tracker.db_session
-            self._load_tokens_from_db()
-        else:
-            logging.warning("DigestCog: No database session available - token data will not persist across reboots")
-        
         # Start the hourly task
         self.hourly_digest.start()
         
@@ -45,77 +34,13 @@ class DigestCog(commands.Cog):
         self.monitor = monitor if monitor else None
         self.error_count = 0
         
-        # Add trade tracking from TradeSummaryCog
-        self.hourly_trades = {}  # Format: {token_address: {'buys': float, 'sells': float, 'users': {user: {'message_link': str, 'actions': set()}}}}
+        # Add trade tracking
+        self.hourly_trades = {}
         
-        # Define major tokens (copied from TradeSummaryCog)
-        self.major_tokens = {
-            'ETH', 'WETH',  # Ethereum
-            'SOL', 'WSOL',  # Solana
-            'USDC',         # Major stablecoins
-            'USDT',
-            'DAI',
-            'BNB', 'WBNB',  # Binance
-            'S',            # Base
-            'MATIC',        # Polygon
-            'AVAX',         # Avalanche
-            'ARB'           # Arbitrum
-        }
-        self.major_tokens.update({f'W{t}' for t in self.major_tokens})
-
-    def _load_tokens_from_db(self):
-        """Load tokens from the database into the hour buckets"""
-        try:
-            if not self.db_session:
-                logging.warning("Cannot load digest tokens: No database session")
-                return
-                
-            # Get the current time and 24 hours ago
-            now = datetime.now()
-            one_day_ago = now - timedelta(hours=24)
-            
-            # Query tokens from the last 24 hours (covers all digestible tokens)
-            recent_tokens = self.db_session.query(Token).filter(
-                Token.first_seen >= one_day_ago
-            ).order_by(Token.first_seen).all()
-            
-            token_count = 0
-            
-            # Group tokens by hour and add to the appropriate hour bucket
-            for token in recent_tokens:
-                # Get the hour key for when this token was first seen
-                token_time = token.first_seen
-                if token_time:
-                    token_time_ny = token_time.astimezone(self.ny_tz)
-                    hour_key = token_time_ny.strftime("%Y-%m-%d-%H")
-                    
-                    # Initialize the hour bucket if needed
-                    if hour_key not in self.hour_tokens:
-                        self.hour_tokens[hour_key] = OrderedDict()
-                    
-                    # Convert the token to the format used by digest
-                    token_data = {
-                        'name': token.name,
-                        'chart_url': token.chart_url,
-                        'initial_market_cap': token.initial_market_cap,
-                        'initial_market_cap_formatted': token.initial_market_cap_formatted,
-                        'chain': token.chain,
-                        'source': token.source,
-                        'user': token.credited_user,
-                        'message_id': token.message_id,
-                        'channel_id': token.channel_id,
-                        'guild_id': token.guild_id
-                    }
-                    
-                    # Add to the appropriate hour bucket
-                    self.hour_tokens[hour_key][token.contract_address] = token_data
-                    token_count += 1
-            
-            # Log success message with count
-            logging.info(f"DigestCog: Loaded {token_count} tokens from database into {len(self.hour_tokens)} hour buckets")
-            
-        except Exception as e:
-            logging.error(f"DigestCog: Error loading tokens from database: {e}", exc_info=True)
+        # Define major tokens
+        self.major_tokens = token_tracker.major_tokens.copy()
+        
+        self.db_session = None
 
     def cog_unload(self):
         self.hourly_digest.cancel()  # Clean up task when cog is unloaded
