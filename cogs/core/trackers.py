@@ -52,7 +52,7 @@ class TokenTracker:
             'USDT',
             'DAI',
             'BNB', 'WBNB',  # Binance
-            'S', 'wS',      # Sonic
+            'S', 'wS', 'x33', 'USDC.e', # Sonic
             'MATIC',        # Polygon
             'AVAX',         # Avalanche
             'ARB'           # Arbitrum
