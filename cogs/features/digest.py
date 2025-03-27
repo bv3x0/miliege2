@@ -34,8 +34,8 @@ class DigestCog(commands.Cog):
         self.monitor = monitor if monitor else None
         self.error_count = 0
         
-        # Add trade tracking
-        self.hourly_trades = {}
+        # Add trade tracking - organize by hour like tokens
+        self.hourly_trades = OrderedDict()
         
         # Define major tokens
         self.major_tokens = token_tracker.major_tokens.copy()
@@ -63,6 +63,8 @@ class DigestCog(commands.Cog):
 
         # Convert tokens to list and calculate sorting metrics
         token_list = []
+        current_hour_key = self.current_hour_key
+        
         for contract, token in tokens.items():
             # Calculate status score (4=up, 3=normal, 2=x, 1=gravestone)
             status_score = 3  # Default score for normal tokens
@@ -89,25 +91,32 @@ class DigestCog(commands.Cog):
             except Exception as e:
                 logging.error(f"Error calculating percent change: {e}")
 
-            # Check for sell-only tokens
-            if contract in self.hourly_trades:
-                trade_data = self.hourly_trades[contract]
+            # Check for sell-only tokens - ONLY CONSIDER TRADES FROM TOKENS IN THE CURRENT HOUR
+            total_buys = 0
+            total_sells = 0
+            
+            # For hourly digests, use the trade data from the previous hour key
+            # For manual digests, use the current hour key
+            now = datetime.now(self.ny_tz)
+            hour_key = (now - timedelta(hours=1)).strftime("%Y-%m-%d-%H") if is_hourly else current_hour_key
+            
+            # Get trade data for the current contract in the specified hour
+            if hour_key in self.hourly_trades and contract in self.hourly_trades.get(hour_key, {}):
+                trade_data = self.hourly_trades[hour_key][contract]
                 total_buys = sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())
                 total_sells = sum(user_data.get('sells', 0) for user_data in trade_data['users'].values())
+                
                 if total_sells > 0 and total_buys == 0:
                     status_score = 2  # ❌
-
-            # Calculate total buy amount
-            total_buys = 0
-            if contract in self.hourly_trades:
-                trade_data = self.hourly_trades[contract]
-                total_buys = sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())
+            else:
+                logging.info(f"No trade data found for {contract} in hour {hour_key}")
 
             token_list.append({
                 'contract': contract,
                 'token': token,
                 'status_score': status_score,
-                'total_buys': total_buys
+                'total_buys': total_buys,
+                'total_sells': total_sells  # Store the total sells as well
             })
 
         # Sort tokens by status_score (descending) and total_buys (descending)
@@ -212,22 +221,45 @@ class DigestCog(commands.Cog):
                 
                 # Format social links
                 social_parts = self._format_social_links(token)
-                social_str = f"{' ⋅ '.join(social_parts)} ⋅ " if social_parts and social_parts != ["no socials"] else ""
+                
+                # Log the social parts for debugging
+                logging.info(f"Social parts for {name}: {social_parts}")
+                
+                # Create the social string with proper formatting
+                if social_parts:
+                    social_str = f"{' ⋅ '.join(social_parts)} ⋅ "
+                else:
+                    social_str = ""
                 
                 # Format the stats line with social links
                 stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {social_str}{chain_display}"
+                logging.info(f"Stats line for {name}: {stats_line}")
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
                 
                 # IMPORTANT FIX #3: Always prioritize displaying trade info when available
-                if contract in self.hourly_trades:
-                    trade_data = self.hourly_trades[contract]
+                # And for manual digests, only consider current hour trades
+                display_trade_data = False
+                trade_data = None
+                
+                # For hourly digests, use the trade data from the previous hour key
+                # For manual digests, use the current hour key
+                now = datetime.now(self.ny_tz)
+                hour_key = (now - timedelta(hours=1)).strftime("%Y-%m-%d-%H") if is_hourly else current_hour_key
+                
+                # Get trade data for this token from the appropriate hour
+                if hour_key in self.hourly_trades and contract in self.hourly_trades.get(hour_key, {}):
+                    trade_data = self.hourly_trades[hour_key][contract]
+                    display_trade_data = True
+                    logging.info(f"Found trade data for {name} in hour {hour_key}")
+                
+                if display_trade_data and trade_data:
                     has_trades = sum(user_data.get('buys', 0) > 0 or user_data.get('sells', 0) > 0 for user_data in trade_data['users'].values()) > 0
                     
                     if has_trades:
                         # First try the structured formatting
-                        trade_info = self._format_trade_info(trade_data)
+                        trade_info = self._format_trade_info(trade_data, not is_hourly)
                         
                         if trade_info and trade_info.strip():
                             new_lines.append(trade_info)
@@ -261,7 +293,7 @@ class DigestCog(commands.Cog):
                         source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                         new_lines.append(source_line)
                 else:
-                    # No trade data at all, use source via user
+                    # We're not showing trade data for this token (likely not in current hour)
                     source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
                     new_lines.append(source_line)
                 
@@ -399,11 +431,15 @@ class DigestCog(commands.Cog):
         else:
             self.hour_tokens[current_hour][contract] = token_data
         
-        # Track the trade data with per-user amounts
-        if contract not in self.hourly_trades:
-            self.hourly_trades[contract] = {'users': {}}
+        # Track the trade data with per-user amounts - ORGANIZED BY HOUR
+        current_hour = self.current_hour_key
+        if current_hour not in self.hourly_trades:
+            self.hourly_trades[current_hour] = {}
         
-        trade_data = self.hourly_trades[contract]
+        if contract not in self.hourly_trades[current_hour]:
+            self.hourly_trades[current_hour][contract] = {'users': {}}
+        
+        trade_data = self.hourly_trades[current_hour][contract]
         
         # Update amounts and determine action
         action = None
@@ -537,9 +573,15 @@ class DigestCog(commands.Cog):
 
     def _clear_hour_data(self, hour_key):
         """Clear the token data for a specific hour after it has been processed"""
+        # Clear tokens from hour_tokens
         if hour_key in self.hour_tokens:
             del self.hour_tokens[hour_key]
             logging.info(f"Cleared token data for hour: {hour_key}")
+        
+        # Clear trades from hourly_trades (using the new hour-organized structure)
+        if hour_key in self.hourly_trades:
+            del self.hourly_trades[hour_key]
+            logging.info(f"Cleared trade data for hour: {hour_key}")
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, 
                     dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False, 
@@ -633,11 +675,14 @@ class DigestCog(commands.Cog):
                 if not token_entry.get('chart_url'):
                     token_entry['chart_url'] = dexscreener_url
             
-            # Update trade tracking - SIMPLIFIED VERSION
-            if token_address not in self.hourly_trades:
-                self.hourly_trades[token_address] = {'users': {}}
+            # Update trade tracking - ORGANIZED BY HOUR
+            if current_hour not in self.hourly_trades:
+                self.hourly_trades[current_hour] = {}
             
-            trade_data = self.hourly_trades[token_address]
+            if token_address not in self.hourly_trades[current_hour]:
+                self.hourly_trades[current_hour][token_address] = {'users': {}}
+            
+            trade_data = self.hourly_trades[current_hour][token_address]
             
             # Initialize or update user data
             if user not in trade_data['users']:
@@ -676,8 +721,14 @@ class DigestCog(commands.Cog):
         except Exception as e:
             logging.error(f"Error tracking trade: {e}", exc_info=True)
 
-    def _format_trade_info(self, trade_data):
-        """Format trade information for a token"""
+    def _format_trade_info(self, trade_data, for_current_hour=True):
+        """Format trade information for a token
+        
+        Args:
+            trade_data: The trade data for the token
+            for_current_hour: If True, only show trades from the current hour (unused - kept for API compatibility)
+                             The trade data should already be filtered by hour before calling this function
+        """
         # Group users by their trades
         user_trades = []
         
@@ -709,6 +760,7 @@ class DigestCog(commands.Cog):
         
         if 'social_info' in token_data:
             info = token_data['social_info']
+            logging.info(f"Processing social info: {info}")
             
             # Add website if available
             websites = info.get('websites', [])
@@ -720,14 +772,27 @@ class DigestCog(commands.Cog):
             elif websites := info.get('website'):  # Legacy format
                 social_parts.append(f"[web]({websites})")
             
-            # Add X/Twitter
+            # Add X/Twitter - check multiple potential formats
             socials_list = info.get('socials', [])
             if isinstance(socials_list, list):
                 for social in socials_list:
-                    if isinstance(social, dict) and social.get('platform', '').lower() == 'twitter':
-                        social_parts.append(f"[𝕏]({social['url']})")
-                        break
-            elif twitter := info.get('twitter'):  # Legacy format
-                social_parts.append(f"[𝕏]({twitter})")
+                    # Handle different formats in the API response
+                    if isinstance(social, dict):
+                        # Check both 'platform' and 'type' fields for Twitter
+                        platform = social.get('platform', '').lower()
+                        typ = social.get('type', '').lower()
+                        
+                        if 'twitter' in platform or 'twitter' in typ:
+                            if 'url' in social:
+                                social_parts.append(f"[𝕏]({social['url']})")
+                                logging.info(f"Found Twitter link: {social['url']}")
+                                break
+            
+            # Check legacy Twitter format as fallback
+            if not any('𝕏' in part for part in social_parts):
+                if twitter := info.get('twitter'):
+                    social_parts.append(f"[𝕏]({twitter})")
+                    logging.info(f"Found legacy Twitter link: {twitter}")
         
+        logging.info(f"Final social parts: {social_parts}")
         return social_parts  # Return empty list instead of ["no socials"]

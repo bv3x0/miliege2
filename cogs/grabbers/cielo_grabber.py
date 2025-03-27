@@ -666,22 +666,57 @@ class CieloGrabber(commands.Cog):
                 dex_data = await DexScreenerAPI.get_token_info(session, token_address)
                 if dex_data and dex_data.get('pairs'):
                     pair = dex_data['pairs'][0]
-                    # Extract social info
+                    # Extract social info - Enhanced version with better extraction for Twitter links
                     social_info = {}
+                    logging.info(f"Extracting social info from DexScreener API response for {token_address}")
                     
                     # Extract websites
                     websites = pair.get('info', {}).get('websites', [])
                     if websites and isinstance(websites, list):
                         social_info['websites'] = websites
+                        logging.info(f"Extracted websites: {websites}")
                     elif website := pair.get('info', {}).get('website'):
                         social_info['website'] = website
+                        logging.info(f"Extracted legacy website: {website}")
                     
-                    # Extract social links
-                    socials = pair.get('info', {}).get('socials', [])
-                    if socials and isinstance(socials, list):
+                    # Extract social links with better handling for Twitter
+                    socials = []
+                    raw_socials = pair.get('info', {}).get('socials', [])
+                    
+                    if raw_socials and isinstance(raw_socials, list):
+                        # Process each social to ensure proper format
+                        for social in raw_socials:
+                            if isinstance(social, dict):
+                                # Check if it's a Twitter link
+                                platform = social.get('platform', '').lower()
+                                social_type = social.get('type', '').lower()
+                                
+                                if 'twitter' in platform or 'twitter' in social_type or social.get('url', '').lower().startswith('https://twitter.com'):
+                                    # Normalize the format to ensure compatibility
+                                    normalized_social = {
+                                        'platform': 'twitter',
+                                        'type': 'twitter',
+                                        'url': social.get('url')
+                                    }
+                                    socials.append(normalized_social)
+                                    logging.info(f"Found Twitter link: {normalized_social['url']}")
+                                else:
+                                    # Keep other socials as they are
+                                    socials.append(social)
+                    
+                    # Only add socials if we found any
+                    if socials:
                         social_info['socials'] = socials
-                    elif twitter := pair.get('info', {}).get('twitter'):
-                        social_info['twitter'] = twitter
+                        logging.info(f"Extracted socials: {socials}")
+                    
+                    # Legacy Twitter format fallback
+                    if not any(s.get('platform') == 'twitter' or s.get('type') == 'twitter' for s in socials if isinstance(s, dict)):
+                        if twitter := pair.get('info', {}).get('twitter'):
+                            social_info['twitter'] = twitter
+                            logging.info(f"Extracted legacy Twitter: {twitter}")
+                            
+                    # Debug log the final social info
+                    logging.info(f"Final social_info for {token_address}: {social_info}")
             
             if self.digest_cog:
                 # Prepare token data for tracking
