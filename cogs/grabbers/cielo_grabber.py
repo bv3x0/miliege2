@@ -663,7 +663,7 @@ class CieloGrabber(commands.Cog):
             
             # Get token data from Dexscreener to extract social info
             async with aiohttp.ClientSession() as session:
-                dex_data = await DexScreenerAPI.get_token_info(session, contract_address)
+                dex_data = await DexScreenerAPI.get_token_info(session, token_address)
                 if dex_data and dex_data.get('pairs'):
                     pair = dex_data['pairs'][0]
                     # Extract social info
@@ -692,7 +692,7 @@ class CieloGrabber(commands.Cog):
                     'original_message_id': message.id,
                     'original_channel_id': message.channel.id,
                     'original_guild_id': message.guild.id if message.guild else None,
-                    'social_info': social_info if 'social_info' in locals() else {}  # Add social info here
+                    'social_info': social_info if 'social_info' in locals() and social_info else {}  # Add social info here
                 }
                 
                 if to_is_major:
