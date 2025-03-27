@@ -210,13 +210,12 @@ class DigestCog(commands.Cog):
                 # IMPORTANT FIX #2: Always use chain from token data, never default to unknown
                 chain_display = chain.lower() if chain and chain != "Unknown" else "unknown"
                 
-                # Format social links and add them to stats line if available
-                social_links = self._format_social_links(token)
-                social_links_str = ""
-                if social_links and social_links != ["no socials"]:
-                    social_links_str = f"{' ⋅ '.join(social_links)} ⋅ "
+                # Format social links
+                social_parts = self._format_social_links(token)
+                social_str = f"{' ⋅ '.join(social_parts)} ⋅ " if social_parts and social_parts != ["no socials"] else ""
                 
-                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {social_links_str}{chain_display}"
+                # Format the stats line with social links
+                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {social_str}{chain_display}"
                 
                 # Calculate the length of new lines to be added
                 new_lines = [token_line, stats_line]
@@ -370,6 +369,9 @@ class DigestCog(commands.Cog):
     def process_new_token(self, contract, token_data):
         """Process a new token and add it to both the global tracker and hour-specific tracker"""
         current_hour = self.current_hour_key
+        
+        # Add logging to check social info
+        logging.info(f"Processing token {token_data.get('name')} with social info: {token_data.get('social_info')}")
         
         # Extract initial market cap from message_embed if available
         if 'message_embed' in token_data:
