@@ -586,13 +586,21 @@ class DigestCog(commands.Cog):
             
             # Process new token or update existing token
             if token_address not in self.hour_tokens.get(current_hour, {}):
-                # Create new token entry with all required fields
+                # Get social information from token tracker if available
+                social_info = {}
+                if token_data and 'social_info' in token_data:
+                    social_info = token_data['social_info']
+                elif self.token_tracker.tokens.get(token_address, {}).get('social_info'):
+                    social_info = self.token_tracker.tokens[token_address]['social_info']
+                
+                # Create new token entry with all required fields and social info
                 self.hour_tokens[current_hour][token_address] = {
                     'name': token_name,
                     'chart_url': dexscreener_url,
                     'source': 'cielo',
                     'user': user,
                     'chain': chain,
+                    'social_info': social_info,
                     'original_message_id': message_embed.get('id') if message_embed else None,
                     'original_channel_id': message_link.split('/')[5] if message_link else None,
                     'original_guild_id': message_link.split('/')[4] if message_link else None
@@ -602,13 +610,15 @@ class DigestCog(commands.Cog):
                 if token_data:
                     self.hour_tokens[current_hour][token_address].update(token_data)
                 
-                logging.info(f"Created new token entry for {token_name} with chain={chain}")
+                logging.info(f"Created new token entry for {token_name} with chain={chain} and social_info={social_info}")
             else:
-                # Update existing token
+                # Update existing token but preserve social info
                 token_entry = self.hour_tokens[current_hour][token_address]
                 
-                # ALWAYS set source to cielo for cielo trades
-                token_entry['source'] = 'cielo'
+                # Check for social info in token_data
+                if token_data and 'social_info' in token_data and token_data['social_info']:
+                    token_entry['social_info'] = token_data['social_info']
+                    logging.info(f"Updated social info for {token_name}: {token_data['social_info']}")
                 
                 # Update user if not unknown
                 if user and user != "unknown":
@@ -720,4 +730,4 @@ class DigestCog(commands.Cog):
             elif twitter := info.get('twitter'):  # Legacy format
                 social_parts.append(f"[𝕏]({twitter})")
         
-        return social_parts if social_parts else ["no socials"]
+        return social_parts  # Return empty list instead of ["no socials"]

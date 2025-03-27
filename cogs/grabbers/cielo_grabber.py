@@ -661,6 +661,28 @@ class CieloGrabber(commands.Cog):
             # Debug logging
             logging.info(f"Trade detection - from_token: {from_token} (is_major: {from_is_major}), to_token: {to_token} (is_major: {to_is_major})")
             
+            # Get token data from Dexscreener to extract social info
+            async with aiohttp.ClientSession() as session:
+                dex_data = await DexScreenerAPI.get_token_info(session, contract_address)
+                if dex_data and dex_data.get('pairs'):
+                    pair = dex_data['pairs'][0]
+                    # Extract social info
+                    social_info = {}
+                    
+                    # Extract websites
+                    websites = pair.get('info', {}).get('websites', [])
+                    if websites and isinstance(websites, list):
+                        social_info['websites'] = websites
+                    elif website := pair.get('info', {}).get('website'):
+                        social_info['website'] = website
+                    
+                    # Extract social links
+                    socials = pair.get('info', {}).get('socials', [])
+                    if socials and isinstance(socials, list):
+                        social_info['socials'] = socials
+                    elif twitter := pair.get('info', {}).get('twitter'):
+                        social_info['twitter'] = twitter
+            
             if self.digest_cog:
                 # Prepare token data for tracking
                 token_data = {
@@ -669,7 +691,8 @@ class CieloGrabber(commands.Cog):
                     'message_embed': message.embeds[0].to_dict() if message.embeds else None,
                     'original_message_id': message.id,
                     'original_channel_id': message.channel.id,
-                    'original_guild_id': message.guild.id if message.guild else None
+                    'original_guild_id': message.guild.id if message.guild else None,
+                    'social_info': social_info if 'social_info' in locals() else {}  # Add social info here
                 }
                 
                 if to_is_major:
