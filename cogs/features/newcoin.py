@@ -217,11 +217,16 @@ class NewCoinCog(commands.Cog):
             
         # Add X/Twitter
         socials_list = socials.get('socials', [])
+        logging.info(f"Processing social links: {socials_list}")
         if isinstance(socials_list, list):
             for social in socials_list:
-                if isinstance(social, dict) and social.get('platform', '').lower() == 'twitter':
-                    social_parts.append(f"[𝕏]({social['url']})")
-                    break
+                if isinstance(social, dict):
+                    platform = social.get('platform', '').lower()
+                    # Check for both 'twitter' and 'x' platform names
+                    if platform in ['twitter', 'x'] or 'x.com' in social.get('url', '').lower():
+                        logging.info(f"Found X/Twitter social: {social}")
+                        social_parts.append(f"[𝕏]({social['url']})")
+                        break
         elif twitter := socials.get('twitter'):  # Legacy format
             social_parts.append(f"[𝕏]({twitter})")
         
