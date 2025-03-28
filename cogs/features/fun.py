@@ -16,7 +16,7 @@ class FunCommands(commands.Cog):
         self.data_dir = 'data'
         os.makedirs(self.data_dir, exist_ok=True)
         self.goon_file = os.path.join(self.data_dir, 'goon_database.json')
-        
+
         # Test write permissions
         try:
             # Try to write to the file
@@ -27,7 +27,7 @@ class FunCommands(commands.Cog):
         except Exception as e:
             logging.error(f"Permission error: Cannot write to {self.goon_file}: {e}")
             raise
-        
+
         self.goon_options = [
             "https://cdn.discordapp.com/attachments/1180965924459778151/1342230338172096573/Gi9JK-rXEAAaaqv.png?ex=67b8e0ea&is=67b78f6a&hm=429e57cc369fa4cc5212971aa26ce7b63826e5b4e91511f37e050b63dae6129e&",
             "https://media.discordapp.net/attachments/1183105518194151464/1342183366711054387/78851_SFA_156500152520copia.png?ex=67b8b52b&is=67b763ab&hm=47518292a5c8fce06778fdfbb71e6e2ee90bd63bcdca11b016a798e1b29a9502&=&format=webp&quality=lossless&width=607&height=920",
@@ -72,13 +72,13 @@ class FunCommands(commands.Cog):
         try:
             # Send the GIF URL first - Discord will automatically embed it
             await ctx.send("https://tenor.com/view/burpees-shot-caller-2017-prison-gif-17889553258612147199")
-            
+
             # Send the text as a separate message
             quote = ("The safety of these numbers comes with a price. There are no free rides here. "
                     "Everyone puts in work, whether cliqued up or not. I'm not talking about helping us "
                     "with our computer skills. You'll get your fucking hands dirty like the rest of us. "
                     "Or you can go back to seeing how that lone bullshit works out for you, money man.")
-            
+
             await ctx.send(quote)
         except Exception as e:
             logging.error(f"Error in shotcaller command: {e}")
@@ -92,38 +92,31 @@ class FunCommands(commands.Cog):
                 title="Are you trading... _in the zone_ ??",
                 color=UI.EMBED_BORDER
             )
-            
+
             embed.add_field(
-                name="<:namaste:1150497812283408424> Prepare with intention",
-                value="- Define a valid setup, then watch without forming expectations.\n"
+                name="Prepare with intention",
+                value="- Every trade is independent and impermanent.\n"
+                      "- Define a valid setup using an edge, then watch without forming expectations.\n"
                       "- Accept uncertainty. Anything can happen, and that's OK.",
                 inline=False
             )
-            
+
             embed.add_field(
-                name="<a:sniper:1263637653249593427> Act with discipline",
+                name="Act with discipline",
                 value="- Take only trades that align with your plan.\n"
                       "- Manage risk. Never exceed your set % per trade.\n"
                       "- Be aware of emotions. Do not let them control you.",
                 inline=False
             )
-            
+
             embed.add_field(
-                name="<:isee:1151138752794722405> Observe and adjust",
+                name="Observe and adjust",
                 value="- Adapt based on fresh analysis, not attachment.\n"
-                      "- Review mistakes without judgment or self-criticism.\n"
-                      "- Reflect on each trade—what did it teach you?",
-                inline=False
-            )
-            
-            embed.add_field(
-                name="<:trump:1149703968440729610> Strengthen your mindset",
-                value="- Every trade is independent and impermanent.\n"
-                      "- An edge increases your odds but doesn't guarantee results.\n"
+                      "- Review mistakes without self-criticism. What did it teach you?\n"
                       "- Wins and losses happen, then they pass. Let them go.",
                 inline=False
             )
-            
+
             await ctx.send(embed=embed)
         except Exception as e:
             logging.error(f"Error in zone command: {e}")
@@ -138,7 +131,7 @@ class FunCommands(commands.Cog):
                 title="Are you thinking... _in bets_ ??",
                 color=UI.EMBED_BORDER
             )
-            
+
             embed.add_field(
                 name="Before: Frame decisions as bets",
                 value="- Focus on probabilities, not results.\n"
@@ -147,7 +140,7 @@ class FunCommands(commands.Cog):
                       "- Use expected value: Is the upside worth the downside?",
                 inline=False
             )
-            
+
             embed.add_field(
                 name="After: Update your beliefs",
                 value="- Don't cling to old assumptions. Incorporate new information.\n"
@@ -156,12 +149,12 @@ class FunCommands(commands.Cog):
                       "- Aim to be less wrong over time, not always right.",
                 inline=False
             )
-            
+
             await ctx.send(embed=embed)
-            
+
             # Then send the GIF
             await ctx.send("https://tenor.com/view/betmore-money-wasted-buy-gif-21033443")
-            
+
         except Exception as e:
             logging.error(f"Error in bet command: {e}")
             await ctx.send("❌ Failed to post bet message")
@@ -175,4 +168,4 @@ class FunCommands(commands.Cog):
     @commands.command()
     async def ngmi(self, ctx):
         """Respond with NGMI emoji"""
-        await ctx.send("<:ngmi:YOUR_EMOJI_ID>") 
+        await ctx.send("<:ngmi:YOUR_EMOJI_ID>")
