@@ -95,29 +95,26 @@ class FunCommands(commands.Cog):
 
             embed.add_field(
                 name="Prepare with intention",
-                value="- Every trade is independent and impermanent.\n"
-                      "- Define a valid setup using an edge, then watch without forming expectations.\n"
-                      "- Accept uncertainty. Anything can happen, and that's OK.",
-                inline=False
-            )
-
-            embed.add_field(
-                name="Act with discipline",
-                value="- Take only trades that align with your plan.\n"
-                      "- Manage risk. Never exceed your set % per trade.\n"
-                      "- Be aware of emotions. Do not let them control you.",
+                value="- Define a valid setup using an edge.\n"
+                      "- Be aware of emotions. Don't let them control you.\n"
+                      "- Never exceed your set risk per trade.\n"
+                      "- Anything can happen, and that's OK.",
                 inline=False
             )
 
             embed.add_field(
                 name="Observe and adjust",
-                value="- Adapt based on fresh analysis, not attachment.\n"
-                      "- Review mistakes without self-criticism. What did it teach you?\n"
-                      "- Wins and losses happen, then they pass. Let them go.",
+                value="- Review mistakes without self-criticism.\n"
+                      "- Ask what the trade taught you.\n"
+                      "- Then let it go.",
                 inline=False
             )
 
             await ctx.send(embed=embed)
+
+            # Then send the GIF
+            await ctx.send("https://media.discordapp.net/attachments/1185169573046124595/1271226724901720074/1597441693262.gif?ex=67e7c4e5&is=67e67365&hm=e5590fb22362ac9b10743a7d2f9c06b6bbcbb6f460e75e431d0eb74b6a7b842f&=")
+
         except Exception as e:
             logging.error(f"Error in zone command: {e}")
             await ctx.send("❌ Failed to post zone message")
