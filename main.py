@@ -19,7 +19,7 @@ from discord import app_commands
 from cogs.utils.config import settings
 import json
 from cogs.features.newcoin import NewCoinCog
-from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber
+# from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber  # Disabled
 
 # Create logs directory if it doesn't exist
 if not os.path.exists('logs'):
@@ -172,15 +172,16 @@ class DiscordBot(commands.Bot):
         await self.add_cog(AdminCommands(self))
         
         # 5. Optional features
-        await self.add_cog(HyperliquidWalletGrabber(
-            self, 
-            self.token_tracker, 
-            self.monitor, 
-            self.session, 
-            digest_cog, 
-            daily_digest_channel_id
-        ))
-        logger.info("Hyperliquid Wallet Grabber loaded successfully")
+        # Hyperliquid functionality disabled
+        # await self.add_cog(HyperliquidWalletGrabber(
+        #     self, 
+        #     self.token_tracker, 
+        #     self.monitor, 
+        #     self.session, 
+        #     digest_cog, 
+        #     daily_digest_channel_id
+        # ))
+        logger.info("Hyperliquid Wallet Grabber disabled")
 
         logger.info("All cogs loaded successfully")
 
@@ -317,13 +318,13 @@ class DiscordBot(commands.Bot):
                 
                 embed.add_field(name=cog_name, value=command_text, inline=False)
             
-            # Add a special section for Hyperliquid wallet commands
-            hyperliquid_commands = [
-                "`!add_wallet <address> [name]` - Add a wallet to track on Hyperliquid",
-                "`!remove_wallet <address>` - Remove a wallet from tracking",
-                "`!list_wallets` - List all tracked Hyperliquid wallets"
-            ]
-            embed.add_field(name="Hyperliquid Wallet Commands", value="\n".join(hyperliquid_commands), inline=False)
+            # Hyperliquid wallet commands disabled
+            # hyperliquid_commands = [
+            #     "`!add_wallet <address> [name]` - Add a wallet to track on Hyperliquid",
+            #     "`!remove_wallet <address>` - Remove a wallet from tracking",
+            #     "`!list_wallets` - List all tracked Hyperliquid wallets"
+            # ]
+            # embed.add_field(name="Hyperliquid Wallet Commands", value="\n".join(hyperliquid_commands), inline=False)
             
             # Dexscreener commands temporarily disabled
             # dexscreener_commands = [
@@ -347,39 +348,40 @@ class DiscordBot(commands.Bot):
         except Exception as e:
             logging.error(f"Error during shutdown: {e}")
 
-    @app_commands.command()
-    @app_commands.checks.has_role("Admin")  # Or use custom checks
-    @app_commands.checks.cooldown(1, 60.0)  # Once per minute
-    async def addwallet(self, interaction: discord.Interaction, wallet: str):
-        """Add a wallet to track on Hyperliquid"""
-        try:
-            # Get the HyperliquidWalletGrabber cog
-            wallet_grabber = self.get_cog('HyperliquidWalletGrabber')
-            if not wallet_grabber:
-                await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
-                return
-
-            # Add the wallet
-            tracked_wallet = await wallet_grabber.add_wallet(wallet)
-            if tracked_wallet:
-                await interaction.response.send_message(f"✅ Successfully added wallet: `{wallet}`", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ Failed to add wallet. Please check the address and try again.", ephemeral=True)
-        except Exception as e:
-            logger.error(f"Error adding wallet: {e}")
-            await interaction.response.send_message("❌ An error occurred while adding the wallet.", ephemeral=True)
-
-    @app_commands.command()
-    @app_commands.checks.has_role("Admin")  # Or use custom checks
-    @app_commands.checks.cooldown(1, 60.0)  # Once per minute
-    async def removewallet(self, interaction: discord.Interaction, wallet: str):
-        @wallet.autocomplete
-        async def wallet_autocomplete(interaction: discord.Interaction, current: str):
-            # Return list of matching wallets
-            return [
-                app_commands.Choice(name=w.name, value=w.address)
-                for w in self.wallets if current.lower() in w.address.lower()
-            ][:25]  # Discord limits to 25 choices
+    # Hyperliquid wallet commands disabled
+    # @app_commands.command()
+    # @app_commands.checks.has_role("Admin")  # Or use custom checks
+    # @app_commands.checks.cooldown(1, 60.0)  # Once per minute
+    # async def addwallet(self, interaction: discord.Interaction, wallet: str):
+    #     """Add a wallet to track on Hyperliquid"""
+    #     try:
+    #         # Get the HyperliquidWalletGrabber cog
+    #         wallet_grabber = self.get_cog('HyperliquidWalletGrabber')
+    #         if not wallet_grabber:
+    #             await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
+    #             return
+    # 
+    #         # Add the wallet
+    #         tracked_wallet = await wallet_grabber.add_wallet(wallet)
+    #         if tracked_wallet:
+    #             await interaction.response.send_message(f"✅ Successfully added wallet: `{wallet}`", ephemeral=True)
+    #         else:
+    #             await interaction.response.send_message("❌ Failed to add wallet. Please check the address and try again.", ephemeral=True)
+    #     except Exception as e:
+    #         logger.error(f"Error adding wallet: {e}")
+    #         await interaction.response.send_message("❌ An error occurred while adding the wallet.", ephemeral=True)
+    # 
+    # @app_commands.command()
+    # @app_commands.checks.has_role("Admin")  # Or use custom checks
+    # @app_commands.checks.cooldown(1, 60.0)  # Once per minute
+    # async def removewallet(self, interaction: discord.Interaction, wallet: str):
+    #     @wallet.autocomplete
+    #     async def wallet_autocomplete(interaction: discord.Interaction, current: str):
+    #         # Return list of matching wallets
+    #         return [
+    #             app_commands.Choice(name=w.name, value=w.address)
+    #             for w in self.wallets if current.lower() in w.address.lower()
+    #         ][:25]  # Discord limits to 25 choices
 
 async def main():
     bot = DiscordBot()

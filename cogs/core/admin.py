@@ -12,97 +12,100 @@ class AdminCommands(commands.Cog):
         # Initialize feature states
         self.feature_states = {
             'hourly_digest': True,
-            'hyperliquid_bot': True,
+            # 'hyperliquid_bot': True,  # Hyperliquid disabled
             'cielo_grabber_bot': True
         }
         
-    @app_commands.command(name="list", description="List all tracked Hyperliquid wallets")
-    async def list_wallets(self, interaction: discord.Interaction):
-        """List all tracked Hyperliquid wallets"""
-        try:
-            logging.info("List wallets command called")
-            # Get the HyperliquidWalletGrabber cog
-            wallet_grabber = self.bot.get_cog('HyperliquidWalletGrabber')
-            logging.info(f"Got wallet grabber: {wallet_grabber is not None}")
-            
-            if not wallet_grabber:
-                await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
-                return
+    # Hyperliquid commands disabled
+    # @app_commands.command(name="list", description="List all tracked Hyperliquid wallets")
+    # async def list_wallets(self, interaction: discord.Interaction):
+    #     """List all tracked Hyperliquid wallets"""
+    #     try:
+    #         logging.info("List wallets command called")
+    #         # Get the HyperliquidWalletGrabber cog
+    #         wallet_grabber = self.bot.get_cog('HyperliquidWalletGrabber')
+    #         logging.info(f"Got wallet grabber: {wallet_grabber is not None}")
+    #         
+    #         if not wallet_grabber:
+    #             await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
+    #             return
 
-            # Get wallets directly from the cog's memory
-            wallets = wallet_grabber.wallets
-            logging.info(f"Found {len(wallets)} wallets")
-            
-            if not wallets:
-                await interaction.response.send_message("No wallets are currently being tracked.", ephemeral=True)
-                return
-                
-            # Create embed with wallet information
-            embed = discord.Embed(
-                title="Tracked Hyperliquid Wallets",
-                description=f"Currently tracking {len(wallets)} wallets",
-                color=0x5b594f
-            )
-            
-            # Add each wallet to the embed
-            for wallet in wallets:
-                status = "🟢 Active" if wallet.is_active else "🔴 Inactive"
-                embed.add_field(
-                    name=f"{wallet.name} ({status})",
-                    value=f"`{wallet.address}`",
-                    inline=False
-                )
-                
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            
-        except Exception as e:
-            logging.error(f"Error listing wallets via slash command: {e}", exc_info=True)
-            await interaction.response.send_message("❌ An error occurred while retrieving the wallet list.", ephemeral=True)
+    #         # Get wallets directly from the cog's memory
+    #         wallets = wallet_grabber.wallets
+    #         logging.info(f"Found {len(wallets)} wallets")
+    #         
+    #         if not wallets:
+    #             await interaction.response.send_message("No wallets are currently being tracked.", ephemeral=True)
+    #             return
+    #             
+    #         # Create embed with wallet information
+    #         embed = discord.Embed(
+    #             title="Tracked Hyperliquid Wallets",
+    #             description=f"Currently tracking {len(wallets)} wallets",
+    #             color=0x5b594f
+    #         )
+    #         
+    #         # Add each wallet to the embed
+    #         for wallet in wallets:
+    #             status = "🟢 Active" if wallet.is_active else "🔴 Inactive"
+    #             embed.add_field(
+    #                 name=f"{wallet.name} ({status})",
+    #                 value=f"`{wallet.address}`",
+    #                 inline=False
+    #             )
+    #             
+    #         await interaction.response.send_message(embed=embed, ephemeral=True)
+    #         
+    #     except Exception as e:
+    #         logging.error(f"Error listing wallets via slash command: {e}", exc_info=True)
+    #         await interaction.response.send_message("❌ An error occurred while retrieving the wallet list.", ephemeral=True)
         
-    @app_commands.command(name="add", description="Track a new Hyperliquid wallet")
-    @app_commands.describe(
-        wallet="Wallet address (0x...)",
-        name="Optional nickname"
-    )
-    async def add_wallet(self, interaction: discord.Interaction, wallet: str, name: str = None):
-        try:
-            # Get the HyperliquidWalletGrabber cog
-            wallet_grabber = self.bot.get_cog('HyperliquidWalletGrabber')
-            if not wallet_grabber:
-                await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
-                return
-
-            # Add the wallet using the new method
-            tracked_wallet = await wallet_grabber.add_wallet(wallet, name)
-            if tracked_wallet:
-                await interaction.response.send_message(f"✅ Successfully added wallet: `{wallet}`", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ Failed to add wallet. Please check the address and try again.", ephemeral=True)
-        except Exception as e:
-            logging.error(f"Error adding wallet: {e}", exc_info=True)
-            await interaction.response.send_message("❌ An error occurred while adding the wallet.", ephemeral=True)
+    # Hyperliquid wallet commands disabled
+    # @app_commands.command(name="add", description="Track a new Hyperliquid wallet")
+    # @app_commands.describe(
+    #     wallet="Wallet address (0x...)",
+    #     name="Optional nickname"
+    # )
+    # async def add_wallet(self, interaction: discord.Interaction, wallet: str, name: str = None):
+    #     try:
+    #         # Get the HyperliquidWalletGrabber cog
+    #         wallet_grabber = self.bot.get_cog('HyperliquidWalletGrabber')
+    #         if not wallet_grabber:
+    #             await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
+    #             return
+    #
+    #         # Add the wallet using the new method
+    #         tracked_wallet = await wallet_grabber.add_wallet(wallet, name)
+    #         if tracked_wallet:
+    #             await interaction.response.send_message(f"✅ Successfully added wallet: `{wallet}`", ephemeral=True)
+    #         else:
+    #             await interaction.response.send_message("❌ Failed to add wallet. Please check the address and try again.", ephemeral=True)
+    #     except Exception as e:
+    #         logging.error(f"Error adding wallet: {e}", exc_info=True)
+    #         await interaction.response.send_message("❌ An error occurred while adding the wallet.", ephemeral=True)
         
-    @app_commands.command(name="delete", description="Stop tracking a wallet")
-    @app_commands.describe(
-        wallet="Wallet address to remove"
-    )
-    async def delete_wallet(self, interaction: discord.Interaction, wallet: str):
-        try:
-            # Get the HyperliquidWalletGrabber cog
-            wallet_grabber = self.bot.get_cog('HyperliquidWalletGrabber')
-            if not wallet_grabber:
-                await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
-                return
-
-            # Remove the wallet using the new method
-            success = await wallet_grabber.remove_wallet(wallet)
-            if success:
-                await interaction.response.send_message(f"✅ Successfully removed wallet: `{wallet}`", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ Wallet not found. Please check the address and try again.", ephemeral=True)
-        except Exception as e:
-            logging.error(f"Error removing wallet: {e}", exc_info=True)
-            await interaction.response.send_message("❌ An error occurred while removing the wallet.", ephemeral=True)
+    # Hyperliquid wallet commands disabled
+    # @app_commands.command(name="delete", description="Stop tracking a wallet")
+    # @app_commands.describe(
+    #     wallet="Wallet address to remove"
+    # )
+    # async def delete_wallet(self, interaction: discord.Interaction, wallet: str):
+    #     try:
+    #         # Get the HyperliquidWalletGrabber cog
+    #         wallet_grabber = self.bot.get_cog('HyperliquidWalletGrabber')
+    #         if not wallet_grabber:
+    #             await interaction.response.send_message("❌ Wallet tracking system not available.", ephemeral=True)
+    #             return
+    # 
+    #         # Remove the wallet using the new method
+    #         success = await wallet_grabber.remove_wallet(wallet)
+    #         if success:
+    #             await interaction.response.send_message(f"✅ Successfully removed wallet: `{wallet}`", ephemeral=True)
+    #         else:
+    #             await interaction.response.send_message("❌ Wallet not found. Please check the address and try again.", ephemeral=True)
+    #     except Exception as e:
+    #         logging.error(f"Error removing wallet: {e}", exc_info=True)
+    #         await interaction.response.send_message("❌ An error occurred while removing the wallet.", ephemeral=True)
     
     # Control group commands remain the same
     control_group = app_commands.Group(name="control", description="Bot controls")
@@ -113,7 +116,7 @@ class AdminCommands(commands.Cog):
     )
     @app_commands.choices(feature=[
         app_commands.Choice(name="Hourly New Coins", value="hourly_digest"),
-        app_commands.Choice(name="Hyperliquid Bot", value="hyperliquid_bot"),
+        # app_commands.Choice(name="Hyperliquid Bot", value="hyperliquid_bot"),  # Hyperliquid disabled
         app_commands.Choice(name="Cielo Grabber", value="cielo_grabber_bot")
     ])
     async def pause_feature(self, interaction: discord.Interaction, feature: str):
@@ -130,7 +133,7 @@ class AdminCommands(commands.Cog):
     )
     @app_commands.choices(feature=[
         app_commands.Choice(name="Hourly New Coins", value="hourly_digest"),
-        app_commands.Choice(name="Hyperliquid Bot", value="hyperliquid_bot"),
+        # app_commands.Choice(name="Hyperliquid Bot", value="hyperliquid_bot"),  # Hyperliquid disabled
         app_commands.Choice(name="Cielo Grabber", value="cielo_grabber_bot")
     ])
     async def unpause_feature(self, interaction: discord.Interaction, feature: str):
