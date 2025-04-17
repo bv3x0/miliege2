@@ -1,0 +1,12 @@
+# macOS cruft
+.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+env/
+venv/
+# VS Code
+.vscode/
+# Logs
+*.log
