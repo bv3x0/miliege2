@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "tracktracker"
+version = "1.0.0"
+description = "A command-line utility that scrapes track listings from NTS Radio episodes, then creates a playlist in Spotify with those tracks"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/yourusername/tracktracker"
+packages = [{include = "tracktracker"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+requests = "^2.28.0"
+beautifulsoup4 = "^4.11.0"
+rapidfuzz = "^2.13.0"
+spotipy = "^2.23.0"
+playwright = "^1.40.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+black = "^23.0.0"
+isort = "^5.12.0"
+flake8 = "^6.0.0"
+mypy = "^1.4.0"
+pylint = "^2.17.0"
+
+[tool.poetry.scripts]
+tracktracker = "tracktracker.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pylint.messages_control]
+disable = ["C0111", "C0103", "C0330", "C0326"] 
