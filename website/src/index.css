@@ -1,7 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
 
+/* Custom link styles for NTS Radio links */
+a.nts-link {
+  color: #000;
+  text-decoration: underline;
+  text-decoration-color: rgba(0,0,0,0.4);
+  text-underline-offset: 2px;
+  padding: 0 2px;
+}
+
+a.nts-link:hover {
+  background-color: rgba(0,0,0,0.1);
+  text-decoration-color: #000;
+}
+
 * { box-sizing: border-box; }
-html, body { overflow-x: hidden; }
+html {
+  overflow-y: scroll; /* Always show vertical scrollbar */
+  padding-left: calc(100vw - 100%); /* Prevent content shift when scrollbar appears */
+  margin-right: 0 !important;
+}
+body {
+  overflow-x: hidden;
+}
 
 /* Base styles */
 :root {
@@ -18,13 +39,13 @@ body {
 }
 
 .main-content {
-  max-width: 1755px;
-  margin-left: auto;
-  margin-right: auto;
+  max-width: 900px;
+  margin: 0 auto;
+  padding-left: 0;
+  padding-right: 0;
   width: 100%;
   box-sizing: border-box;
-  padding-left: 27px;
-  padding-right: 27px;
+  position: relative;
 }
 
 .site-title {
@@ -79,12 +100,15 @@ body {
 
 .playlist-grid {
   display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 22px;
+  position: relative;
   width: 100%;
   max-width: 1755px;
   margin-left: auto;
   margin-right: auto;
   box-sizing: border-box;
-  /* grid-template-columns and gap will be set by media queries */
 }
 
 /* Playlist Container */
@@ -95,6 +119,12 @@ body {
   justify-content: center;
   width: 100%;
   margin: 0 auto;
+}
+
+/* Hover effects for tiles */
+.playlist-tile-btn:hover ~ .title-container .playlist-short-title {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* Base tile image styling */
@@ -162,6 +192,11 @@ body {
   position: relative;
 }
 
+.playlist-tile-outer.selected .playlist-short-title {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Heart border grid around the image */
 .heart-border-grid {
   display: grid;
@@ -169,10 +204,11 @@ body {
   grid-template-rows: repeat(10, 1fr);
   place-items: center;
   position: absolute;
-  width: 100%;
-  height: 100%;
+  width: 284px;
+  height: 280px;
   top: 0;
   left: 0;
+  transform: translateX(-7px) translateY(-3px);
   pointer-events: none;
   z-index: 2;
   aspect-ratio: 1/1;
@@ -189,9 +225,6 @@ body {
   user-select: none;
   pointer-events: none;
   background: none;
-  padding: 0;
-  text-shadow: 0 0 3px white, 0 0 5px white;
-  filter: drop-shadow(0 0 2px white);
 }
 
 
@@ -223,7 +256,6 @@ body {
   padding: 2.5rem 2rem;
   width: 100%;
   max-width: 500px;
-  box-shadow: 0 2px 16px 0 rgba(0,0,0,0.10);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -256,31 +288,61 @@ body {
     width: 75%;
     height: 75%;
   }
+
+  .heart-border-grid {
+    width: 284px !important;
+    height: 280px !important;
+    transform: translateX(-7px) translateY(-3px);
+  }
+
+  .heart-cell {
+    font-size: 1.1rem;
+  }
+
+  .playlist-tile-img-area {
+    /* Maintain consistent size on mobile */
+    width: 270px;
+    height: 270px;
+  }
+
+  /* Double the whitespace around screen edges for mobile */
+  .main-content {
+    padding-left: 54px;
+    padding-right: 54px;
+  }
+
+  /* Ensure show info section has proper padding */
+  .show-info-section-custom,
+  .show-info-section-custom.expanded {
+    padding: 2.5rem 2rem;
+    margin-left: auto;
+    margin-right: auto;
+    width: calc(100% - 54px);
+  }
 }
 
 /* Desktop-specific styles */
-@media {
+@media (min-width: 601px) {
   .heart-border-grid {
-    width: 274px !important;
-    height: 270px !important;
-    margin-left: -2px;
-
+    width: 284px !important;
+    height: 280px !important;
+    transform: translateX(-7px) translateY(-3px);
   }
-  
+
   .playlist-tile-outer.selected {
     margin-top: 0 !important;
   }
-  
+
   .playlist-tile-img-area {
     width: 270px;
     height: 270px;
   }
-  
+
   .playlist-tile-image {
     width: 220px !important;
     height: 220px !important;
   }
-  
+
   .heart-cell {
     font-size: 1.1rem;
   }
@@ -317,19 +379,29 @@ body {
     grid-template-columns: repeat(3, 270px);
     gap: 50px;
     justify-content: center;
-    align-items: center;
+    align-items: start;
     width: 100%;
     max-width: 960px;
     margin: 0 auto;
+    padding: 0;
+    /* Prevent horizontal shifting */
+    position: relative;
+    left: 0;
+    transition: none;
   }
-  
-  .site-title,
-  .site-description {
+
+  /* Explicitly prevent shifting for expanded state */
+  .playlist-grid.has-expanded-content {
+    left: 0;
+    transition: none;
+  }
+
+  .col-span-full {
+    grid-column: 1 / -1;
+    width: 100%;
     max-width: 960px;
     margin-left: auto;
     margin-right: auto;
-    text-align: left;
-    padding-left: 0;
   }
 }
 
@@ -351,12 +423,10 @@ body {
   padding: 6px 14px;
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 1rem;
-  letter-spacing: 0.07em;
   text-transform: uppercase;
   text-align: center;
   cursor: pointer;
   margin: 0 6px;
-  transition: background 0.2s, box-shadow 0.2s, color 0.2s;
   box-shadow: 0 2px 8px 0 rgba(0,0,0,0.10);
   outline: none;
   text-decoration: none;
@@ -377,9 +447,43 @@ body {
 
 .playlist-btn:hover {
   background: #222;
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
 }
 
 /* Center the buttons when used in flex container */
 .show-info-section-custom .flex {
   justify-content: center;
+}
+
+/* Mobile padding override - ensure this is at the end of the CSS to take precedence */
+@media (max-width: 600px) {
+  .main-content {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    max-width: 100%;
+  }
+
+  .site-title,
+  .site-description {
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .playlist-grid {
+    justify-content: center;
+  }
+
+  .show-info-section-custom,
+  .show-info-section-custom.expanded {
+    width: calc(100% - 40px);
+    max-width: calc(100% - 40px);
+    margin-left: auto;
+    margin-right: auto;
+    padding: 2rem 1.5rem;
+  }
 }
