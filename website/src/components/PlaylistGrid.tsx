@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect } from "react";
+import React, { useState, useRef, useLayoutEffect, useEffect } from "react";
 import PlaylistTile from "./PlaylistTile";
 import { Apple, ExternalLink } from "lucide-react";
 
@@ -174,6 +174,23 @@ const PlaylistGrid = () => {
   const tileRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [colCount, setColCount] = useState(1);
+  
+  // Effect to handle scrolling when a show is selected
+  useEffect(() => {
+    if (openIndex !== null && tileRefs.current[openIndex]) {
+      const selectedTile = tileRefs.current[openIndex];
+      if (selectedTile) {
+        // Scroll to position the selected tile 80px from the top of the viewport
+        const yOffset = -58; 
+        const y = selectedTile.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        
+        window.scrollTo({
+          top: y,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [openIndex]);
 
   useLayoutEffect(() => {
     if (gridRef.current) {
@@ -210,7 +227,11 @@ const PlaylistGrid = () => {
     const rowTiles = row.map((show, colIdx) => {
       const idx = tileIdx + colIdx;
       return (
-        <div key={show.longTitle + idx} ref={el => { tileRefs.current[idx] = el; }}>
+        <div 
+          key={show.longTitle + idx} 
+          ref={el => { tileRefs.current[idx] = el; }}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}
+        >
           <PlaylistTile
             show={show}
             isOpen={openIndex === idx}
