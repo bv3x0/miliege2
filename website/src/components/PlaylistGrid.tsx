@@ -88,7 +88,7 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
   }));
   
   // State for sorting method
-  const [sortMethod, setSortMethod] = useState<SortMethod>("latest");
+  const [sortMethod, setSortMethod] = useState<SortMethod>("latest"); // Keep default as latest
   
   // Sort shows based on current sort method
   const sortedShows = [...fixedShows].sort((a, b) => {
@@ -291,33 +291,30 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
   }, [openIndex]);
 
   // Sorting links style - Times New Roman as requested
-  const sortLinkStyle = {
+  const sortLinkStyleAZ = {
     fontFamily: "'Times New Roman', serif",
     fontSize: "1rem",
     color: "#000",
     cursor: "pointer",
-    textDecoration: sortMethod === "latest" ? "none" : "underline",
+    textDecoration: sortMethod === "alphabetical" ? "none" : "underline",
     marginRight: "1rem",
     fontWeight: "normal" as const
   };
   
-  const sortLinkStyleAZ = {
-    ...sortLinkStyle,
-    textDecoration: sortMethod === "alphabetical" ? "none" : "underline"
+  const sortLinkStyleLatest = {
+    ...sortLinkStyleAZ,
+    textDecoration: sortMethod === "latest" ? "none" : "underline"
   };
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1.5rem" }}>
-        <span 
-          onClick={() => setSortMethod("latest")}
-          style={sortLinkStyle}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && setSortMethod("latest")}
-        >
-          Latest
-        </span>
+      <div style={{ 
+        display: "flex", 
+        justifyContent: "flex-end", 
+        marginBottom: "0",
+        position: "relative",
+        top: "-15px" // Move up to align with the green line
+      }}>
         <span 
           onClick={() => setSortMethod("alphabetical")}
           style={sortLinkStyleAZ}
@@ -326,6 +323,15 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
           onKeyDown={(e) => e.key === 'Enter' && setSortMethod("alphabetical")}
         >
           A-Z
+        </span>
+        <span 
+          onClick={() => setSortMethod("latest")}
+          style={sortLinkStyleLatest}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && setSortMethod("latest")}
+        >
+          Latest
         </span>
       </div>
       <div
