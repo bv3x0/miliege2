@@ -92,9 +92,10 @@ def push_website_changes() -> bool:
     Push website changes to GitHub.
     
     This function:
-    1. Commits the changes to shows.json
-    2. Pushes the changes to GitHub
-    3. The GitHub Actions workflow will then deploy the website
+    1. Pulls the latest changes from GitHub
+    2. Commits the changes to shows.json
+    3. Pushes the changes to GitHub
+    4. The GitHub Actions workflow will then deploy the website
     
     Returns:
         True if the push was successful, False otherwise
@@ -107,9 +108,26 @@ def push_website_changes() -> bool:
         
         logging.info(f"Pushing changes to GitHub for {relative_path}")
         
+        # First, pull the latest changes from GitHub
+        # This prevents "non-fast-forward" errors
+        try:
+            logging.info("Pulling latest changes from GitHub")
+            pull_command = ["git", "pull", "origin", "main"]
+            subprocess.run(pull_command, cwd=project_root, check=True)
+        except Exception as pull_error:
+            logging.warning(f"Unable to pull changes: {pull_error}. Will try to continue.")
+        
         # Add the changed file
         add_command = ["git", "add", relative_path]
         subprocess.run(add_command, cwd=project_root, check=True)
+        
+        # Check if there are changes to commit
+        status_command = ["git", "status", "--porcelain", relative_path]
+        status_result = subprocess.run(status_command, cwd=project_root, capture_output=True, text=True, check=False)
+        
+        if not status_result.stdout.strip():
+            logging.info("No changes to commit for shows data")
+            return True
         
         # Commit the changes
         commit_msg = f"Update shows data via tracktracker tool - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -117,8 +135,20 @@ def push_website_changes() -> bool:
         subprocess.run(commit_command, cwd=project_root, check=True)
         
         # Push to GitHub
+        logging.info("Pushing changes to GitHub")
         push_command = ["git", "push", "origin", "main"]
-        subprocess.run(push_command, cwd=project_root, check=True)
+        result = subprocess.run(push_command, cwd=project_root, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            # If push fails, try pull and push again
+            logging.warning(f"Push failed, trying pull and push again: {result.stderr}")
+            pull_command = ["git", "pull", "--rebase", "origin", "main"]
+            subprocess.run(pull_command, cwd=project_root, check=True)
+            
+            # Try pushing again
+            push_result = subprocess.run(push_command, cwd=project_root, check=True)
+            if push_result.returncode != 0:
+                raise Exception(f"Failed to push after rebasing: {push_result.stderr}")
         
         logging.info("Successfully pushed website changes to GitHub")
         return True
@@ -141,12 +171,12 @@ def add_new_show(show_data: Dict[str, Any], auto_push: bool = True) -> None:
     # Add the new show at the top of the list
     shows.insert(0, show_data)
     
-    # Save the updated shows data
+    # Save the updated shows data and try to push
     save_shows_data(shows, auto_push=auto_push)
     logging.info(f"Added new show: {show_data.get('shortTitle', 'Unknown')}")
     
     if auto_push:
-        logging.info("Changes have been pushed to GitHub and will be deployed automatically")
+        logging.info("Automatic GitHub push was attempted - check for success or error messages above")
 
 
 def update_show_end_date(show_index: int, new_end_date: str, auto_push: bool = True) -> bool:
@@ -180,7 +210,7 @@ def update_show_end_date(show_index: int, new_end_date: str, auto_push: bool = T
         logging.info(f"Updated end date for {shows[show_index].get('shortTitle', 'Unknown')} to {new_end_date}")
         
         if auto_push:
-            logging.info("Changes have been pushed to GitHub and will be deployed automatically")
+            logging.info("Automatic GitHub push was attempted - check for success or error messages above")
         return True
     else:
         logging.error(f"Invalid show index: {show_index}")
