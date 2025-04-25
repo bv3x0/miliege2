@@ -93,8 +93,8 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
   // Sort shows based on current sort method
   const sortedShows = [...fixedShows].sort((a, b) => {
     if (sortMethod === "latest") {
-      // Sort by most recent endDate
-      return new Date(b.endDate).getTime() - new Date(a.endDate).getTime();
+      // Sort by date, oldest first (reversed as requested)
+      return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
     } else { // alphabetical
       return a.shortTitle.localeCompare(b.shortTitle);
     }
@@ -296,14 +296,14 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
     fontSize: "1rem",
     color: "#000",
     cursor: "pointer",
-    textDecoration: sortMethod === "alphabetical" ? "none" : "underline",
+    textDecoration: sortMethod === "alphabetical" ? "underline" : "none",
     marginRight: "1rem",
     fontWeight: "normal" as const
   };
   
   const sortLinkStyleLatest = {
     ...sortLinkStyleAZ,
-    textDecoration: sortMethod === "latest" ? "none" : "underline"
+    textDecoration: sortMethod === "latest" ? "underline" : "none"
   };
 
   return (
