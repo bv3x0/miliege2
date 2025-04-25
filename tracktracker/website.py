@@ -8,6 +8,7 @@ including updating the shows list in the PlaylistGrid component.
 import json
 import os
 import logging
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -63,12 +64,13 @@ def load_shows_data() -> List[Dict[str, Any]]:
         return []
 
 
-def save_shows_data(shows: List[Dict[str, Any]]) -> None:
+def save_shows_data(shows: List[Dict[str, Any]], auto_push: bool = False) -> None:
     """
     Save shows data to the shows.json file.
     
     Args:
         shows: List of show data dictionaries
+        auto_push: Whether to automatically push changes to GitHub
     """
     shows_file = get_shows_data_path()
     
@@ -76,17 +78,62 @@ def save_shows_data(shows: List[Dict[str, Any]]) -> None:
         with open(shows_file, "w") as f:
             json.dump(shows, f, indent=2)
         logging.info(f"Saved shows data to {shows_file}")
+        
+        # Automatically push changes to GitHub if requested
+        if auto_push:
+            push_website_changes()
     except Exception as e:
         logging.error(f"Failed to save shows data: {e}")
         raise ValueError(f"Failed to save shows data: {e}")
 
 
-def add_new_show(show_data: Dict[str, Any]) -> None:
+def push_website_changes() -> bool:
+    """
+    Push website changes to GitHub.
+    
+    This function:
+    1. Commits the changes to shows.json
+    2. Pushes the changes to GitHub
+    3. The GitHub Actions workflow will then deploy the website
+    
+    Returns:
+        True if the push was successful, False otherwise
+    """
+    try:
+        # Get the project root directory
+        project_root = Path(__file__).parent.parent.absolute()
+        shows_path = get_shows_data_path()
+        relative_path = os.path.relpath(shows_path, project_root)
+        
+        logging.info(f"Pushing changes to GitHub for {relative_path}")
+        
+        # Add the changed file
+        add_command = ["git", "add", relative_path]
+        subprocess.run(add_command, cwd=project_root, check=True)
+        
+        # Commit the changes
+        commit_msg = f"Update shows data via tracktracker tool - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        commit_command = ["git", "commit", "-m", commit_msg]
+        subprocess.run(commit_command, cwd=project_root, check=True)
+        
+        # Push to GitHub
+        push_command = ["git", "push", "origin", "main"]
+        subprocess.run(push_command, cwd=project_root, check=True)
+        
+        logging.info("Successfully pushed website changes to GitHub")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to push website changes to GitHub: {e}")
+        return False
+
+
+def add_new_show(show_data: Dict[str, Any], auto_push: bool = True) -> None:
     """
     Add a new show to the shows data.
     
     Args:
         show_data: Show data dictionary with all required fields
+        auto_push: Whether to automatically push changes to GitHub
     """
     # Load existing shows
     shows = load_shows_data()
@@ -95,17 +142,21 @@ def add_new_show(show_data: Dict[str, Any]) -> None:
     shows.insert(0, show_data)
     
     # Save the updated shows data
-    save_shows_data(shows)
+    save_shows_data(shows, auto_push=auto_push)
     logging.info(f"Added new show: {show_data.get('shortTitle', 'Unknown')}")
+    
+    if auto_push:
+        logging.info("Changes have been pushed to GitHub and will be deployed automatically")
 
 
-def update_show_end_date(show_index: int, new_end_date: str) -> bool:
+def update_show_end_date(show_index: int, new_end_date: str, auto_push: bool = True) -> bool:
     """
     Update the end date for a show in the shows data.
     
     Args:
         show_index: Index of the show to update
         new_end_date: New end date in ISO format (YYYY-MM-DD)
+        auto_push: Whether to automatically push changes to GitHub
         
     Returns:
         True if the date was updated, False if no change was needed
@@ -125,8 +176,11 @@ def update_show_end_date(show_index: int, new_end_date: str) -> bool:
         shows[show_index]["endDate"] = new_end_date
         
         # Save the updated shows data
-        save_shows_data(shows)
+        save_shows_data(shows, auto_push=auto_push)
         logging.info(f"Updated end date for {shows[show_index].get('shortTitle', 'Unknown')} to {new_end_date}")
+        
+        if auto_push:
+            logging.info("Changes have been pushed to GitHub and will be deployed automatically")
         return True
     else:
         logging.error(f"Invalid show index: {show_index}")
@@ -219,3 +273,16 @@ def create_show_data_from_nts(
         show_data["description"] = description
     
     return show_data
+
+
+def deploy_website() -> bool:
+    """
+    Manually deploy the website by pushing any changes to GitHub.
+    
+    This is useful when you want to push changes to the website without making
+    changes to the shows data.
+    
+    Returns:
+        True if the deploy was successful, False otherwise
+    """
+    return push_website_changes()
