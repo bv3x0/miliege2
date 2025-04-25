@@ -7,6 +7,9 @@ on:
       - 'website/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -29,17 +32,20 @@ jobs:
         working-directory: website
         run: npm run build
         
-      - name: Copy images to build directory
+      - name: Prepare files
         run: |
           mkdir -p website/dist/show-images
-          cp -r website/public/show-images/* website/dist/show-images/ || true
+          find website/public/show-images -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" \) -exec cp {} website/dist/show-images/ \;
           touch website/dist/.nojekyll
+          echo "# TrackTracker Radio Website" > website/dist/README.md
+          echo "" >> website/dist/README.md
+          echo "This repository hosts the build files for the TrackTracker radio website." >> website/dist/README.md
       
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Deploy to GitHub Pages Repository
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          deploy_key: ${{ secrets.DEPLOY_KEY }}
-          external_repository: bv3x0/radio-site
-          publish_branch: main
-          publish_dir: ./website/dist
-          force_orphan: true
+          folder: website/dist
+          repository-name: bv3x0/radio-site
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+          clean: true

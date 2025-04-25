@@ -1,4 +1,4 @@
-git add website# macOS
+# macOS
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -94,3 +94,11 @@ local_settings.py
 
 # Spotify authentication
 .cache
+
+# Deployment directories
+website/fresh-deploy/
+website/temp-deploy/
+website/gh-pages-deploy/
+
+# Keys and sensitive data
+keys/
