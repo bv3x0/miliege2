@@ -7,20 +7,8 @@ on:
       - 'website/**'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,17 +28,18 @@ jobs:
       - name: Build
         working-directory: website
         run: npm run build
-      
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-        with:
-          static_site_generator: vitejs/vite
-      
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: website/dist
+        
+      - name: Copy images to build directory
+        run: |
+          mkdir -p website/dist/show-images
+          cp -r website/public/show-images/* website/dist/show-images/ || true
+          touch website/dist/.nojekyll
       
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          deploy_key: ${{ secrets.DEPLOY_KEY }}
+          external_repository: bv3x0/radio-site
+          publish_branch: main
+          publish_dir: ./website/dist
+          force_orphan: true

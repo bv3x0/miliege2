@@ -7,6 +7,7 @@ Includes URL parsing, track deduplication, and other helper functions.
 import os
 import re
 import datetime
+import shutil
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -175,4 +176,132 @@ def clean_playlist_name(name: str) -> str:
     """
     # Remove characters that might cause issues
     name = re.sub(r'[^\w\s\-–:]', '', name)
-    return name.strip() 
+    return name.strip()
+
+
+def create_spotify_embed(spotify_url: str) -> str:
+    """
+    Create an embed HTML code for a Spotify playlist.
+    
+    Args:
+        spotify_url: The Spotify playlist URL
+        
+    Returns:
+        HTML embed code for the Spotify playlist
+    """
+    # Extract the playlist ID from the URL
+    playlist_id = ""
+    match = re.search(r'playlist/([a-zA-Z0-9]+)', spotify_url)
+    if match:
+        playlist_id = match.group(1)
+    
+    # If we couldn't extract the ID, try to extract from URL with query parameters
+    if not playlist_id:
+        match = re.search(r'playlist/([a-zA-Z0-9]+)\?', spotify_url)
+        if match:
+            playlist_id = match.group(1)
+    
+    if not playlist_id:
+        return ""
+    
+    # Generate the embed code
+    return f'<iframe style="border-radius:12px" src="https://open.spotify.com/embed/playlist/{playlist_id}?utm_source=generator" width="100%" height="352" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture; storage-access-by-user-activation" loading="lazy" sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation"></iframe>'
+
+
+def create_apple_embed(apple_url: str) -> str:
+    """
+    Create an embed HTML code for an Apple Music playlist.
+    
+    Args:
+        apple_url: The Apple Music playlist URL
+        
+    Returns:
+        HTML embed code for the Apple Music playlist
+    """
+    # Extract the playlist path from the URL
+    playlist_path = ""
+    match = re.search(r'playlist/([^/]+/[^/]+)', apple_url)
+    if match:
+        playlist_path = match.group(1)
+    
+    if not playlist_path:
+        return ""
+    
+    # Generate the embed code
+    return f'<iframe allow="autoplay *; encrypted-media *;" frameborder="0" height="450" style="width:567px;max-width:100%;overflow:hidden;background:transparent;" sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation" src="https://embed.music.apple.com/us/playlist/{playlist_path}"></iframe>'
+
+
+def copy_artwork(source_path: str, destination_dir: str = None) -> str:
+    """
+    Copy artwork file to the website's public/show-images directory.
+    
+    Args:
+        source_path: Path to the source image file
+        destination_dir: Optional destination directory (defaults to website/public/show-images)
+        
+    Returns:
+        Web path to the copied image (/show-images/filename.jpg)
+        
+    Raises:
+        ValueError: If the file can't be copied
+    """
+    if not os.path.exists(source_path):
+        raise ValueError(f"Source image file not found: {source_path}")
+    
+    # Default destination directory is in the website folder
+    if not destination_dir:
+        try:
+            # Get the path from settings
+            from tracktracker.config import settings
+            
+            # Make sure the directory exists
+            settings.ensure_directories()
+            
+            destination_dir = str(settings.paths.show_images_dir)
+        except ImportError:
+            # Fallback to legacy path if config is not available
+            project_root = "/Users/duncancooper/Documents/tracktracker"
+            destination_dir = os.path.join(project_root, "website", "public", "show-images")
+    
+    # Create destination directory if it doesn't exist
+    os.makedirs(destination_dir, exist_ok=True)
+    
+    # Extract the filename from the source path
+    filename = os.path.basename(source_path)
+    destination_path = os.path.join(destination_dir, filename)
+    
+    # Copy the file
+    try:
+        shutil.copy2(source_path, destination_path)
+        return f"/show-images/{filename}"
+    except Exception as e:
+        raise ValueError(f"Failed to copy artwork file: {e}")
+
+
+def format_spotify_url(spotify_url: str) -> str:
+    """
+    Format a Spotify URL to the standard web format.
+    
+    Args:
+        spotify_url: Original Spotify URL
+        
+    Returns:
+        Formatted Spotify URL
+    """
+    # Extract the playlist ID from the URL
+    playlist_id = ""
+    match = re.search(r'playlist/([a-zA-Z0-9]+)', spotify_url)
+    if match:
+        playlist_id = match.group(1)
+    
+    # If we couldn't extract the ID, try to extract from URL with query parameters
+    if not playlist_id:
+        match = re.search(r'playlist/([a-zA-Z0-9]+)\?', spotify_url)
+        if match:
+            playlist_id = match.group(1)
+    
+    if not playlist_id:
+        return spotify_url
+    
+    # Generate the standard format URL
+    return f'https://open.spotify.com/playlist/{playlist_id}'

@@ -5,20 +5,41 @@ Command-line interface for the tracktracker utility.
 Scrapes track listings from NTS Radio episodes or entire shows, then creates
 Spotify playlists with those tracks.
 
-Three modes of operation:
+Modes of operation:
 1. Single episode: Create a playlist from a single NTS episode
 2. Show archive: Create a playlist containing all tracks from all episodes of a show
 3. Weekly report: Generate a CSV report of all tracks played on NTS in the past week
+4. Website: Create a show entry for the website
+5. Batch update: Check for new episodes for all shows and update playlists
 """
 
 import argparse
 import logging
 import sys
-from typing import Dict, Optional
+import os
+import inquirer
+import pathlib
+from typing import Dict, Optional, Tuple, Any, List
+
+try:
+    from dotenv import load_dotenv
+    # Try to load from .env file if it exists
+    load_dotenv()
+except ImportError:
+    pass  # dotenv is optional
 
 from tracktracker.scrapers import nts
 from tracktracker import spotify
 from tracktracker import utils
+from tracktracker import website
+from tracktracker import batch_update
+from tracktracker.api_utils import (
+    APIError,
+    RateLimitError,
+    AuthenticationError,
+    NonRecoverableError,
+    TrackTrackerError,
+)
 
 
 def get_episode_title(tracks_info: Dict) -> str:
@@ -66,9 +87,19 @@ def process_single_episode(url: str, verbose: bool = False) -> None:
     logging.info(f"Processing episode: {episode_title}")
     logging.info(f"Found {len(tracks)} tracks initially.")
 
+    # Save the raw tracklist to CSV for manual verification
+    if tracks:
+        raw_csv_path = spotify.save_tracklist_to_csv(tracks, f"{show_name}_{episode_title}_raw")
+        logging.info(f"Raw tracklist saved to {raw_csv_path} for manual verification")
+
     # Deduplicate tracks
     unique_tracks = utils.deduplicate_tracks(tracks)
     logging.info(f"After deduplication: {len(unique_tracks)} unique tracks.")
+
+    # Save the deduplicated tracklist to CSV
+    if unique_tracks:
+        csv_path = spotify.save_tracklist_to_csv(unique_tracks, f"{show_name}_{episode_title}")
+        logging.info(f"Deduplicated tracklist saved to {csv_path} for manual verification")
 
     if not unique_tracks:
         logging.warning("No unique tracks found after deduplication. Exiting.")
@@ -100,6 +131,7 @@ def process_single_episode(url: str, verbose: bool = False) -> None:
     
     if stats['not_found_tracks'] > 0:
         logging.warning(f"× {stats['not_found_tracks']} tracks could not be found on Spotify")
+        logging.info(f"Check {csv_path} to see all tracks and make manual corrections if needed")
         if verbose and 'not_found' in locals():
             logging.debug("Tracks not found:")
             for track in not_found:
@@ -108,13 +140,25 @@ def process_single_episode(url: str, verbose: bool = False) -> None:
     logging.info(f"\nPlaylist URL: {playlist_url}")
 
 
-def process_show_archive(url: str, verbose: bool = False) -> None:
+def process_show_archive(
+    url: str, 
+    verbose: bool = False, 
+    add_to_website: bool = False, 
+    chunk_size: Optional[int] = None,
+    start_episode: int = 0,
+    small_test: bool = False
+) -> Tuple[str, Dict]:
     """
     Process an entire NTS show archive and create or update a Spotify playlist with all tracks.
     
     Args:
         url: URL to an NTS Radio show
         verbose: Whether to enable verbose output
+        add_to_website: Whether to add the show to the website
+        chunk_size: Optional number of episodes to process at a time (None for all)
+        
+    Returns:
+        Tuple of (playlist_url, show_info)
         
     Raises:
         ValueError: If any processing step fails
@@ -145,7 +189,35 @@ def process_show_archive(url: str, verbose: bool = False) -> None:
 
     if not episodes_data:
         logging.warning("No episodes with tracks found. Exiting.")
-        return
+        return "", show_info
+        
+    # Apply small test option if requested
+    if small_test:
+        logging.info("Running in small test mode - using only the latest episode")
+        if episodes_data:
+            episodes_data = [episodes_data[0]]  # Just take the latest episode
+            episode_count = 1
+            logging.info(f"Selected latest episode: {episodes_data[0].get('episode_title', 'Unknown')}")
+    
+    # Apply start_episode option if specified
+    elif start_episode > 0:
+        if start_episode < len(episodes_data):
+            logging.info(f"Starting from episode index {start_episode} out of {len(episodes_data)}")
+            episodes_data = episodes_data[start_episode:]
+            episode_count = len(episodes_data)
+        else:
+            logging.warning(f"Start episode index {start_episode} is out of range (max: {len(episodes_data)-1})")
+            return "", show_info
+    
+    # Collect all tracks from all episodes
+    all_tracks = []
+    for episode in episodes_data:
+        all_tracks.extend(episode.get("tracks", []))
+    
+    # Save the tracklist to CSV for manual verification
+    if all_tracks:
+        csv_path = spotify.save_tracklist_to_csv(all_tracks, show_name)
+        logging.info(f"Tracklist saved to {csv_path} for manual verification")
 
     # Handle Spotify interactions
     logging.info("Authenticating with Spotify...")
@@ -153,8 +225,18 @@ def process_show_archive(url: str, verbose: bool = False) -> None:
     
     # Always use update_show_archive which handles both creating and updating playlists
     logging.info(f"Processing archive playlist for show: {show_name}")
+    
+    # Add chunking information if enabled
+    if chunk_size:
+        logging.info(f"Processing in chunks of up to {chunk_size} episodes to avoid rate limits")
+    
     playlist_url, stats = spotify.update_show_archive(
-        spotify_client, show_name, episodes_data, verbose
+        spotify_client, 
+        show_name, 
+        episodes_data, 
+        verbose,
+        chunk_size=chunk_size,
+        delay_between_chunks=60.0  # 1 minute between chunks
     )
     
     # Results Summary
@@ -170,8 +252,12 @@ def process_show_archive(url: str, verbose: bool = False) -> None:
     
     if stats['not_found_tracks'] > 0:
         logging.warning(f"× {stats['not_found_tracks']} tracks could not be found on Spotify")
+        logging.info(f"Check {csv_path} to see all tracks and make manual corrections if needed")
 
     logging.info(f"\nPlaylist URL: {playlist_url}")
+    
+    # Return the playlist URL and show info for potential website use
+    return playlist_url, show_info
 
 
 def process_weekly_report(days: int = 7, verbose: bool = False) -> None:
@@ -218,8 +304,242 @@ def process_weekly_report(days: int = 7, verbose: bool = False) -> None:
         raise ValueError(f"Failed to generate weekly report: {e}")
 
 
+def process_add_to_website(nts_url: str, spotify_url: str, verbose: bool = False) -> None:
+    """
+    Add an NTS show to the website.
+    
+    Args:
+        nts_url: URL to an NTS Radio show
+        spotify_url: URL to the Spotify playlist
+        verbose: Whether to enable verbose output
+    """
+    logging.info(f"Adding show to website: {nts_url}")
+    
+    try:
+        # Validate the show URL and get show info
+        url_info = nts.parse_nts_url(nts_url)
+        if not url_info.get("is_show", False):
+            logging.warning("The provided URL is not for a show. Using show URL instead.")
+            # Construct show URL from episode URL if possible
+            show_alias = url_info.get("show_alias")
+            if show_alias:
+                nts_url = f"https://www.nts.live/shows/{show_alias}"
+                logging.info(f"Using show URL: {nts_url}")
+            else:
+                raise ValueError("Could not determine the show URL from the provided URL.")
+        
+        # Scrape show information
+        show_info = nts.scrape(nts_url)
+        show_name = show_info.get("show_name", "NTS Show")
+        
+        # Prompt for short title
+        questions = [
+            inquirer.Text('short_title',
+                          message="Enter a short title for the show",
+                          default=show_name)
+        ]
+        answers = inquirer.prompt(questions)
+        short_title = answers.get('short_title', show_name)
+        
+        # Prompt for artwork file
+        questions = [
+            inquirer.Text('artwork_path',
+                          message="Enter path to artwork file (jpg)",
+                          validate=lambda _, x: os.path.exists(x) and x.lower().endswith(('.jpg', '.jpeg')))
+        ]
+        answers = inquirer.prompt(questions)
+        artwork_path = answers.get('artwork_path')
+        
+        # Prompt for Apple Music link
+        questions = [
+            inquirer.Text('apple_url',
+                          message="Enter Apple Music playlist URL (leave empty if none)",
+                          default="")
+        ]
+        answers = inquirer.prompt(questions)
+        apple_url = answers.get('apple_url', "")
+        
+        # Prompt for show description if not available
+        description = show_info.get("description", "")
+        if not description:
+            # Use plain input instead of inquirer for multiline text to avoid repeating issues
+            print("[?] Enter a description for the show (press Enter twice when done):")
+            lines = []
+            while True:
+                line = input()
+                if not line and (not lines or not lines[-1]):
+                    # Break on empty line after another empty line or at start
+                    break
+                lines.append(line)
+            description = "\n".join(lines)
+        
+        # Format the Spotify URL to the standard format
+        formatted_spotify_url = utils.format_spotify_url(spotify_url)
+        
+        # Create show data
+        show_data = website.create_show_data_from_nts(
+            nts_url=nts_url,
+            nts_data=show_info,
+            spotify_url=formatted_spotify_url,
+            apple_url=apple_url,
+            short_title=short_title,
+            artwork_path=artwork_path,
+            custom_description=description
+        )
+        
+        # Add to website
+        website.add_new_show(show_data)
+        
+        logging.info("\n--- Website Update Complete ---")
+        logging.info(f"Added show to website: {short_title}")
+        logging.info(f"Show data: {show_data}")
+        
+    except Exception as e:
+        logging.error(f"Error adding show to website: {e}", exc_info=verbose)
+        raise ValueError(f"Failed to add show to website: {e}")
+
+
+def process_config(show: bool = False, create_env: bool = False, verbose: bool = False) -> None:
+    """
+    View or update configuration settings.
+    
+    Args:
+        show: Whether to show current settings
+        create_env: Whether to create a sample .env file
+        verbose: Whether to enable verbose output
+    """
+    try:
+        from tracktracker.config import settings
+        
+        if show:
+            # Display current settings
+            print("Current Configuration:")
+            print(f"  App Name: {settings.app_name}")
+            print(f"  App Version: {settings.app_version}")
+            print(f"  Log Level: {settings.log_level}")
+            print("\nPaths:")
+            print(f"  Cache Directory: {settings.paths.cache_dir}")
+            print(f"  Data Directory: {settings.paths.data_dir}")
+            print(f"  Show Images Directory: {settings.paths.show_images_dir}")
+            print(f"  Spotify Token Path: {settings.paths.spotify_token_path}")
+            print(f"  Track Cache Path: {settings.paths.track_cache_path}")
+            print(f"  Shows Data Path: {settings.paths.shows_data_path}")
+            print("\nAPI Settings:")
+            print(f"  User Agent: {settings.api.user_agent}")
+            print(f"  Timeout: {settings.api.timeout} seconds")
+            print(f"  Max Retries: {settings.api.max_retries}")
+            print(f"  Base Delay: {settings.api.base_delay} seconds")
+            print(f"  Max Delay: {settings.api.max_delay} seconds")
+            print(f"  Retry Backoff Factor: {settings.api.retry_backoff}")
+            print("\nSpotify Settings:")
+            print(f"  Client ID: {'set' if settings.spotify.client_id else 'not set'}")
+            print(f"  Client Secret: {'set' if settings.spotify.client_secret else 'not set'}")
+            print(f"  Redirect URI: {settings.spotify.redirect_uri}")
+            
+        if create_env:
+            # Create a sample .env file with current settings
+            env_path = os.path.join(os.getcwd(), ".env")
+            
+            # Import datetime here to avoid circular imports
+            from datetime import datetime
+            
+            # Check if file exists and ask for confirmation using a simpler method
+            if os.path.exists(env_path):
+                print(f".env file already exists at {env_path}.")
+                confirm = input("Do you want to overwrite it? (y/N): ").strip().lower()
+                if confirm != 'y':
+                    print("Aborted.")
+                    return
+                
+            # Create the file
+            with open(env_path, "w") as f:
+                f.write("# TrackTracker Configuration\n")
+                f.write("# Generated on {}\n\n".format(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                
+                # Spotify settings
+                f.write("# Spotify API credentials\n")
+                f.write(f"SPOTIFY_CLIENT_ID={settings.spotify.client_id}\n")
+                f.write(f"SPOTIFY_CLIENT_SECRET={settings.spotify.client_secret}\n")
+                f.write(f"SPOTIFY_REDIRECT_URI={settings.spotify.redirect_uri}\n\n")
+                
+                # Logging
+                f.write("# Logging\n")
+                f.write(f"LOG_LEVEL={settings.log_level}\n\n")
+                
+                # Path overrides (commented out by default)
+                f.write("# Optional: Override the default paths\n")
+                f.write(f"# TRACKTRACKER_CACHE_DIR={settings.paths.cache_dir}\n")
+                f.write(f"# TRACKTRACKER_DATA_DIR={settings.paths.data_dir}\n")
+                f.write(f"# TRACKTRACKER_SHOW_IMAGES_DIR={settings.paths.show_images_dir}\n")
+                
+            print(f"Created .env file at {env_path}")
+            
+        if not show and not create_env:
+            # If no options specified, show help
+            print("Use --show to view current settings or --create-env to create a sample .env file.")
+            
+    except ImportError:
+        print("Configuration module not available. Make sure pydantic and python-dotenv are installed.")
+        print("You can install them with: pip install pydantic python-dotenv")
+
+
+def process_batch_update(verbose: bool = False) -> None:
+    """
+    Check for new episodes for all shows and update playlists.
+    
+    Args:
+        verbose: Whether to enable verbose output
+    """
+    logging.info("Starting batch update of playlists")
+    
+    try:
+        # Run the batch update
+        stats = batch_update.batch_update_playlists()
+        
+        # Display summary
+        logging.info("\n--- Batch Update Complete ---")
+        logging.info(f"Shows checked: {stats['shows_checked']}")
+        logging.info(f"Shows updated: {stats['shows_updated']}")
+        logging.info(f"Episodes added: {stats['episodes_added']}")
+        logging.info(f"Tracks added: {stats['tracks_added']}")
+        
+        if stats["errors"] > 0:
+            logging.warning(f"Encountered {stats['errors']} errors during the update")
+        
+    except AuthenticationError as e:
+        logging.error(f"Authentication failed: {e}", exc_info=verbose)
+        logging.error("Please check your Spotify API credentials in the environment variables")
+        raise ValueError(f"Authentication failed: {e}")
+    except RateLimitError as e:
+        logging.error(f"Rate limit exceeded: {e}", exc_info=verbose)
+        logging.error(f"Please try again later. Retry after: {e.retry_after or 'unknown'} seconds")
+        raise ValueError(f"Rate limit exceeded. Please try again later: {e}")
+    except APIError as e:
+        logging.error(f"API error: {e}", exc_info=verbose)
+        logging.error("Please check your internet connection and try again")
+        raise ValueError(f"API error: {e}")
+    except NonRecoverableError as e:
+        logging.error(f"Non-recoverable error: {e}", exc_info=verbose)
+        raise ValueError(f"Non-recoverable error: {e}")
+    except TrackTrackerError as e:
+        logging.error(f"TrackTracker error: {e}", exc_info=verbose)
+        raise ValueError(f"TrackTracker error: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected error during batch update: {e}", exc_info=verbose)
+        raise ValueError(f"Failed to run batch update: {e}")
+
+
 def main():
     """Main entry point for the tracktracker CLI."""
+    # Try to initialize configuration
+    try:
+        from tracktracker.config import settings
+        # Ensure all required directories exist
+        settings.ensure_directories()
+    except ImportError:
+        # Config module not available, continue with legacy behavior
+        pass
+    
     parser = argparse.ArgumentParser(
         description="Utility for NTS Radio tracks - create Spotify playlists or generate weekly reports."
     )
@@ -238,6 +558,48 @@ def main():
         action="store_true",
         help="Create or update a complete archive playlist for the show instead of a single episode"
     )
+    playlist_parser.add_argument(
+        "-w", "--website",
+        action="store_true",
+        help="Add the show to the website after creating the playlist"
+    )
+    playlist_parser.add_argument(
+        "-c", "--clear-cache",
+        action="store_true",
+        help="Clear the track search cache before running to ensure fresh results"
+    )
+    playlist_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Use strict matching criteria when searching for tracks on Spotify"
+    )
+    playlist_parser.add_argument(
+        "--chunk-size",
+        type=int,
+        help="Process episodes in chunks of this size to avoid rate limits (for archive mode)"
+    )
+    playlist_parser.add_argument(
+        "--start-episode",
+        type=int,
+        default=0,
+        help="Start processing from this episode index (0-based, for archive mode)"
+    )
+    playlist_parser.add_argument(
+        "--small-test",
+        action="store_true",
+        help="Run a small test with just the latest episode to verify functionality"
+    )
+    
+    # Website command
+    website_parser = subparsers.add_parser("website", help="Add a show to the website")
+    website_parser.add_argument(
+        "nts_url", 
+        help="URL to an NTS Radio show"
+    )
+    website_parser.add_argument(
+        "spotify_url", 
+        help="URL to the Spotify playlist for the show"
+    )
     
     # Report command
     report_parser = subparsers.add_parser("report", help="Generate a weekly report of tracks played on NTS")
@@ -248,8 +610,24 @@ def main():
         help="Number of days to look back (default: 7)"
     )
     
+    # Batch update command
+    batch_parser = subparsers.add_parser("batch-update", help="Check for new episodes for all shows and update playlists")
+    
+    # Config command
+    config_parser = subparsers.add_parser("config", help="View or update configuration settings")
+    config_parser.add_argument(
+        "--show", 
+        action="store_true",
+        help="Show current configuration settings"
+    )
+    config_parser.add_argument(
+        "--create-env", 
+        action="store_true",
+        help="Create a sample .env file with current settings"
+    )
+    
     # Common options
-    for p in [playlist_parser, report_parser]:
+    for p in [playlist_parser, report_parser, website_parser, batch_parser, config_parser]:
         p.add_argument(
             "-v", "--verbose", 
             action="store_true",
@@ -265,7 +643,10 @@ def main():
         args.command = "playlist"
         args.url = sys.argv[1]
         args.archive = "--archive" in sys.argv or "-a" in sys.argv
+        args.website = "--website" in sys.argv or "-w" in sys.argv
         args.verbose = "--verbose" in sys.argv or "-v" in sys.argv
+        args.clear_cache = "--clear-cache" in sys.argv or "-c" in sys.argv
+        args.strict = "--strict" in sys.argv
     
     # Configure logging
     log_level = logging.DEBUG if getattr(args, "verbose", False) else logging.INFO
@@ -277,6 +658,16 @@ def main():
 
     try:
         if args.command == "playlist":
+            # Clear track cache if requested
+            if getattr(args, "clear_cache", False):
+                logging.info("Clearing track search cache...")
+                spotify.clear_track_cache()
+                
+            # Set strict matching flag globally
+            strict_matching = getattr(args, "strict", True)  # Default to True for strict matching
+            if strict_matching:
+                logging.info("Using strict matching criteria for track search")
+            
             # Validate the URL is for NTS
             url = utils.parse_url(args.url)
             
@@ -284,7 +675,23 @@ def main():
             # If archive flag is explicitly set, treat as show
             if args.archive:
                 # Process entire show archive
-                process_show_archive(url, args.verbose)
+                playlist_url, show_info = process_show_archive(
+                    url, 
+                    args.verbose, 
+                    add_to_website=args.website,
+                    chunk_size=args.chunk_size,
+                    start_episode=args.start_episode,
+                    small_test=args.small_test
+                )
+                
+                # Add to website if requested
+                if args.website and playlist_url:
+                    process_add_to_website(url, playlist_url, args.verbose)
+                    
+                # Suggest chunking if chunk_size wasn't provided
+                if not args.chunk_size:
+                    logging.info("\nTIP: If you hit rate limits, try using the --chunk-size option:")
+                    logging.info("   python -m tracktracker.cli playlist [URL] --archive --chunk-size 5")
             else:
                 # Check URL structure to determine if it's a show or episode
                 url_info = nts.parse_nts_url(url)
@@ -292,14 +699,46 @@ def main():
                 
                 if is_show:
                     logging.info(f"Detected URL is for a show. Processing as show archive.")
-                    process_show_archive(url, args.verbose)
+                    playlist_url, show_info = process_show_archive(
+                        url, 
+                        args.verbose, 
+                        add_to_website=args.website,
+                        chunk_size=args.chunk_size,
+                        start_episode=args.start_episode,
+                        small_test=args.small_test
+                    )
+                    
+                    # Add to website if requested
+                    if args.website and playlist_url:
+                        process_add_to_website(url, playlist_url, args.verbose)
+                        
+                    # Suggest chunking if chunk_size wasn't provided
+                    if not args.chunk_size:
+                        logging.info("\nTIP: If you hit rate limits, try using the --chunk-size option:")
+                        logging.info("   python -m tracktracker.cli playlist [URL] --archive --chunk-size 5")
                 else:
                     # Process single episode
                     process_single_episode(url, args.verbose)
                     
+        elif args.command == "website":
+            # Add show to website
+            process_add_to_website(args.nts_url, args.spotify_url, args.verbose)
+                    
         elif args.command == "report":
             # Generate weekly report
             process_weekly_report(args.days, args.verbose)
+            
+        elif args.command == "batch-update":
+            # Run batch update of playlists
+            process_batch_update(getattr(args, "verbose", False))
+            
+        elif args.command == "config":
+            # View or update configuration
+            process_config(
+                show=getattr(args, "show", False),
+                create_env=getattr(args, "create_env", False),
+                verbose=getattr(args, "verbose", False)
+            )
             
         else:
             # No command specified

@@ -16,6 +16,16 @@ import csv
 import datetime
 from bs4 import BeautifulSoup
 
+from tracktracker.api_utils import (
+    make_json_request,
+    make_request,
+    retry_with_backoff,
+    APIError,
+    RateLimitError,
+    NonRecoverableError,
+    DataValidationError,
+)
+
 
 def parse_nts_url(url: str) -> Dict[str, str]:
     """
@@ -89,6 +99,7 @@ def parse_nts_url(url: str) -> Dict[str, str]:
     )
 
 
+@retry_with_backoff(max_retries=5, base_delay=2.0)
 def get_show_info(show_alias: str) -> Dict[str, Any]:
     """
     Get information about a show from NTS API.
@@ -100,7 +111,10 @@ def get_show_info(show_alias: str) -> Dict[str, Any]:
         Dictionary containing show information
         
     Raises:
-        ValueError: If the request fails or returns an invalid response
+        APIError: If the API request fails
+        DataValidationError: If the response is not valid JSON
+        AuthenticationError: If authentication fails
+        NonRecoverableError: For other non-recoverable errors
     """
     url = f"https://www.nts.live/api/v2/shows/{show_alias}"
     
@@ -111,21 +125,28 @@ def get_show_info(show_alias: str) -> Dict[str, Any]:
     
     try:
         print(f"Requesting JSON from show page: {url}")
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        raise ValueError(f"Failed to fetch NTS show data: {e}")
-    except ValueError as e:
-        raise ValueError(f"Failed to parse NTS show JSON: {e}")
+        return make_json_request(url=url, headers=headers)
+    except (APIError, NonRecoverableError) as e:
+        # Convert to standard ValueError for backward compatibility
+        # In the future, we could propagate these more specific errors
+        raise ValueError(f"Failed to fetch NTS show data: {e}") from e
 
 
-def get_show_episodes(show_alias: str) -> List[Dict[str, Any]]:
+@retry_with_backoff(max_retries=3, base_delay=1.0)
+def get_show_episodes(
+    show_alias: str, 
+    limit_count: Optional[int] = None,
+    use_cache: bool = True,
+    force_refresh: bool = False
+) -> List[Dict[str, Any]]:
     """
-    Get all episodes for a show from NTS API, handling pagination.
+    Get episodes for a show from NTS API, with optional lazy loading.
     
     Args:
         show_alias: The show alias from the URL
+        limit_count: Maximum number of episodes to fetch (None for all)
+        use_cache: Whether to use cached data
+        force_refresh: Force refresh the cache
         
     Returns:
         List of episode dictionaries with their information
@@ -133,64 +154,89 @@ def get_show_episodes(show_alias: str) -> List[Dict[str, Any]]:
     Raises:
         ValueError: If the request fails or returns an invalid response
     """
-    # Get basic show information first
-    show_data = get_show_info(show_alias)
-    
-    # Episodes are accessed via the embeds.episodes path
-    if "embeds" not in show_data or "episodes" not in show_data["embeds"]:
-        raise ValueError(f"Could not find episodes for show: {show_alias}")
-    
-    episodes_data = show_data["embeds"]["episodes"]
-    
-    # Initialize empty list for all episodes
-    all_episodes = []
-    
-    # Check if we have episodes data and metadata for pagination
-    if "results" in episodes_data and isinstance(episodes_data["results"], list):
-        all_episodes.extend(episodes_data["results"])
+    try:
+        # Get basic show information first (this will be cached if caching is enabled)
+        show_data = get_show_info(show_alias)
         
-        # Get pagination metadata if available
-        if "metadata" in episodes_data and "resultset" in episodes_data["metadata"]:
-            total_count = episodes_data["metadata"]["resultset"].get("count", 0)
-            limit = episodes_data["metadata"]["resultset"].get("limit", 12)
+        # Episodes are accessed via the embeds.episodes path
+        if "embeds" not in show_data or "episodes" not in show_data["embeds"]:
+            raise ValueError(f"Could not find episodes for show: {show_alias}")
+        
+        episodes_data = show_data["embeds"]["episodes"]
+        
+        # Initialize empty list for all episodes
+        all_episodes = []
+        
+        # Check if we have episodes data and metadata for pagination
+        if "results" in episodes_data and isinstance(episodes_data["results"], list):
+            all_episodes.extend(episodes_data["results"])
             
-            # If there are more episodes than returned in the first request
-            if total_count > len(all_episodes):
-                print(f"Show has {total_count} episodes, fetching all pages...")
+            # Get pagination metadata if available
+            if "metadata" in episodes_data and "resultset" in episodes_data["metadata"]:
+                total_count = episodes_data["metadata"]["resultset"].get("count", 0)
+                api_limit = episodes_data["metadata"]["resultset"].get("limit", 12)
                 
-                # Fetch remaining pages
-                offset = limit
-                while offset < total_count:
-                    url = f"https://www.nts.live/api/v2/shows/{show_alias}/episodes?offset={offset}&limit={limit}"
+                # Use limit_count if specified, otherwise fetch all episodes
+                if limit_count is not None:
+                    episodes_to_fetch = min(limit_count, total_count)
+                else:
+                    episodes_to_fetch = total_count
+                
+                # If we need more episodes and have not reached our limit
+                if episodes_to_fetch > len(all_episodes):
+                    print(f"Show has {total_count} episodes, fetching up to {episodes_to_fetch}...")
                     
-                    headers = {
-                        "Accept": "application/json",
-                        "User-Agent": "tracktracker/1.0"
-                    }
-                    
-                    try:
-                        print(f"Fetching more episodes from offset {offset}...")
-                        response = requests.get(url, headers=headers)
-                        response.raise_for_status()
-                        page_data = response.json()
+                    # Fetch remaining pages as needed
+                    offset = api_limit
+                    while offset < total_count and len(all_episodes) < episodes_to_fetch:
+                        url = f"https://www.nts.live/api/v2/shows/{show_alias}/episodes?offset={offset}&limit={api_limit}"
                         
-                        if "results" in page_data and isinstance(page_data["results"], list):
-                            all_episodes.extend(page_data["results"])
+                        headers = {
+                            "Accept": "application/json",
+                            "User-Agent": "tracktracker/1.0"
+                        }
                         
-                        # Move to the next page
-                        offset += limit
-                    except requests.RequestException as e:
-                        # If we fail to get a page, we can still continue with what we have
-                        print(f"Warning: Failed to fetch episodes page at offset {offset}: {e}")
-                        break
-                    except ValueError as e:
-                        print(f"Warning: Failed to parse episodes JSON at offset {offset}: {e}")
-                        break
-    
-    print(f"Found {len(all_episodes)} episodes for show: {show_alias}")
-    return all_episodes
+                        try:
+                            print(f"Fetching more episodes from offset {offset}...")
+                            # Use our centralized request function with caching
+                            page_data = make_json_request(
+                                url=url, 
+                                headers=headers,
+                                use_cache=use_cache,
+                                force_refresh=force_refresh,
+                                cache_max_age=86400  # Cache for 24 hours by default
+                            )
+                            
+                            # Extract episodes from this page
+                            if "results" in page_data and isinstance(page_data["results"], list):
+                                # Only add episodes up to our desired limit
+                                if limit_count is not None:
+                                    remaining = episodes_to_fetch - len(all_episodes)
+                                    all_episodes.extend(page_data["results"][:remaining])
+                                else:
+                                    all_episodes.extend(page_data["results"])
+                            
+                            # Move to the next page
+                            offset += api_limit
+                        except (APIError, DataValidationError) as e:
+                            # If we fail to get a page, we can still continue with what we have
+                            print(f"Warning: Failed to fetch episodes page at offset {offset}: {e}")
+                            # We've already retried with backoff, so we'll just move on
+                            break
+        
+        # Limit the final result if needed
+        if limit_count is not None and len(all_episodes) > limit_count:
+            all_episodes = all_episodes[:limit_count]
+            
+        print(f"Found {len(all_episodes)} episodes for show: {show_alias}")
+        return all_episodes
+    except Exception as e:
+        # Capture any unexpected errors and standardize the error message
+        # While maintaining backward compatibility with existing code
+        raise ValueError(f"Failed to get episodes for show {show_alias}: {e}") from e
 
 
+@retry_with_backoff(max_retries=5, base_delay=2.0)
 def get_tracklist_from_episode_page(show_alias: str, episode_alias: str) -> Dict[str, Any]:
     """
     Get the tracklist directly from the episode page JSON API.
@@ -206,7 +252,10 @@ def get_tracklist_from_episode_page(show_alias: str, episode_alias: str) -> Dict
         Dictionary containing API response with tracklist
         
     Raises:
-        ValueError: If the request fails or returns an invalid response
+        APIError: If the API request fails
+        DataValidationError: If the response is not valid JSON
+        AuthenticationError: If authentication fails
+        NonRecoverableError: For other non-recoverable errors
     """
     # Get the episode data
     url = f"https://www.nts.live/api/v2/shows/{show_alias}/episodes/{episode_alias}"
@@ -218,19 +267,11 @@ def get_tracklist_from_episode_page(show_alias: str, episode_alias: str) -> Dict
     
     try:
         print(f"Requesting JSON from episode page: {url}")
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        
-        # Get episode data - in the updated API, the tracklist is already included
-        # in the response under "embeds.tracklist.results"
-        episode_data = response.json()
-        
-        # No need for a second request since the tracklist is already included
-        return episode_data
-    except requests.RequestException as e:
-        raise ValueError(f"Failed to fetch NTS episode data: {e}")
-    except ValueError as e:
-        raise ValueError(f"Failed to parse NTS episode JSON: {e}")
+        # Using our standardized API request function with built-in retry logic
+        return make_json_request(url=url, headers=headers)
+    except (APIError, DataValidationError) as e:
+        # Convert to standard ValueError for backward compatibility
+        raise ValueError(f"Failed to fetch NTS episode data: {e}") from e
 
 
 def parse_tracklist(data: Dict[str, Any]) -> Dict[str, Any]:

@@ -4,7 +4,7 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: '/tracktracker/', // GitHub Pages repository name
+  base: '/radio-site/', // GitHub Pages repository name
   server: {
     host: "::",
     port: 8080,

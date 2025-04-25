@@ -202,21 +202,36 @@ npm run dev
 ```
 
 ### Deploying the Website to GitHub Pages
-The website is automatically deployed to GitHub Pages whenever changes are pushed to the repository:
+The website can be deployed to GitHub Pages using the included script:
 
-1. Make your changes to the website code or data
-2. Commit and push your changes to the main branch:
+1. Install the GitHub CLI if you haven't already:
 ```
-git add website/
-git commit -m "Update website content"
-git push
+brew install gh
 ```
-3. GitHub Actions will automatically build and deploy the website
-4. The website will be available at https://[your-github-username].github.io/tracktracker/
 
-You can also manually trigger a deployment from the GitHub Actions tab in your repository.
+2. Authenticate with GitHub:
+```
+gh auth login
+```
 
-This approach uses GitHub Actions CI/CD, which is the modern, secure way to deploy websites. The deployment is handled entirely through GitHub's infrastructure, with no need to handle tokens or credentials manually.
+3. Run the deployment script:
+```
+cd website
+./deploy.sh
+```
+
+The script will:
+- Build the website
+- Clone your public radio repository
+- Copy the built files
+- Commit and push the changes
+- The website will be available at https://bv3x0.github.io/radio/
+
+This approach:
+- Keeps your main repository private
+- Only publishes the built website
+- Uses the GitHub CLI for secure authentication
+- Requires no manual handling of tokens or credentials
 
 ## CSV Report Format
 
