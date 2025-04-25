@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "./deploy-site.sh"
+    "test": "./deploy-site.sh"
   },
   "dependencies": {
     "lucide-react": "^0.462.0",

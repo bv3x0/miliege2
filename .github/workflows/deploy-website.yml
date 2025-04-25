@@ -41,11 +41,9 @@ jobs:
           echo "" >> website/dist/README.md
           echo "This repository hosts the build files for the TrackTracker radio website." >> website/dist/README.md
       
-      - name: Deploy to GitHub Pages Repository
+      - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: website/dist
-          repository-name: bv3x0/radio-site
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+          branch: gh-pages
           clean: true
