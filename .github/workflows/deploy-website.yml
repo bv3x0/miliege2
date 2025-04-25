@@ -1,0 +1,49 @@
+name: Deploy Website
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'website/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+      
+      - name: Build
+        working-directory: website
+        run: npm run build
+        
+      - name: Prepare files
+        run: |
+          mkdir -p website/dist/show-images
+          find website/public/show-images -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" \) -exec cp {} website/dist/show-images/ \;
+          touch website/dist/.nojekyll
+          echo "# TrackTracker Radio Website" > website/dist/README.md
+          echo "" >> website/dist/README.md
+          echo "This repository hosts the build files for the TrackTracker radio website." >> website/dist/README.md
+      
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: website/dist
+          branch: gh-pages
+          clean: true
