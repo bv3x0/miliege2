@@ -1,5 +1,19 @@
 [
   {
+    "shortTitle": "Sounds Of The Dawn",
+    "longTitle": "Sounds Of The Dawn",
+    "art": "/show-images/dawn.jpeg",
+    "nts": "https://www.nts.live/shows/soundsofthedawn",
+    "apple": "https://music.apple.com/us/playlist/sounds-of-the-dawn-nts-archive/pl.u-6pbvLt5jDd9",
+    "spotify": "https://open.spotify.com/playlist/4MYLdU4PwCmi4t19wOrxWr",
+    "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/sounds-of-the-dawn-nts-archive/pl.u-6pbvLt5jDd9\"></iframe>",
+    "spotifyEmbed": "<iframe style=\"border-radius:12px\" src=\"https://open.spotify.com/embed/playlist/4MYLdU4PwCmi4t19wOrxWr?utm_source=generator\" width=\"100%\" height=\"352\" frameBorder=\"0\" allowfullscreen=\"\" allow=\"autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture; storage-access-by-user-activation\" loading=\"lazy\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation\"></iframe>",
+    "frequency": "Monthly",
+    "startDate": "2015-03-07",
+    "endDate": "2025-04-19",
+    "description": "Sounds of the Dawn is a monthly two hour session through new age, ambient, environmental, meditation and relaxation cassettes from the seventies to the nineties. Tune in and zone out.\n"
+  },
+  {
     "shortTitle": "Como La Flor",
     "longTitle": "Como La Flor w/ Jazmin ",
     "art": "/show-images/como.jpg",
