@@ -85,13 +85,18 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
     art: `${baseUrl}${show.art.startsWith('/') ? show.art.slice(1) : show.art}`
   }));
   
-  // Initialize with the first show (index 0) already open
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  // Always sort alphabetically
+  const sortedShows = [...fixedShows].sort((a, b) => {
+    return a.shortTitle.localeCompare(b.shortTitle);
+  });
+  
+  // Initialize with no show open (null)
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   const tileRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [colCount, setColCount] = useState(1);
-  // Add a state to track if grid has content expanded (true by default)
-  const [hasExpandedContent, setHasExpandedContent] = useState(true);
+  // Add a state to track if grid has content expanded (false by default since no show is open)
+  const [hasExpandedContent, setHasExpandedContent] = useState(false);
 
   // Calculate column count based on screen width
   useLayoutEffect(() => {
@@ -119,8 +124,8 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
 
   // Chunk shows by row and render info panel after the row containing the openIndex
   const tiles: React.ReactNode[] = [];
-  const numShows = fixedShows.length;
-  const rows = chunk(fixedShows, colCount);
+  const numShows = sortedShows.length;
+  const rows = chunk(sortedShows, colCount);
   let tileIdx = 0;
   for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
     const row = rows[rowIdx];
@@ -189,26 +194,26 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
             >
               ×
             </button>
-            <div className="show-info-long-title" style={{ marginBottom: '1.5rem', letterSpacing: '0.05em' }}>{shows[openIndex].longTitle}</div>
-            {shows[openIndex].description && (
+            <div className="show-info-long-title" style={{ marginBottom: '1.5rem', letterSpacing: '0.05em' }}>{sortedShows[openIndex].longTitle}</div>
+            {sortedShows[openIndex].description && (
               <p className="text-base text-gray-800 font-serif text-center" style={{ maxWidth: '85%', margin: '0 auto 1.2rem', lineHeight: '1.2', fontSize: '1.05rem' }}>
                 <a
-                  href={shows[openIndex].nts}
+                  href={sortedShows[openIndex].nts}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-bold nts-link"
                 >
                   NTS Radio
-                </a>: "{shows[openIndex].description}"
+                </a>: "{sortedShows[openIndex].description}"
               </p>
             )}
             <div className="flex flex-col items-center">
               <p className="font-serif text-center" style={{ fontStyle: 'italic', fontSize: '0.95rem', color: '#555', marginBottom: '1.5rem', letterSpacing: '0.02em' }}>
-                Listen to the complete show archive ({formatDate(shows[openIndex].startDate)} - {formatDate(shows[openIndex].endDate)})
+                Playlists feature whatever is on streaming, from mixes {formatDate(sortedShows[openIndex].startDate)} - {formatDate(sortedShows[openIndex].endDate)}.
               </p>
               <div className="flex gap-8 items-center">
                 <a
-                  href={shows[openIndex].spotify}
+                  href={sortedShows[openIndex].spotify}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="playlist-btn spotify-btn"
@@ -217,7 +222,7 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
                   SPOTIFY
                 </a>
                 <a
-                  href={shows[openIndex].apple}
+                  href={sortedShows[openIndex].apple}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="playlist-btn apple-btn"
@@ -233,7 +238,7 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
                 style={{background:"none", padding:0, margin:0, textAlign:'center', maxWidth:'567px', height:'352px', overflow:'hidden'}}
                 // eslint-disable-next-line react/no-danger
                 dangerouslySetInnerHTML={{
-                  __html: shows[openIndex].spotifyEmbed,
+                  __html: sortedShows[openIndex].spotifyEmbed,
                 }}
               />
               <br />
@@ -242,7 +247,7 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
                 style={{background:"none", padding:0, margin:0, textAlign:'center', maxWidth:'567px'}}
                 // eslint-disable-next-line react/no-danger
                 dangerouslySetInnerHTML={{
-                  __html: shows[openIndex].appleEmbed,
+                  __html: sortedShows[openIndex].appleEmbed,
                 }}
               />
             </div>
@@ -276,12 +281,14 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
   }, [openIndex]);
 
   return (
-    <div
-      className={`playlist-grid${hasExpandedContent ? ' has-expanded-content' : ''}`}
-      ref={gridRef}
-    >
-      {tiles}
-    </div>
+    <>
+      <div
+        className={`playlist-grid${hasExpandedContent ? ' has-expanded-content' : ''}`}
+        ref={gridRef}
+      >
+        {tiles}
+      </div>
+    </>
   );
 };
 

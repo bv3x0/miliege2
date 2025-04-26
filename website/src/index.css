@@ -181,6 +181,7 @@ body {
 .playlist-short-title {
   font-family: 'Times New Roman', serif;
   font-size: 1.25rem;
+  font-weight: normal; /* Changed from default (bold) to normal */
   margin: 0;
   padding: 0;
   text-align: center;
