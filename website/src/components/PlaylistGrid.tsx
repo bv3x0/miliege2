@@ -3,8 +3,6 @@ import PlaylistTile from "./PlaylistTile";
 import { Apple, ExternalLink } from "lucide-react";
 import showsData from "../data/shows.json";
 
-type SortMethod = "latest" | "alphabetical";
-
 interface PlaylistGridProps {
   baseUrl?: string;
 }
@@ -87,26 +85,18 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
     art: `${baseUrl}${show.art.startsWith('/') ? show.art.slice(1) : show.art}`
   }));
   
-  // State for sorting method
-  const [sortMethod, setSortMethod] = useState<SortMethod>("latest"); // Keep default as latest
-  
-  // Sort shows based on current sort method
+  // Always sort alphabetically
   const sortedShows = [...fixedShows].sort((a, b) => {
-    if (sortMethod === "latest") {
-      // Sort by date, oldest first (reversed as requested)
-      return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
-    } else { // alphabetical
-      return a.shortTitle.localeCompare(b.shortTitle);
-    }
+    return a.shortTitle.localeCompare(b.shortTitle);
   });
   
-  // Initialize with the first show (index 0) already open
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  // Initialize with no show open (null)
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   const tileRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [colCount, setColCount] = useState(1);
-  // Add a state to track if grid has content expanded (true by default)
-  const [hasExpandedContent, setHasExpandedContent] = useState(true);
+  // Add a state to track if grid has content expanded (false by default since no show is open)
+  const [hasExpandedContent, setHasExpandedContent] = useState(false);
 
   // Calculate column count based on screen width
   useLayoutEffect(() => {
@@ -290,50 +280,8 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
     }
   }, [openIndex]);
 
-  // Sorting links style - Times New Roman as requested
-  const sortLinkStyleAZ = {
-    fontFamily: "'Times New Roman', serif",
-    fontSize: "1rem",
-    color: "#000",
-    cursor: "pointer",
-    textDecoration: sortMethod === "alphabetical" ? "underline" : "none",
-    marginRight: "1rem",
-    fontWeight: "normal" as const
-  };
-  
-  const sortLinkStyleLatest = {
-    ...sortLinkStyleAZ,
-    textDecoration: sortMethod === "latest" ? "underline" : "none"
-  };
-
   return (
     <>
-      <div style={{ 
-        display: "flex", 
-        justifyContent: "flex-end", 
-        marginBottom: "0",
-        position: "relative",
-        top: "-15px" // Move up to align with the green line
-      }}>
-        <span 
-          onClick={() => setSortMethod("alphabetical")}
-          style={sortLinkStyleAZ}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && setSortMethod("alphabetical")}
-        >
-          A-Z
-        </span>
-        <span 
-          onClick={() => setSortMethod("latest")}
-          style={sortLinkStyleLatest}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && setSortMethod("latest")}
-        >
-          Latest
-        </span>
-      </div>
       <div
         className={`playlist-grid${hasExpandedContent ? ' has-expanded-content' : ''}`}
         ref={gridRef}
