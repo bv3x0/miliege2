@@ -209,7 +209,7 @@ const PlaylistGrid: React.FC<PlaylistGridProps> = ({ baseUrl = '/' }) => {
             )}
             <div className="flex flex-col items-center">
               <p className="font-serif text-center" style={{ fontStyle: 'italic', fontSize: '0.95rem', color: '#555', marginBottom: '1.5rem', letterSpacing: '0.02em' }}>
-                Playlists feature whatever is on streaming, from mixes ({formatDate(sortedShows[openIndex].startDate)} - {formatDate(sortedShows[openIndex].endDate)})
+                Playlists feature whatever is on streaming, from mixes {formatDate(sortedShows[openIndex].startDate)} - {formatDate(sortedShows[openIndex].endDate)}.
               </p>
               <div className="flex gap-8 items-center">
                 <a
