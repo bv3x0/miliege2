@@ -108,16 +108,57 @@ def push_website_changes() -> bool:
         
         logging.info(f"Pushing changes to GitHub for {relative_path}")
         
-        # First, pull the latest changes from GitHub
-        # This prevents "non-fast-forward" errors
+        # First, handle image file conflicts
+        # This is a common source of conflicts when images are updated
+        image_dir = os.path.join(project_root, "website", "public", "show-images")
+        if os.path.exists(image_dir):
+            # Check if we need to forcibly add any untracked image files
+            git_status_cmd = ["git", "status", "--porcelain", image_dir]
+            status_output = subprocess.run(git_status_cmd, cwd=project_root, capture_output=True, text=True).stdout
+            
+            # Look for any "??" lines that indicate untracked files
+            untracked_images = [line.split()[1] for line in status_output.splitlines() 
+                               if line.startswith("??") and line.split()[1].endswith((".jpg", ".jpeg", ".png", ".gif"))]
+            
+            if untracked_images:
+                logging.info(f"Adding {len(untracked_images)} untracked image files")
+                for img in untracked_images:
+                    add_cmd = ["git", "add", img]
+                    subprocess.run(add_cmd, cwd=project_root, check=False)
+        
+        # Try to stash any other changes
+        stash_cmd = ["git", "stash", "push", "--include-untracked"]
+        subprocess.run(stash_cmd, cwd=project_root, capture_output=True, check=False)
+        
+        # Try to pull changes
         try:
             logging.info("Pulling latest changes from GitHub")
-            pull_command = ["git", "pull", "origin", "main"]
+            pull_command = ["git", "pull", "origin", "main", "--no-rebase"]
             subprocess.run(pull_command, cwd=project_root, check=True)
         except Exception as pull_error:
-            logging.warning(f"Unable to pull changes: {pull_error}. Will try to continue.")
+            logging.warning(f"Unable to pull changes: {pull_error}. Will reset to remote state.")
+            # If pull fails, do a hard reset to the remote branch
+            try:
+                # Fetch the latest state
+                fetch_cmd = ["git", "fetch", "origin", "main"]
+                subprocess.run(fetch_cmd, cwd=project_root, check=True)
+                
+                # Reset to match the remote
+                reset_cmd = ["git", "reset", "--hard", "origin/main"]
+                subprocess.run(reset_cmd, cwd=project_root, check=True)
+                
+                logging.info("Successfully reset to remote state")
+            except Exception as reset_error:
+                logging.warning(f"Unable to reset to remote state: {reset_error}")
         
-        # Add the changed file
+        # Apply the stashed changes
+        stash_pop_cmd = ["git", "stash", "pop"]
+        try:
+            subprocess.run(stash_pop_cmd, cwd=project_root, capture_output=True, check=False)
+        except Exception as stash_error:
+            logging.warning(f"Unable to apply stashed changes: {stash_error}")
+        
+        # Add the shows data file
         add_command = ["git", "add", relative_path]
         subprocess.run(add_command, cwd=project_root, check=True)
         
@@ -134,23 +175,25 @@ def push_website_changes() -> bool:
         commit_command = ["git", "commit", "-m", commit_msg]
         subprocess.run(commit_command, cwd=project_root, check=True)
         
-        # Push to GitHub
+        # Push to GitHub - use force with lease to be safer than force but still override if needed
         logging.info("Pushing changes to GitHub")
-        push_command = ["git", "push", "origin", "main"]
+        push_command = ["git", "push", "origin", "main", "--force-with-lease"]
         result = subprocess.run(push_command, cwd=project_root, capture_output=True, text=True)
         
         if result.returncode != 0:
-            # If push fails, try pull and push again
-            logging.warning(f"Push failed, trying pull and push again: {result.stderr}")
-            pull_command = ["git", "pull", "--rebase", "origin", "main"]
-            subprocess.run(pull_command, cwd=project_root, check=True)
+            # If push fails, try a direct force push as a last resort
+            logging.warning(f"Push failed, trying force push: {result.stderr}")
+            force_push_command = ["git", "push", "origin", "main", "--force"]
+            push_result = subprocess.run(force_push_command, cwd=project_root, capture_output=True, text=True)
             
-            # Try pushing again
-            push_result = subprocess.run(push_command, cwd=project_root, check=True)
             if push_result.returncode != 0:
-                raise Exception(f"Failed to push after rebasing: {push_result.stderr}")
-        
-        logging.info("Successfully pushed website changes to GitHub")
+                raise Exception(f"Failed even with force push: {push_result.stderr}")
+            else:
+                logging.info("Successfully force pushed changes to GitHub")
+        else:
+            logging.info("Successfully pushed changes to GitHub")
+            
+        logging.info("Website update will be deployed automatically via GitHub Actions")
         return True
     except Exception as e:
         logging.error(f"Failed to push website changes to GitHub: {e}")
@@ -177,6 +220,7 @@ def add_new_show(show_data: Dict[str, Any], auto_push: bool = True) -> None:
     
     if auto_push:
         logging.info("Automatic GitHub push was attempted - check for success or error messages above")
+        logging.info("If push failed, you can manually push changes with: git add . && git commit -m 'Update shows' && git push")
 
 
 def update_show_end_date(show_index: int, new_end_date: str, auto_push: bool = True) -> bool:
@@ -211,6 +255,7 @@ def update_show_end_date(show_index: int, new_end_date: str, auto_push: bool = T
         
         if auto_push:
             logging.info("Automatic GitHub push was attempted - check for success or error messages above")
+            logging.info("If push failed, you can manually push changes with: git add . && git commit -m 'Update shows' && git push")
         return True
     else:
         logging.error(f"Invalid show index: {show_index}")
