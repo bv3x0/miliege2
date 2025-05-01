@@ -1,5 +1,19 @@
 [
   {
+    "shortTitle": "Kali Malone",
+    "longTitle": "Kali Malone",
+    "art": "/show-images/kali.jpg",
+    "nts": "https://www.nts.live/shows/kali-malone",
+    "apple": "https://music.apple.com/us/playlist/kali-malone-nts-archive/pl.u-Z7B1jh4xmBX",
+    "spotify": "https://open.spotify.com/playlist/56pRZ4n6mfHHByKQDnIYzi",
+    "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/kali-malone-nts-archive/pl.u-Z7B1jh4xmBX\"></iframe>",
+    "spotifyEmbed": "<iframe style=\"border-radius:12px\" src=\"https://open.spotify.com/embed/playlist/56pRZ4n6mfHHByKQDnIYzi?utm_source=generator\" width=\"100%\" height=\"352\" frameBorder=\"0\" allowfullscreen=\"\" allow=\"autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture; storage-access-by-user-activation\" loading=\"lazy\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation\"></iframe>",
+    "frequency": "Monthly",
+    "startDate": "2019-05-30",
+    "endDate": "2024-08-27",
+    "description": "Meditative and minimalist explorations with Stockholm-based composer Kali Malone.\n"
+  },
+  {
     "shortTitle": "Laurel Halo",
     "longTitle": "Awe w/ Laurel Halo",
     "art": "/show-images/laurel.jpeg",
