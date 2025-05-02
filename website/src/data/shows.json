@@ -1,9 +1,23 @@
 [
   {
+    "shortTitle": "New Rap Music 2025",
+    "longTitle": "New Rap Music 2025",
+    "art": "/show-images/noz.jpg",
+    "url": "https://www.mixcloud.com/nozwon/",
+    "apple": "https://music.apple.com/us/playlist/new-rap-music-2025/pl.u-Pqvp5Cx2Eq3",
+    "spotify": "https://open.spotify.com/playlist/3ZMTgUg524ugXrIQ4cK1Uu",
+    "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/new-rap-music-2025/pl.u-Pqvp5Cx2Eq3\"></iframe>",
+    "spotifyEmbed": "<iframe style=\"border-radius:12px\" src=\"https://open.spotify.com/embed/playlist/3ZMTgUg524ugXrIQ4cK1Uu?utm_source=generator\" width=\"100%\" height=\"352\" frameBorder=\"0\" allowfullscreen=\"\" allow=\"autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture; storage-access-by-user-activation\" loading=\"lazy\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation\"></iframe>",
+    "frequency": "Monthly",
+    "startDate": "2025-01-27",
+    "endDate": "2025-04-28",
+    "source": "Mixcloud",
+    "description": "Subscribe at https://sleep.noz.agency/\n"
+  },
+  {
     "shortTitle": "Kali Malone",
     "longTitle": "Kali Malone",
     "art": "/show-images/kali.jpg",
-    "nts": "https://www.nts.live/shows/kali-malone",
     "apple": "https://music.apple.com/us/playlist/kali-malone-nts-archive/pl.u-Z7B1jh4xmBX",
     "spotify": "https://open.spotify.com/playlist/56pRZ4n6mfHHByKQDnIYzi",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/kali-malone-nts-archive/pl.u-Z7B1jh4xmBX\"></iframe>",
@@ -11,13 +25,14 @@
     "frequency": "Monthly",
     "startDate": "2019-05-30",
     "endDate": "2024-08-27",
-    "description": "Meditative and minimalist explorations with Stockholm-based composer Kali Malone.\n"
+    "description": "Meditative and minimalist explorations with Stockholm-based composer Kali Malone.\n",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/kali-malone"
   },
   {
     "shortTitle": "Laurel Halo",
     "longTitle": "Awe w/ Laurel Halo",
     "art": "/show-images/laurel.jpeg",
-    "nts": "https://www.nts.live/shows/laurel-halo",
     "apple": "https://music.apple.com/us/playlist/awe-w-laurel-halo-nts-archive/pl.u-L9Y5qTld14A",
     "spotify": "https://open.spotify.com/playlist/40N9A1N5BKrJJzaHjuh0nR",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/awe-w-laurel-halo-nts-archive/pl.u-L9Y5qTld14A\"></iframe>",
@@ -25,13 +40,14 @@
     "frequency": "Monthly",
     "startDate": "2021-01-11",
     "endDate": "2025-03-11",
-    "description": "Awe is something you feel when confronted with forces beyond your control: nature, the cosmos, chaos, human error, hallucinations.\n"
+    "description": "Awe is something you feel when confronted with forces beyond your control: nature, the cosmos, chaos, human error, hallucinations.\n",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/laurel-halo"
   },
   {
     "shortTitle": "Sounds Of The Dawn",
     "longTitle": "Sounds Of The Dawn",
     "art": "/show-images/dawn.jpeg",
-    "nts": "https://www.nts.live/shows/soundsofthedawn",
     "apple": "https://music.apple.com/us/playlist/sounds-of-the-dawn-nts-archive/pl.u-6pbvLt5jDd9",
     "spotify": "https://open.spotify.com/playlist/4MYLdU4PwCmi4t19wOrxWr",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/sounds-of-the-dawn-nts-archive/pl.u-6pbvLt5jDd9\"></iframe>",
@@ -39,13 +55,14 @@
     "frequency": "Monthly",
     "startDate": "2015-03-07",
     "endDate": "2025-04-19",
-    "description": "Sounds of the Dawn is a monthly two hour session through new age, ambient, environmental, meditation and relaxation cassettes from the seventies to the nineties. Tune in and zone out.\n"
+    "description": "Sounds of the Dawn is a monthly two hour session through new age, ambient, environmental, meditation and relaxation cassettes from the seventies to the nineties. Tune in and zone out.\n",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/soundsofthedawn"
   },
   {
     "shortTitle": "Como La Flor",
     "longTitle": "Como La Flor w/ Jazmin ",
     "art": "/show-images/como.jpg",
-    "nts": "https://www.nts.live/shows/jazmin-garcia",
     "apple": "https://music.apple.com/us/playlist/como-la-flor-nts-archive/pl.u-B7GRJUMPN7o",
     "spotify": "https://open.spotify.com/playlist/3zFRsxYXxjtrksonMoi5Qr",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/como-la-flor-nts-archive/pl.u-B7GRJUMPN7o\"></iframe>",
@@ -53,13 +70,14 @@
     "frequency": "Monthly",
     "startDate": "2017-05-16",
     "endDate": "2025-02-10",
-    "description": "M\u00fasica sentimental for all the sad girls and sad boys.\n"
+    "description": "M\u00fasica sentimental for all the sad girls and sad boys.\n",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/jazmin-garcia"
   },
   {
     "shortTitle": "Aaron Angell",
     "longTitle": "Aaron Angell",
     "art": "/show-images/aaron.jpeg",
-    "nts": "https://www.nts.live/shows/aaron-angell",
     "apple": "https://music.apple.com/us/playlist/aaron-angell-nts-archive/pl.u-B7GPbTMPN7o",
     "spotify": "https://open.spotify.com/playlist/3bCxtUeyScpUiXeOPzYHNJ",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/aaron-angell-nts-archive/pl.u-B7GPbTMPN7o\"></iframe>",
@@ -67,13 +85,14 @@
     "frequency": "Monthly",
     "startDate": "2019-05-08",
     "endDate": "2025-04-07",
-    "description": "Visual artist and ceramicist Aaron Angell plays a vinyl-only monthly selection of music from his collection - usually focussing on guitar soli, privately pressed UK folk, psychedelia, and the occult new age.\n"
+    "description": "Visual artist and ceramicist Aaron Angell plays a vinyl-only monthly selection of music from his collection - usually focussing on guitar soli, privately pressed UK folk, psychedelia, and the occult new age.\n",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/aaron-angell"
   },
   {
     "shortTitle": "Organ Tapes",
     "longTitle": "Organ Tapes",
     "art": "/show-images/organ.jpg",
-    "nts": "https://www.nts.live/shows/organ-tapes",
     "apple": "https://music.apple.com/us/playlist/organ-tapes-nts-archive/pl.u-ljgdPIe3D86",
     "spotify": "https://open.spotify.com/playlist/2tUgWUK276jwsOBC1J2zLP",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/organ-tapes-nts-archive/pl.u-ljgdPIe3D86\"></iframe>",
@@ -81,13 +100,14 @@
     "frequency": "Monthly",
     "startDate": "2017-09-04",
     "endDate": "2025-04-07",
-    "description": "Organ Tapes and friends play disparate music plied and wrenched together with religious fervour. Sound of E5 \u4e0a\u6d77 monthly on a Monday.\n"
+    "description": "Organ Tapes and friends play disparate music plied and wrenched together with religious fervour. Sound of E5 \u4e0a\u6d77 monthly on a Monday.\n",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/organ-tapes"
   },
   {
     "shortTitle": "Kranky",
     "longTitle": "Kranky",
     "art": "/show-images/kranky.jpg",
-    "nts": "https://www.nts.live/shows/kranky",
     "apple": "https://music.apple.com/us/playlist/kranky-nts-archive/pl.u-RmkqNHB1a4X",
     "spotify": "https://open.spotify.com/playlist/2BBpSCmLqEpbJn7ez769bI",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/kranky-nts-archive/pl.u-RmkqNHB1a4X\"></iframe>",
@@ -95,13 +115,14 @@
     "frequency": "Monthly",
     "startDate": "2017-06-07",
     "endDate": "2025-04-02",
-    "description": "The inimitable Kranky Ltd, live from LA once a month.\n"
+    "description": "The inimitable Kranky Ltd, live from LA once a month.\n",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/kranky"
   },
   {
     "shortTitle": "Malibu",
     "longTitle": "United In Flames w/ Malibu ",
     "art": "/show-images/malibu.jpg",
-    "nts": "https://www.nts.live/shows/malibu/",
     "apple": "https://music.apple.com/us/playlist/united-in-flames-w-malibu-nts-archive/pl.u-bJLr8Ibv8aX",
     "spotify": "https://open.spotify.com/playlist/2Vdb3y7JIHjbiDHYRVZtep",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/united-in-flames-w-malibu-nts-archive/pl.u-bJLr8Ibv8aX\"></iframe>",
@@ -109,13 +130,14 @@
     "frequency": "Monthly",
     "startDate": "2020-07-15",
     "endDate": "2025-04-17",
-    "description": "Malibu is a French electronic musician whose work sails between ambient and ethereal music. Forever inspired by soft reverbed vocals and melodious chord progressions, Malibu\u2019s music is an immersive nostalgic journey in a sea of synthetic strings and choirs."
+    "description": "Malibu is a French electronic musician whose work sails between ambient and ethereal music. Forever inspired by soft reverbed vocals and melodious chord progressions, Malibu\u2019s music is an immersive nostalgic journey in a sea of synthetic strings and choirs.",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/malibu/"
   },
   {
     "shortTitle": "Jim O'Rourke",
     "longTitle": "Jim O'Rourke",
     "art": "/show-images/jim.jpg",
-    "nts": "https://www.nts.live/shows/jim-o-rourke",
     "apple": "https://music.apple.com/us/playlist/jim-orourke-nts-archive/pl.u-6pbKvT5jDd9",
     "spotify": "https://open.spotify.com/playlist/2NVNRLLLHBegBWMlLGyLze",
     "appleEmbed": "<iframe allow=\"autoplay *; encrypted-media *;\" frameborder=\"0\" height=\"450\" style=\"width:567px;max-width:100%;overflow:hidden;background:transparent;\" sandbox=\"allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation\" src=\"https://embed.music.apple.com/us/playlist/jim-orourke-nts-archive/pl.u-6pbKvT5jDd9\"></iframe>",
@@ -123,6 +145,8 @@
     "frequency": "Monthly",
     "startDate": "2022-01-20",
     "endDate": "2025-04-17",
-    "description": "Avant-garde musician and composer Jim O'Rourke pulls stops by once a month, pulling an hour of picks from his extensive record collection."
+    "description": "Avant-garde musician and composer Jim O'Rourke pulls stops by once a month, pulling an hour of picks from his extensive record collection.",
+    "source": "NTS",
+    "url": "https://www.nts.live/shows/jim-o-rourke"
   }
 ]
