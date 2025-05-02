@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrackTracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="main-content">
+    <h1 class="site-title">TRACKTRACKER</h1>
+    <div class="site-description">Bootleg playlists of radio show tracklists.</div>
+    
+    <div class="playlist-grid" id="showGrid"></div>
+  </div>
+
+  <template id="showInfoTemplate">
+    <div class="show-info-section">
+      <button class="close-btn">&times;</button>
+      <div class="show-info-long-title"></div>
+      <p class="show-description"></p>
+      <p class="show-date-range"></p>
+      <div class="buttons-container">
+        <a class="playlist-btn spotify-btn" target="_blank">SPOTIFY</a>
+        <a class="playlist-btn apple-btn" target="_blank">APPLE MUSIC</a>
+        <a class="playlist-btn nts-btn source-btn" target="_blank">SOURCE</a>
+      </div>
+      <div class="embeds-container">
+        <div class="spotify-embed"></div>
+        <div class="apple-embed"></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="heartGridTemplate">
+    <div class="heart-border-grid">
+      <!-- Top row -->
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      
+      <!-- Left side row 1 -->
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell">❤️</span>
+      
+      <!-- Rows 2-7 -->
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell">❤️</span>
+
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell">❤️</span>
+
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell">❤️</span>
+
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell">❤️</span>
+
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell">❤️</span>
+
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell" style="visibility: hidden"></span>
+      <span class="heart-cell">❤️</span>
+      
+      <!-- Bottom row -->
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+      <span class="heart-cell">❤️</span>
+    </div>
+  </template>
+
+  <template id="showTileTemplate">
+    <div class="playlist-tile-outer">
+      <div class="playlist-container">
+        <button class="playlist-tile-btn">
+          <div class="playlist-tile-img-area">
+            <img class="playlist-tile-image" alt="">
+            <!-- Heart grid added via JavaScript -->
+          </div>
+        </button>
+        <div class="title-container">
+          <h3 class="playlist-short-title"></h3>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script src="shows.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

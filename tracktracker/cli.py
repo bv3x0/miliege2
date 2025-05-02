@@ -304,53 +304,130 @@ def process_weekly_report(days: int = 7, verbose: bool = False) -> None:
         raise ValueError(f"Failed to generate weekly report: {e}")
 
 
-def process_add_to_website(nts_url: str, spotify_url: str, verbose: bool = False) -> None:
+def process_add_to_website(show_url: str, spotify_url: str, verbose: bool = False, is_nts: bool = True) -> None:
     """
-    Add an NTS show to the website.
+    Add a show to the website.
     
     Args:
-        nts_url: URL to an NTS Radio show
+        show_url: URL to a show (NTS or other source)
         spotify_url: URL to the Spotify playlist
         verbose: Whether to enable verbose output
+        is_nts: Whether this is an NTS show (default: True)
     """
-    logging.info(f"Adding show to website: {nts_url}")
+    source_type = "NTS" if is_nts else "non-NTS"
+    logging.info(f"Adding {source_type} show to website: {show_url}")
     
     try:
-        # Validate the show URL and get show info
-        url_info = nts.parse_nts_url(nts_url)
-        if not url_info.get("is_show", False):
-            logging.warning("The provided URL is not for a show. Using show URL instead.")
-            # Construct show URL from episode URL if possible
-            show_alias = url_info.get("show_alias")
-            if show_alias:
-                nts_url = f"https://www.nts.live/shows/{show_alias}"
-                logging.info(f"Using show URL: {nts_url}")
-            else:
-                raise ValueError("Could not determine the show URL from the provided URL.")
+        if is_nts:
+            # NTS Show workflow - scrape show information from NTS API
+            # Validate the show URL and get show info
+            url_info = nts.parse_nts_url(show_url)
+            if not url_info.get("is_show", False):
+                logging.warning("The provided URL is not for a show. Using show URL instead.")
+                # Construct show URL from episode URL if possible
+                show_alias = url_info.get("show_alias")
+                if show_alias:
+                    show_url = f"https://www.nts.live/shows/{show_alias}"
+                    logging.info(f"Using show URL: {show_url}")
+                else:
+                    raise ValueError("Could not determine the show URL from the provided URL.")
+            
+            # Scrape show information
+            show_info = nts.scrape(show_url)
+            show_name = show_info.get("show_name", "NTS Show")
+            source = "NTS"
+            
+            # Prompt for short title
+            questions = [
+                inquirer.Text('short_title',
+                              message="Enter a short title for the show",
+                              default=show_name)
+            ]
+            answers = inquirer.prompt(questions)
+            short_title = answers.get('short_title', show_name)
+            
+            # Use the show name from NTS for long title
+            long_title = show_name
+        else:
+            # Non-NTS Show workflow - prompt for all details
+            # Prompt for short and long titles
+            questions = [
+                inquirer.Text('short_title',
+                              message="Enter a short title for the show")
+            ]
+            answers = inquirer.prompt(questions)
+            short_title = answers.get('short_title', "")
+            
+            questions = [
+                inquirer.Text('long_title',
+                              message="Enter a full title for the show",
+                              default=short_title)
+            ]
+            answers = inquirer.prompt(questions)
+            long_title = answers.get('long_title', short_title)
+            
+            # Prompt for source type
+            questions = [
+                inquirer.List('source',
+                              message="Select the source platform",
+                              choices=['Mixcloud', 'Soundcloud', 'YouTube', 'Other'])
+            ]
+            answers = inquirer.prompt(questions)
+            source = answers.get('source', "Other")
+            
+            # If "Other" was selected, prompt for custom source
+            if source == "Other":
+                questions = [
+                    inquirer.Text('custom_source',
+                                 message="Enter the custom source name")
+                ]
+                answers = inquirer.prompt(questions)
+                source = answers.get('custom_source', "Other")
+            
+            # Prompt for dates
+            questions = [
+                inquirer.Text('start_date',
+                              message="Enter start date (YYYY-MM-DD)",
+                              validate=lambda _, x: len(x) == 0 or (len(x) == 10 and x[4] == '-' and x[7] == '-'))
+            ]
+            answers = inquirer.prompt(questions)
+            start_date = answers.get('start_date', "")
+            
+            questions = [
+                inquirer.Text('end_date',
+                              message="Enter latest episode date (YYYY-MM-DD)",
+                              validate=lambda _, x: len(x) == 0 or (len(x) == 10 and x[4] == '-' and x[7] == '-'))
+            ]
+            answers = inquirer.prompt(questions)
+            end_date = answers.get('end_date', "")
+            
+            # Prompt for frequency
+            questions = [
+                inquirer.List('frequency',
+                              message="Select show frequency",
+                              choices=['Monthly', 'Weekly', 'Biweekly', 'Daily', 'One-off'])
+            ]
+            answers = inquirer.prompt(questions)
+            frequency = answers.get('frequency', "Monthly")
+            
+            # Create empty show_info dict for non-NTS shows
+            show_info = {
+                "show_name": long_title,
+                "frequency": frequency,
+                "description": "",
+                "episodes_data": []
+            }
         
-        # Scrape show information
-        show_info = nts.scrape(nts_url)
-        show_name = show_info.get("show_name", "NTS Show")
-        
-        # Prompt for short title
-        questions = [
-            inquirer.Text('short_title',
-                          message="Enter a short title for the show",
-                          default=show_name)
-        ]
-        answers = inquirer.prompt(questions)
-        short_title = answers.get('short_title', show_name)
-        
-        # Prompt for artwork file
+        # Prompt for artwork file - common for both NTS and non-NTS
         questions = [
             inquirer.Text('artwork_path',
-                          message="Enter path to artwork file (jpg)",
+                          message="Enter path to artwork file (jpg/jpeg)",
                           validate=lambda _, x: os.path.exists(x) and x.lower().endswith(('.jpg', '.jpeg')))
         ]
         answers = inquirer.prompt(questions)
         artwork_path = answers.get('artwork_path')
         
-        # Prompt for Apple Music link
+        # Prompt for Apple Music link - common for both NTS and non-NTS
         questions = [
             inquirer.Text('apple_url',
                           message="Enter Apple Music playlist URL (leave empty if none)",
@@ -359,7 +436,7 @@ def process_add_to_website(nts_url: str, spotify_url: str, verbose: bool = False
         answers = inquirer.prompt(questions)
         apple_url = answers.get('apple_url', "")
         
-        # Prompt for show description if not available
+        # Prompt for show description if not available - common for both NTS and non-NTS
         description = show_info.get("description", "")
         if not description:
             # Use plain input instead of inquirer for multiline text to avoid repeating issues
@@ -376,16 +453,33 @@ def process_add_to_website(nts_url: str, spotify_url: str, verbose: bool = False
         # Format the Spotify URL to the standard format
         formatted_spotify_url = utils.format_spotify_url(spotify_url)
         
-        # Create show data
-        show_data = website.create_show_data_from_nts(
-            nts_url=nts_url,
-            nts_data=show_info,
-            spotify_url=formatted_spotify_url,
-            apple_url=apple_url,
-            short_title=short_title,
-            artwork_path=artwork_path,
-            custom_description=description
-        )
+        # Create show data based on source
+        if is_nts:
+            # Use NTS show creation method
+            show_data = website.create_show_data_from_nts(
+                nts_url=show_url,
+                nts_data=show_info,
+                spotify_url=formatted_spotify_url,
+                apple_url=apple_url,
+                short_title=short_title,
+                artwork_path=artwork_path,
+                custom_description=description
+            )
+        else:
+            # Use manual show creation method for non-NTS sources
+            show_data = website.create_show_data_manual(
+                show_url=show_url,
+                spotify_url=formatted_spotify_url,
+                apple_url=apple_url,
+                short_title=short_title,
+                long_title=long_title,
+                artwork_path=artwork_path,
+                description=description,
+                source=source,
+                frequency=frequency,
+                start_date=start_date,
+                end_date=end_date
+            )
         
         # Add to website
         website.add_new_show(show_data)
@@ -593,12 +687,17 @@ def main():
     # Website command
     website_parser = subparsers.add_parser("website", help="Add a show to the website")
     website_parser.add_argument(
-        "nts_url", 
-        help="URL to an NTS Radio show"
+        "show_url", 
+        help="URL to the show (NTS, Mixcloud, Soundcloud, etc.)"
     )
     website_parser.add_argument(
         "spotify_url", 
         help="URL to the Spotify playlist for the show"
+    )
+    website_parser.add_argument(
+        "--non-nts",
+        action="store_true",
+        help="Explicitly specify this flag for non-NTS shows (optional, as the tool will auto-detect based on URL)"
     )
     
     # Report command
@@ -722,7 +821,19 @@ def main():
                     
         elif args.command == "website":
             # Add show to website
-            process_add_to_website(args.nts_url, args.spotify_url, args.verbose)
+            # Auto-detect if this is an NTS show from the URL
+            is_nts = "nts.live" in args.show_url.lower()
+            
+            # If the user explicitly specified --non-nts, override the auto-detection
+            if hasattr(args, 'non_nts') and args.non_nts:
+                is_nts = False
+                
+            process_add_to_website(
+                args.show_url, 
+                args.spotify_url, 
+                args.verbose,
+                is_nts=is_nts
+            )
                     
         elif args.command == "report":
             # Generate weekly report

@@ -273,7 +273,7 @@ def copy_artwork(source_path: str, destination_dir: str = None) -> str:
     # Copy the file
     try:
         shutil.copy2(source_path, destination_path)
-        return f"/show-images/{filename}"
+        return f"show-images/{filename}"  # No leading slash
     except Exception as e:
         raise ValueError(f"Failed to copy artwork file: {e}")
 

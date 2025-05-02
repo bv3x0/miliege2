@@ -333,19 +333,85 @@ def create_show_data_from_nts(
         "shortTitle": short_title,
         "longTitle": long_title,
         "art": art_web_path,
-        "nts": nts_url,
+        "url": nts_url,
         "apple": apple_url,
         "spotify": formatted_spotify_url,
         "appleEmbed": apple_embed,
         "spotifyEmbed": spotify_embed,
         "frequency": frequency,
         "startDate": start_date,
-        "endDate": end_date
+        "endDate": end_date,
+        "source": "NTS"  # Default source for NTS shows
     }
     
-    # Add description if available
+    # Add description if available, stripping trailing newlines
     if description:
-        show_data["description"] = description
+        show_data["description"] = description.rstrip()
+    
+    return show_data
+
+
+def create_show_data_manual(
+    show_url: str,
+    spotify_url: str,
+    apple_url: str,
+    short_title: str,
+    long_title: str,
+    artwork_path: str,
+    description: str,
+    source: str,
+    frequency: str = "Monthly",
+    start_date: str = "",
+    end_date: str = ""
+) -> Dict[str, Any]:
+    """
+    Create a show data dictionary from manual inputs for non-NTS shows.
+    
+    Args:
+        show_url: URL to the show (Mixcloud, Soundcloud, etc.)
+        spotify_url: Spotify playlist URL
+        apple_url: Apple Music playlist URL
+        short_title: Short title for the show
+        long_title: Full title for the show
+        artwork_path: Path to artwork file
+        description: Description of the show
+        source: Source of the show (Mixcloud, Soundcloud, etc.)
+        frequency: Show frequency (default: Monthly)
+        start_date: First episode date in YYYY-MM-DD format
+        end_date: Latest episode date in YYYY-MM-DD format
+        
+    Returns:
+        Show data dictionary
+    """
+    # Copy artwork to the website directory
+    art_web_path = utils.copy_artwork(artwork_path)
+    
+    # Format Spotify URL
+    formatted_spotify_url = utils.format_spotify_url(spotify_url)
+    
+    # Create embed codes
+    spotify_embed = utils.create_spotify_embed(formatted_spotify_url)
+    apple_embed = utils.create_apple_embed(apple_url)
+    
+    # Create the show data
+    show_data = {
+        "shortTitle": short_title,
+        "longTitle": long_title,
+        "art": art_web_path,
+        "url": show_url,  # Using "url" field instead of "nts"
+        "apple": apple_url,
+        "spotify": formatted_spotify_url,
+        "appleEmbed": apple_embed,
+        "spotifyEmbed": spotify_embed,
+        "frequency": frequency,
+        "startDate": start_date,
+        "endDate": end_date,
+        "source": source
+    }
+    
+    # Add description if available, stripping trailing newlines
+    if description:
+        show_data["description"] = description.rstrip()
     
     return show_data
 
