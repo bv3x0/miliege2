@@ -172,6 +172,11 @@ class DiscordBot(commands.Bot):
         await self.add_cog(AdminCommands(self))
         
         # 5. Optional features
+        # DexScreener trending pairs functionality
+        from cogs.grabbers.dex_listener import DexListener
+        await self.add_cog(DexListener(self, daily_digest_channel_id))
+        logger.info("DexScreener trending pairs listener added")
+        
         # Hyperliquid functionality disabled
         # await self.add_cog(HyperliquidWalletGrabber(
         #     self, 
@@ -326,11 +331,12 @@ class DiscordBot(commands.Bot):
             # ]
             # embed.add_field(name="Hyperliquid Wallet Commands", value="\n".join(hyperliquid_commands), inline=False)
             
-            # Dexscreener commands temporarily disabled
-            # dexscreener_commands = [
-            #     "`!dex` - Generate a Dexscreener Digest with trending tokens"
-            # ]
-            # embed.add_field(name="Dexscreener Commands", value="\n".join(dexscreener_commands), inline=False)
+            # DexScreener trending commands
+            dexscreener_commands = [
+                "`!trending` - Show top 15 trending pairs from Solana, Ethereum, and Base",
+                "`!trending_status` - Check status of DexScreener connection"
+            ]
+            embed.add_field(name="DexScreener Commands", value="\n".join(dexscreener_commands), inline=False)
             
             await ctx.send(embed=embed)
 
