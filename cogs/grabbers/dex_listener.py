@@ -7,6 +7,8 @@ from typing import List, Dict, Any, Optional
 import discord
 import websockets
 from discord.ext import commands, tasks
+import urllib.parse
+import requests
 
 from cogs.utils import (
     format_large_number,
@@ -54,7 +56,37 @@ class DexListener(commands.Cog):
             try:
                 logging.info("🔌 Connecting to DexScreener WebSocket...")
                 
-                # Connect to WebSocket using minimal parameters
+                # Alternative approach: Get trending data via REST API instead of WebSocket
+                try:
+                    # REST API URL for trending pairs
+                    api_url = "https://api.dexscreener.com/latest/dex/search?rankBy=trendingScoreH1&rankOrder=desc&country=us&sortBy=trendingScoreH1&sortOrder=desc"
+                    
+                    # Use requests with proper headers
+                    headers = {
+                        "User-Agent": "Mozilla/5.0",
+                        "Origin": "https://dexscreener.com",
+                        "Referer": "https://dexscreener.com/"
+                    }
+                    
+                    logging.info(f"Requesting trending data from REST API: {api_url}")
+                    response = requests.get(api_url, headers=headers)
+                    response.raise_for_status()  # Raise exception for HTTP errors
+                    
+                    # Process data as if it came from WebSocket
+                    data = response.json()
+                    await self._process_dex_data(data)
+                    
+                    # Store update time
+                    self.last_update = datetime.now(timezone.utc)
+                    
+                    # Wait before next update
+                    await asyncio.sleep(300)  # 5 minutes
+                    continue  # Skip WebSocket attempt
+                except Exception as e:
+                    logging.error(f"REST API fallback failed: {e}")
+                    # Continue to WebSocket attempt
+                
+                # Try WebSocket connection with minimal parameters
                 async with websockets.connect(
                     WS_URL
                 ) as ws:
