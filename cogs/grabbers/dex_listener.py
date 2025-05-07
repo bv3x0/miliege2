@@ -37,17 +37,22 @@ class DexListener(commands.Cog):
         self.reconnect_delay = 5  # Initial reconnect delay in seconds
         self.max_reconnect_delay = 300  # Maximum reconnect delay (5 minutes)
         
-        # Start the background tasks
-        self.dex_screener_task.start()
-        self.hourly_post_task.start()
+        # DISABLED: Background tasks are disabled due to API blocking
+        # self.dex_screener_task.start()
+        # self.hourly_post_task.start()
         
-        logging.info("DexListener cog initialized")
+        # Generate mock data for testing
+        self.trending_pairs = self._create_mock_data()["pairs"][:15]
+        self.last_update = datetime.now(timezone.utc)
+        
+        logging.info("DexListener initialized in DISABLED MODE with mock data")
 
     def cog_unload(self):
         """Clean up tasks when cog is unloaded"""
-        self.dex_screener_task.cancel()
-        self.hourly_post_task.cancel()
-        logging.info("DexListener tasks cancelled")
+        # Tasks are currently disabled
+        # self.dex_screener_task.cancel()
+        # self.hourly_post_task.cancel()
+        logging.info("DexListener unloaded (tasks already disabled)")
 
     @tasks.loop(minutes=5)
     async def dex_screener_task(self):
@@ -553,14 +558,38 @@ class DexListener(commands.Cog):
 
     @commands.command()
     async def trending(self, ctx):
-        """Shows the top 15 trending pairs from Solana, Ethereum, and Base"""
-        if not self.trending_pairs:
-            await ctx.send("⚠️ Data not available yet, try again in a minute.")
-            return
-            
+        """Shows example trending pairs (MOCK DATA)"""
+        # Temporary message about the status
+        status_embed = discord.Embed(
+            title="DexScreener Integration Status",
+            description="⚠️ **Live data is currently unavailable**\n\nDexScreener is blocking automated data collection. Showing mock data for demonstration purposes.",
+            color=discord.Color.orange()
+        )
+        
+        status_embed.add_field(
+            name="Current Status", 
+            value="The DexScreener API and WebSocket endpoints are returning 403/404 errors, indicating they are blocking our requests."
+        )
+        
+        status_embed.add_field(
+            name="Next Steps",
+            value="Alternative approaches being explored:\n" +
+                  "• Browser automation with Selenium\n" +
+                  "• Request proxying through cloud services\n" +
+                  "• Using an official API if one becomes available"
+        )
+        
+        await ctx.send(embed=status_embed)
+        
+        # Show mock data for demonstration
         try:
+            # Regenerate mock data to keep it fresh
+            self.trending_pairs = self._create_mock_data()["pairs"][:15]
+            self.last_update = datetime.now(timezone.utc)
+            
             embeds = await self._create_trending_embeds()
             for embed in embeds:
+                embed.set_footer(text="⚠️ MOCK DATA FOR DEMONSTRATION ONLY")
                 await ctx.send(embed=embed)
         except Exception as e:
             logging.error(f"Error sending trending: {e}")
@@ -568,26 +597,40 @@ class DexListener(commands.Cog):
 
     @commands.command()
     async def trending_status(self, ctx):
-        """Shows status of the DexScreener connection"""
+        """Shows status of the DexScreener integration"""
         embed = discord.Embed(
-            title="DexScreener Status",
-            color=Colors.EMBED_BORDER
+            title="DexScreener Integration Status",
+            description="⚠️ **LIVE DATA DISABLED**\n\nThe integration is currently running in mock data mode due to API blocking.",
+            color=discord.Color.orange()
         )
         
-        # Add status fields
+        # Add implementation details
         embed.add_field(
-            name="Connection", 
-            value="✅ Connected" if self.trending_pairs else "❌ Disconnected"
+            name="Implementation Details", 
+            value="\n".join([
+                "• WebSocket connection: ❌ Disabled - 403 Forbidden",
+                "• REST API endpoints: ❌ Disabled - 404 Not Found",
+                "• Mock data generation: ✅ Active"
+            ])
         )
         
+        # Add recommendations
+        embed.add_field(
+            name="Recommended Alternatives",
+            value="\n".join([
+                "• Manually monitor https://dexscreener.com/trending",
+                "• Consider using a web automation tool (Selenium/Playwright)",
+                "• Explore using a proxy service to bypass restrictions"
+            ]),
+            inline=False
+        )
+        
+        # Add last update details
         if self.last_update:
             time_diff = (datetime.now(timezone.utc) - self.last_update).total_seconds() / 60
-            last_update = f"{int(time_diff)}m ago"
-        else:
-            last_update = "Never"
+            embed.add_field(name="Mock Data Last Updated", value=f"{int(time_diff)}m ago")
             
-        embed.add_field(name="Last Update", value=last_update)
-        embed.add_field(name="Pairs Tracked", value=str(len(self.trending_pairs)))
+        embed.add_field(name="Mock Pairs Available", value=str(len(self.trending_pairs)))
         
         await ctx.send(embed=embed)
 
