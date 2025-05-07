@@ -54,12 +54,10 @@ class DexListener(commands.Cog):
             try:
                 logging.info("🔌 Connecting to DexScreener WebSocket...")
                 
+                # Connect to WebSocket using standard parameters
                 async with websockets.connect(
                     WS_URL,
-                    extra_headers={
-                        "User-Agent": "Mozilla/5.0",
-                        "Origin": "https://dexscreener.com"
-                    },
+                    origin="https://dexscreener.com",
                     timeout=WS_TIMEOUT
                 ) as ws:
                     logging.info("✅ Connected to DexScreener WebSocket")
