@@ -54,19 +54,17 @@ class DexListener(commands.Cog):
             try:
                 logging.info("🔌 Connecting to DexScreener WebSocket...")
                 
-                # Connect to WebSocket using standard parameters
+                # Connect to WebSocket using minimal parameters
                 async with websockets.connect(
-                    WS_URL,
-                    origin="https://dexscreener.com",
-                    timeout=WS_TIMEOUT
+                    WS_URL
                 ) as ws:
                     logging.info("✅ Connected to DexScreener WebSocket")
                     self.reconnect_delay = 5  # Reset reconnect delay on successful connection
                     
                     while True:
                         try:
-                            # Receive data with timeout
-                            message = await asyncio.wait_for(ws.recv(), timeout=WS_TIMEOUT)
+                            # Receive data without timeout
+                            message = await ws.recv()
                             data = json.loads(message)
                             
                             # Process new data
@@ -78,15 +76,10 @@ class DexListener(commands.Cog):
                             # Wait before next update
                             await asyncio.sleep(300)  # 5 minutes
                             
+                        # Simplified error handling
                         except asyncio.TimeoutError:
-                            logging.warning("WebSocket timeout, sending ping to keep connection alive")
-                            pong_waiter = await ws.ping()
-                            try:
-                                await asyncio.wait_for(pong_waiter, timeout=10)
-                                logging.info("Received pong from WebSocket")
-                            except asyncio.TimeoutError:
-                                logging.error("WebSocket ping timeout, reconnecting...")
-                                break
+                            logging.warning("WebSocket timeout, reconnecting...")
+                            break
                         
                         except websockets.exceptions.ConnectionClosed as e:
                             logging.error(f"WebSocket connection closed: {e}")
