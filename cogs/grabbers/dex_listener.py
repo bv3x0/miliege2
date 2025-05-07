@@ -58,18 +58,23 @@ class DexListener(commands.Cog):
                 
                 # Alternative approach: Get trending data via REST API instead of WebSocket
                 try:
-                    # REST API URL for trending pairs
-                    api_url = "https://api.dexscreener.com/latest/dex/search?rankBy=trendingScoreH1&rankOrder=desc&country=us&sortBy=trendingScoreH1&sortOrder=desc"
+                    # Correct REST API URL for trending pairs
+                    api_url = "https://api.dexscreener.com/latest/dex/pairs/solana%2Cethereum%2Cbase?sort=trendingScoreH1"
                     
-                    # Use requests with proper headers
+                    # Use requests with detailed headers that mimic a browser
                     headers = {
-                        "User-Agent": "Mozilla/5.0",
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36",
+                        "Accept": "application/json, text/plain, */*",
+                        "Accept-Language": "en-US,en;q=0.9",
                         "Origin": "https://dexscreener.com",
-                        "Referer": "https://dexscreener.com/"
+                        "Referer": "https://dexscreener.com/trending",
+                        "sec-ch-ua": '"Chromium";v="112", "Google Chrome";v="112", "Not:A-Brand";v="99"',
+                        "sec-ch-ua-mobile": "?0",
+                        "sec-ch-ua-platform": '"macOS"'
                     }
                     
                     logging.info(f"Requesting trending data from REST API: {api_url}")
-                    response = requests.get(api_url, headers=headers)
+                    response = requests.get(api_url, headers=headers, timeout=10)
                     response.raise_for_status()  # Raise exception for HTTP errors
                     
                     # Process data as if it came from WebSocket
@@ -84,6 +89,27 @@ class DexListener(commands.Cog):
                     continue  # Skip WebSocket attempt
                 except Exception as e:
                     logging.error(f"REST API fallback failed: {e}")
+                    
+                    # Try alternative API URL
+                    try:
+                        alt_api_url = "https://api.dexscreener.com/latest/dex/tokens/solana%2Cethereum%2Cbase?sort=liquidity&desc=true"
+                        logging.info(f"Trying alternative API URL: {alt_api_url}")
+                        
+                        alt_response = requests.get(alt_api_url, headers=headers, timeout=10)
+                        alt_response.raise_for_status()
+                        
+                        alt_data = alt_response.json()
+                        await self._process_dex_data(alt_data)
+                        
+                        # Store update time
+                        self.last_update = datetime.now(timezone.utc)
+                        
+                        # Wait before next update
+                        await asyncio.sleep(300)  # 5 minutes
+                        continue  # Skip WebSocket attempt
+                    except Exception as alt_e:
+                        logging.error(f"Alternative API fallback failed: {alt_e}")
+                    
                     # Continue to WebSocket attempt
                 
                 # Try WebSocket connection with minimal parameters
@@ -179,16 +205,33 @@ class DexListener(commands.Cog):
         await asyncio.sleep(wait_seconds)
 
     async def _process_dex_data(self, data: Dict[str, Any]) -> None:
-        """Process incoming WebSocket data and update trending pairs"""
-        if "pairs" not in data or not data["pairs"]:
-            logging.warning("No pairs data in WebSocket response")
+        """Process incoming data and update trending pairs"""
+        # Handle both WebSocket and REST API response formats
+        pairs = []
+        
+        # Check for the WebSocket/original format
+        if "pairs" in data and isinstance(data["pairs"], list):
+            pairs = data["pairs"]
+        # Check for REST API format
+        elif isinstance(data, dict) and "pairs" in data and isinstance(data["pairs"], list):
+            pairs = data["pairs"]
+        # Check for alternative API format
+        elif isinstance(data, dict) and "tokens" in data:
+            # Try to extract pairs from tokens response
+            tokens = data.get("tokens", [])
+            for token in tokens:
+                if "pairs" in token and isinstance(token["pairs"], list):
+                    pairs.extend(token["pairs"])
+        
+        if not pairs:
+            logging.warning("No pairs data found in response")
             return
             
         # Clear and reload with new data
         self.trending_pairs.clear()
         
         # Extract and process top 15 pairs
-        for pair in data["pairs"][:15]:
+        for pair in pairs[:15]:
             # Extract token data
             token_data = await self._extract_token_data(pair)
             if token_data:
