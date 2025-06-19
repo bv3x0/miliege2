@@ -3,6 +3,7 @@ from discord.ext import commands
 import logging
 import random
 import os
+import json
 from cogs.utils import (
     UI,
     safe_api_call,
@@ -16,6 +17,7 @@ class FunCommands(commands.Cog):
         self.data_dir = 'data'
         os.makedirs(self.data_dir, exist_ok=True)
         self.goon_file = os.path.join(self.data_dir, 'goon_database.json')
+        self.goon_urls_file = os.path.join(self.data_dir, 'goon_urls.json')
 
         # Test write permissions
         try:
@@ -55,6 +57,20 @@ class FunCommands(commands.Cog):
             "https://cdn.discordapp.com/attachments/1180965924459778151/1342944112856268940/Screenshot_2025-02-22_at_2.39.49_PM.png?ex=67bb79ab&is=67ba282b&hm=cbd6601fa219e014bf8360aacd503f960618f05650877a46bf80670a183dcfea&",
             "https://media.discordapp.net/attachments/1180965924459778151/1342944127712759829/Screenshot_2025-02-22_at_2.39.39_PM.png?ex=67bb79ae&is=67ba282e&hm=fb52e7bd1030ecfde77ef4d8c258140a5c2ffb596c05c079b6e50b3909a6df27&=&format=webp&quality=lossless",
         ]
+        
+        # Load additional URLs from file
+        self._load_additional_goon_urls()
+
+    def _load_additional_goon_urls(self):
+        """Load additional goon URLs from JSON file"""
+        try:
+            if os.path.exists(self.goon_urls_file):
+                with open(self.goon_urls_file, 'r') as f:
+                    additional_urls = json.load(f)
+                    self.goon_options.extend(additional_urls)
+                    logging.info(f"Loaded {len(additional_urls)} additional goon URLs")
+        except Exception as e:
+            logging.error(f"Error loading additional goon URLs: {e}")
 
     @commands.command()
     async def goon(self, ctx):

@@ -19,6 +19,7 @@ from discord import app_commands
 from cogs.utils.config import settings
 import json
 from cogs.features.newcoin import NewCoinCog
+from cogs.features.custom_commands import CustomCommands
 # from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber  # Disabled
 
 # Create logs directory if it doesn't exist
@@ -170,6 +171,7 @@ class DiscordBot(commands.Bot):
         await self.add_cog(HealthMonitor(self, self.monitor))
         await self.add_cog(FunCommands(self))
         await self.add_cog(AdminCommands(self))
+        await self.add_cog(CustomCommands(self))
         
         # 5. Optional features
         # DexScreener trending pairs functionality
@@ -337,6 +339,14 @@ class DiscordBot(commands.Bot):
                 "`!trending_status` - Check status of DexScreener connection"
             ]
             embed.add_field(name="DexScreener Commands", value="\n".join(dexscreener_commands), inline=False)
+            
+            # Custom commands
+            custom_commands = [
+                "`/save` - Save a custom command or add URL to !goon (mods only)",
+                "`/delete` - Delete a custom command (mods only)",
+                "`/listcommands` - List all custom commands (shown privately)"
+            ]
+            embed.add_field(name="Custom Commands (Slash Commands)", value="\n".join(custom_commands), inline=False)
             
             await ctx.send(embed=embed)
 
