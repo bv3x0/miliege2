@@ -233,6 +233,10 @@ class CustomCommands(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
+    async def get_custom_command(self, name: str) -> Optional[str]:
+        """Get a custom command by name"""
+        return self.custom_commands.get(name)
+    
     @commands.Cog.listener()
     async def on_message(self, message):
         """Check for custom commands in messages"""
@@ -251,10 +255,13 @@ class CustomCommands(commands.Cog):
         
         cmd_name = parts[0][1:]  # Remove the ! prefix
         
-        # Check if it's a custom command
+        # Check if it's a custom command BEFORE the bot processes it
         if cmd_name in self.custom_commands:
-            await message.channel.send(self.custom_commands[cmd_name])
-            logger.info(f"Executed custom command !{cmd_name} for user {message.author}")
+            # Check if it's also a built-in command
+            if self.bot.get_command(cmd_name) is None:
+                # It's only a custom command, send it
+                await message.channel.send(self.custom_commands[cmd_name])
+                logger.info(f"Executed custom command !{cmd_name} for user {message.author}")
 
 
 async def setup(bot):

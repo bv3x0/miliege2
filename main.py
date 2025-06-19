@@ -217,6 +217,16 @@ class DiscordBot(commands.Bot):
     async def on_command_error(self, ctx, error):
         """Handle command-specific errors with appropriate responses"""
         if isinstance(error, commands.CommandNotFound):
+            # Check if it's a custom command
+            custom_commands_cog = self.get_cog('CustomCommands')
+            if custom_commands_cog:
+                # Extract command name from the message
+                if ctx.message.content.startswith('!'):
+                    cmd_name = ctx.message.content[1:].split()[0] if ctx.message.content[1:].split() else None
+                    if cmd_name and cmd_name in custom_commands_cog.custom_commands:
+                        # It's a custom command, don't show error
+                        return
+            
             await ctx.send("<:ermh:1151138802404954143>")
         
         elif isinstance(error, commands.MissingPermissions):
