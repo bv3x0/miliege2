@@ -114,6 +114,9 @@ class DigestCog(commands.Cog):
         # Fetch token ages and categorize
         async with aiohttp.ClientSession() as session:
             for contract, token in tokens.items():
+                # Skip non-Cielo tokens
+                if token.get('source', '').lower() != 'cielo':
+                    continue
                 # Get token age from DexScreener
                 token_age_hours = None
                 try:
