@@ -40,35 +40,35 @@ class NewCoinCog(commands.Cog):
         if not self.bot.feature_states.get('cielo_grabber_bot', True):
             logging.debug("Cielo grabber is paused, skipping new coin alert")
             return
-            
+
         max_retries = 3
         retry_delay = 1  # seconds
-        
+
         logging.info(f"NewCoinCog.process_new_coin starting:")
         logging.info(f"- Token: {token_address}")
         logging.info(f"- User: {user}")
         logging.info(f"- Chain: {chain}")
         logging.info(f"- Output Channel ID: {self.output_channel_id}")
-        
+
         if not self.output_channel_id:
             logging.error("No output channel ID configured for NewCoinCog")
             return
-        
+
         channel = self.bot.get_channel(self.output_channel_id)
         if not channel:
             logging.error(f"Could not find channel with ID {self.output_channel_id}")
             return
-        
+
         logging.info(f"Found output channel: {channel.name} ({channel.id})")
-        
+
         for attempt in range(max_retries):
             try:
                 logging.info(f"Attempt {attempt + 1} to process new coin")
-                
+
                 # Get token data from DexScreener
                 dex_data = await DexScreenerAPI.get_token_info(self.session, token_address)
                 logging.info(f"DexScreener API response received: {bool(dex_data)}")
-                
+
                 if not dex_data or 'pairs' not in dex_data or not dex_data['pairs']:
                     logging.warning(f"No valid data from DexScreener for {token_address}")
                     await self._handle_no_data(channel, token_address, user, swap_info, chain, dexscreener_url)
@@ -76,7 +76,7 @@ class NewCoinCog(commands.Cog):
 
                 # Process token data and create embed
                 await self._create_and_send_embed(
-                    channel, dex_data['pairs'][0], token_address, user, 
+                    channel, dex_data['pairs'][0], token_address, user,
                     swap_info, dexscreener_url, chain
                 )
                 logging.info("Successfully created and sent embed")
@@ -87,34 +87,34 @@ class NewCoinCog(commands.Cog):
                     await asyncio.sleep(retry_delay)
                 continue
 
-    async def _create_and_send_embed(self, channel, pair_data, token_address, user, 
+    async def _create_and_send_embed(self, channel, pair_data, token_address, user,
                                    swap_info, dexscreener_url, chain):
         """Create and send the new coin embed with full token information"""
         try:
             # Create embed with custom color
             embed = discord.Embed(color=0xC9B956)
-            
+
             # Set author without icon
             embed.set_author(name="New Coin")
-            
+
             # Extract and format token data
             token_data = self._extract_token_data(pair_data)
             token_data['url'] = dexscreener_url  # Add the chart URL from Cielo
-            
+
             # Create embed description
             embed.description = self._create_description(token_data, chain)
-            
+
             # Set banner image if available
             if banner_url := pair_data.get('info', {}).get('header'):
                 embed.set_image(url=banner_url)
-            
+
             # Set footer with user and amount
             self._set_footer(embed, user, swap_info)
-            
+
             # Send messages
             await channel.send(embed=embed)
             await channel.send(f"`{token_address}`")
-            
+
         except Exception as e:
             logging.error(f"Error creating embed: {e}", exc_info=True)
             raise
@@ -137,7 +137,7 @@ class NewCoinCog(commands.Cog):
         info = pair.get('info', {})
         logging.info(f"Token info data: {info}")
         logging.info(f"Social links data: websites={info.get('websites', [])}, socials={info.get('socials', [])}")
-        
+
         return {
             'name': pair.get('baseToken', {}).get('name', 'Unknown Token'),
             'symbol': pair.get('baseToken', {}).get('symbol', ''),
@@ -145,7 +145,8 @@ class NewCoinCog(commands.Cog):
             'market_cap': pair.get('fdv', 'N/A'),
             'price_change_24h': pair.get('priceChange', {}).get('h24', 'N/A'),
             'pair_created_at': pair.get('pairCreatedAt'),
-            'socials': info  # Pass the entire info object
+            'socials': info,  # Pass the entire info object
+            'pair_address': pair.get('pairAddress')  # Add pair address for Axiom
         }
 
     def _create_description(self, data, chain):
@@ -156,7 +157,7 @@ class NewCoinCog(commands.Cog):
             format_large_number(market_cap_value)
             if market_cap_value is not None else "N/A"
         )
-        
+
         # Add fire emoji for low mcap tokens
         if market_cap_value and market_cap_value < 1_000_000:
             formatted_mcap = f"${formatted_mcap} mc 🔥"
@@ -168,28 +169,28 @@ class NewCoinCog(commands.Cog):
         simplified_age = self._simplify_age_string(age_string)
 
         # Format social links
-        social_parts = self._format_social_links(data['socials'])
-        
+        social_parts = self._format_social_links(data['socials'], chain, data.get('pair_address'))
+
         # Create token name/symbol part with optional URL
         if data.get('url'):
             token_header = f"### [{data['name']} ({data['symbol']})]({data['url']})"
         else:
             token_header = f"### {data['name']} ({data['symbol']})"
-        
+
         # Create description parts (removed duplicate fire emoji)
         description_parts = [
             token_header,
             f"{formatted_mcap} ⋅ {simplified_age} ⋅ {chain.lower()}",
             " ⋅ ".join(social_parts) if social_parts else "no socials"
         ]
-        
+
         return "\n".join(description_parts)
 
     def _simplify_age_string(self, age_string):
         """Simplify age string format"""
         if not age_string:
             return ""
-        
+
         replacements = [
             (" days old", "d old"),
             (" day old", "d old"),
@@ -200,16 +201,16 @@ class NewCoinCog(commands.Cog):
             (" months old", "mo old"),
             (" month old", "mo old")
         ]
-        
+
         for old, new in replacements:
             age_string = age_string.replace(old, new)
-        
+
         return age_string
 
-    def _format_social_links(self, socials):
+    def _format_social_links(self, socials, chain, pair_address):
         """Format social media links for display"""
         social_parts = []
-        
+
         # Add website if available
         websites = socials.get('websites', [])
         if isinstance(websites, list) and websites:
@@ -219,7 +220,7 @@ class NewCoinCog(commands.Cog):
                 social_parts.append(f"[web]({websites[0]})")
         elif websites := socials.get('website'):  # Legacy format
             social_parts.append(f"[web]({websites})")
-            
+
         # Add X/Twitter
         socials_list = socials.get('socials', [])
         logging.info(f"Processing social links: {socials_list}")
@@ -234,7 +235,12 @@ class NewCoinCog(commands.Cog):
                         break
         elif twitter := socials.get('twitter'):  # Legacy format
             social_parts.append(f"[𝕏]({twitter})")
-        
+
+        # Add Axiom link for Solana tokens
+        if chain and chain.lower() == 'solana' and pair_address:
+            social_parts.append(f"[axiom](https://axiom.trade/meme/{pair_address})")
+            logging.info(f"Added Axiom link for Solana token: {pair_address}")
+
         return social_parts if social_parts else ["no socials"]
 
     async def _handle_no_data(self, channel, token_address, user, swap_info, chain, dexscreener_url):
@@ -243,20 +249,20 @@ class NewCoinCog(commands.Cog):
         embed.set_author(
             name="New Coin"
         )
-        
+
         # Extract basic info from swap_info
         token_info = self._extract_swap_info(swap_info)
-        
+
         description_parts = [
             f"### [{token_info['name']} ({token_info['name']})]({dexscreener_url})",
             f"New token, no data • {chain}"
         ]
-        
+
         if token_info['formatted_buy']:
             description_parts.append(f"{token_info['formatted_buy']} buy")
-        
+
         embed.description = "\n".join(description_parts)
-        
+
         if user:
             footer_text = user
             if token_info['dollar_amount']:
@@ -267,7 +273,7 @@ class NewCoinCog(commands.Cog):
                     footer_text = "🤑 " + footer_text
                 footer_text += f" ⋅ ${format(int(amount), ',')} buy"
             embed.set_footer(text=footer_text)
-        
+
         await channel.send(embed=embed)
         await channel.send(f"`{token_address}`")
 
@@ -275,9 +281,9 @@ class NewCoinCog(commands.Cog):
         """Set footer text with user and amount information"""
         if not user:
             return
-            
+
         footer_text = user
-            
+
         # Extract amount from swap info if available
         if swap_info:
             # Parse the dollar amount from the swap info string
@@ -289,7 +295,7 @@ class NewCoinCog(commands.Cog):
                 elif amount >= 10000:
                     footer_text = "🤑 " + footer_text
                 footer_text += f" ⋅ ${format(int(amount), ',')} buy"
-            
+
         embed.set_footer(text=footer_text)
 
     def _extract_swap_info(self, swap_info):
@@ -299,10 +305,10 @@ class NewCoinCog(commands.Cog):
             'formatted_buy': '',
             'dollar_amount': None
         }
-        
+
         if not swap_info:
             return token_info
-        
+
         # Try to extract token name and amount from swap info
         try:
             # Look for dollar amount in parentheses
@@ -311,15 +317,15 @@ class NewCoinCog(commands.Cog):
                 amount_str = dollar_match.group(1)
                 token_info['dollar_amount'] = amount_str.replace(',', '')
                 token_info['formatted_buy'] = f"${amount_str}"
-            
+
             # Extract token name between **** markers
             parts = swap_info.split('****')
             if len(parts) >= 4:
                 token_info['name'] = parts[3].strip()
-                
+
         except Exception as e:
             logging.error(f"Error extracting swap info: {e}")
-        
+
         return token_info
 
     def cog_unload(self):

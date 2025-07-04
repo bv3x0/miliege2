@@ -16,7 +16,7 @@ import datetime
 import aiohttp
 
 class CieloGrabber(commands.Cog):
-    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None, 
+    def __init__(self, bot, token_tracker, monitor, session, digest_cog=None,
                  summary_cog=None, newcoin_cog=None, input_channel_id=None):
         self.bot = bot
         self.token_tracker = token_tracker
@@ -25,10 +25,10 @@ class CieloGrabber(commands.Cog):
         self.digest_cog = digest_cog
         self.summary_cog = summary_cog
         self.newcoin_cog = newcoin_cog
-        
+
         # Add at start of __init__
         logging.info(f"Initializing CieloGrabber with summary_cog: {summary_cog is not None}")
-        
+
         # Convert channel ID if needed
         if input_channel_id and isinstance(input_channel_id, str):
             try:
@@ -40,7 +40,7 @@ class CieloGrabber(commands.Cog):
         else:
             self.input_channel_id = input_channel_id
             logging.info(f"Initialized CieloGrabber with input channel ID: {self.input_channel_id}")
-        
+
         # Verify token_tracker has major_tokens
         if not hasattr(token_tracker, 'major_tokens'):
             raise AttributeError("TokenTracker must have major_tokens attribute")
@@ -54,38 +54,38 @@ class CieloGrabber(commands.Cog):
         try:
             if message.channel.id != self.input_channel_id:
                 return
-            
+
             if message.author.bot and message.author.name == "Cielo Alerts":
                 logging.debug("Processing Cielo Alerts message")
-                
+
                 if not message.embeds:
                     return
-                    
+
                 embed = message.embeds[0]
                 if not embed.fields:
                     return
-                    
+
                 # Get the user from the title (remove the 🏷 emoji)
                 user = embed.title.replace('🏷', '').strip()
-                
+
                 # Get the swap info from the first field's value
                 swap_info = embed.fields[0].value
-                
+
                 # Get the token address from the second field
                 token_address = None
                 for field in embed.fields:
                     if field.value.startswith('Token:'):
                         token_address = field.value.replace('Token:', '').replace('`', '').strip()
                         break
-                
+
                 if token_address and ('Swapped' in swap_info):
                     # Create dexscreener URL based on the chain
                     chain = next((f.value for f in embed.fields if f.name == 'Chain'), 'unknown').lower()
                     dexscreener_url = f"https://dexscreener.com/{chain}/{token_address}"
-                    
+
                     logging.info(f"Processing trade - User: {user}, Token: {token_address}")
                     logging.info(f"Swap info: {swap_info}")
-                    
+
                     # Always track the trade for digest, regardless of pause state
                     await self._track_trade(message, token_address, user, swap_info, dexscreener_url)
 
@@ -95,23 +95,23 @@ class CieloGrabber(commands.Cog):
     async def _process_token(self, contract_address, message, credit_user=None, swap_info=None, dexscreener_maker_link=None, tx_link=None, chain_info=None, original_message_id=None, original_channel_id=None, original_guild_id=None):
         try:
             logging.info(f"Querying Dexscreener API for token: {contract_address}")
-            
+
             # Get the channel but don't create the embed yet
             channel = message.channel
-            
+
             dex_data = await DexScreenerAPI.get_token_info(self.session, contract_address)
-            
+
             # Add detailed logging of the API response
             logging.info(f"Dexscreener API response: {dex_data}")
-            
+
             if dex_data and 'pairs' in dex_data and dex_data['pairs']:
                 try:
                     pair = dex_data['pairs'][0]
                     logging.info(f"Found pair data: {pair.get('baseToken', {}).get('name', 'Unknown')}")
-                    
+
                     # Create a new embed with the standard color
                     new_embed = discord.Embed(color=Colors.EMBED_BORDER)
-                    
+
                     # Extract data first to determine icon URL
                     market_cap = pair.get('fdv', 'N/A')
 
@@ -143,9 +143,9 @@ class CieloGrabber(commands.Cog):
                         logging.info(f"Using green circle for market cap: {market_cap_value}")
                         # No fire emoji for higher market caps
                         formatted_mcap = f"${format_large_number(market_cap_value)} mc"
-                        
+
                     new_embed.set_author(name="Buy Alert", icon_url=author_icon_url)
-                    
+
                     # Extract data
                     chain = pair.get('chainId', 'Unknown Chain')
                     price_change_24h = pair.get('priceChange', {}).get('h24', 'N/A')
@@ -153,22 +153,22 @@ class CieloGrabber(commands.Cog):
                     token_name = pair.get('baseToken', {}).get('name', 'Unknown Token')
                     token_symbol = pair.get('baseToken', {}).get('symbol', '')
                     banner_image = pair.get('info', {}).get('header', None)
-                    
+
                     # Get socials from pair info
                     socials = pair.get('info', {})
                     website = socials.get('website', '')
                     twitter = socials.get('twitter', '')
                     telegram = socials.get('telegram', '')
-                    
+
                     # Store raw market cap value for comparison
                     market_cap_value = market_cap if isinstance(market_cap, (int, float)) else None
-                    
+
                     # Format market cap
                     if market_cap_value is not None:
                         formatted_mcap = format_large_number(market_cap_value)
                     else:
                         formatted_mcap = "N/A"
-                    
+
                     # Format price change with explicit +/- and "24h: " prefix
                     if isinstance(price_change_24h, (int, float)):
                         # Add + sign for positive changes, - is automatically included for negative
@@ -176,17 +176,17 @@ class CieloGrabber(commands.Cog):
                         price_change_formatted = f"{sign}{price_change_24h}%"
                     else:
                         price_change_formatted = "N/A"
-                    
+
                     # Create chart URL
                     chart_url = f"https://dexscreener.com/{chain.lower()}/{contract_address}"
-                    
+
                     # Extract pair creation time
                     pair_created_at = pair.get('pairCreatedAt')
                     age_string = get_age_string(pair_created_at)
 
                     # Extract social links from the new format in Dexscreener API
                     social_parts = []
-                    
+
                     try:
                         # Check for websites in the new format first
                         websites = pair.get('info', {}).get('websites', [])
@@ -198,7 +198,7 @@ class CieloGrabber(commands.Cog):
                                 elif isinstance(website, str):
                                     social_parts.append(f"[web]({website})")
                                     break
-                        
+
                         # Then check for socials in the new format
                         socials_new = pair.get('info', {}).get('socials', [])
                         if socials_new and isinstance(socials_new, list):
@@ -211,7 +211,7 @@ class CieloGrabber(commands.Cog):
                                     elif social['type'] == 'discord' and not any('𝕏' in p for p in social_parts):
                                         # Only add Discord if we don't have Twitter already
                                         social_parts.append(f"[dc]({social['url']})")
-                        
+
                         # Legacy social extraction as fallback
                         if not social_parts:
                             # Try to extract from the old format
@@ -219,7 +219,7 @@ class CieloGrabber(commands.Cog):
                             website_link = socials_old.get('website', '')
                             twitter_link = socials_old.get('twitter', '')
                             telegram_link = socials_old.get('telegram', '')
-                            
+
                             if website_link:
                                 social_parts.append(f"[web]({website_link})")
                             if twitter_link:
@@ -229,20 +229,25 @@ class CieloGrabber(commands.Cog):
                     except Exception as e:
                         logging.error(f"Error extracting social links: {e}", exc_info=True)
                         # Continue with empty social_parts if there's an error
-                    
+
+                    # Add Axiom link for Solana tokens
+                    if chain and chain.lower() == 'solana' and 'pairAddress' in pair:
+                        social_parts.append(f"[axiom](https://axiom.trade/meme/{pair['pairAddress']})")
+                        logging.info(f"Added Axiom link for Solana token: {pair['pairAddress']}")
+
                     # Extract the token used for buying (SOL, ETH, etc.)
                     buy_token = "Unknown"
-                    
+
                     try:
                         if swap_info:
                             logging.info(f"Attempting to parse swap info: {swap_info}")
-                            
+
                             # Try multiple patterns to match Cielo's various formatting styles
-                            
+
                             # Pattern 1: Standard format with double asterisks for token (most common)
                             # Example: Swapped **0.0099** ****WETH**** ($23.81) for...
                             buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*(\w+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
-                            
+
                             if buy_match:
                                 amount = buy_match.group(1)
                                 buy_token = buy_match.group(2)
@@ -252,7 +257,7 @@ class CieloGrabber(commands.Cog):
                                 # Pattern 2: Alternative with single asterisks
                                 # Example: Swapped **0.0099** **WETH** ($23.81) for...
                                 alt_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*(\w+)\*\*\s*\(\$([0-9,.]+)\)', swap_info)
-                                
+
                                 if alt_match:
                                     amount = alt_match.group(1)
                                     buy_token = alt_match.group(2)
@@ -261,7 +266,7 @@ class CieloGrabber(commands.Cog):
                                 else:
                                     # Pattern 3: More flexible pattern to try to catch other variations
                                     flex_match = re.search(r'Swapped.*?([0-9,.]+).*?(\w{3,}).*?\(\$([0-9,.]+)', swap_info)
-                                    
+
                                     if flex_match:
                                         amount = flex_match.group(1)
                                         buy_token = flex_match.group(2)
@@ -272,7 +277,7 @@ class CieloGrabber(commands.Cog):
                     except Exception as e:
                         logging.error(f"Error parsing swap info: {e}", exc_info=True)
                         # If we fail to parse swap info, we'll continue with default values
-                    
+
                     # Extract the buy info from swap_info for use in stats_line
                     buy_info = ""
                     try:
@@ -290,10 +295,10 @@ class CieloGrabber(commands.Cog):
                     except Exception as e:
                         logging.error(f"Error formatting buy info: {e}", exc_info=True)
                         buy_info = ""  # Default to empty string if there's an error
-                    
+
                     # Format market cap with dollar sign and "mc" suffix
                     stats_line_1 = f"${formatted_mcap} mc"
-                    
+
                     # Format age (keep "old" suffix but abbreviate time units)
                     simplified_age = ""
                     try:
@@ -309,7 +314,7 @@ class CieloGrabber(commands.Cog):
                             simplified_age = simplified_age.replace(" month old", "mo old")
                     except Exception as e:
                         logging.error(f"Error formatting age: {e}", exc_info=True)
-                    
+
                     # Format social links
                     socials_text = ""
                     try:
@@ -320,29 +325,29 @@ class CieloGrabber(commands.Cog):
                     except Exception as e:
                         logging.error(f"Error formatting socials: {e}", exc_info=True)
                         socials_text = "no socials"
-                    
+
                     # First stats line: No wow emoji, just market cap, age, and chain
                     stats_line_1 = f"{stats_line_1} ⋅ {simplified_age} ⋅ {chain.lower()}"
-                    
+
                     # Second line: just social links
                     stats_line_2 = socials_text
-                    
+
                     # Create title line with token name, symbol, and URL
                     title_line = f"### [{token_name} ({token_symbol})]({chart_url})"
-                    
+
                     # Add the title line and stats lines to the description
                     description_parts = [title_line, stats_line_1]
-                    
+
                     # Always add social links line, even if it's "no socials"
                     description_parts.append(stats_line_2)
-                    
+
                     # Log the final description to help with debugging
                     final_description = "\n".join(description_parts)
                     logging.info(f"Final embed description: {final_description}")
-                    
+
                     # Set the description
                     new_embed.description = final_description
-                    
+
                     # Add banner image after the description
                     if banner_image:
                         try:
@@ -350,11 +355,11 @@ class CieloGrabber(commands.Cog):
                         except Exception as e:
                             logging.error(f"Error setting banner image {banner_image}: {e}", exc_info=True)
                             # Continue without banner if there's an error
-                    
+
                     # Set footer with buy amount emoji and buyer (remove wow emoji from footer)
                     try:
                         footer_parts = []
-                        
+
                         # Add buy amount emoji based on amount
                         if 'dollar_amount' in locals() and dollar_amount:
                             amount_float = float(dollar_amount.replace(',', '').replace('$', '')) if isinstance(dollar_amount, str) else dollar_amount
@@ -363,10 +368,10 @@ class CieloGrabber(commands.Cog):
                             elif amount_float >= 10000:
                                 footer_parts.append("🤑")
                             # Middle range (250-10000) gets no emoji
-                        
+
                         # Join emojis with spaces
                         footer_emojis = " ".join(footer_parts)
-                        
+
                         # Add username at the end
                         footer_text = footer_emojis
                         if credit_user:
@@ -375,7 +380,7 @@ class CieloGrabber(commands.Cog):
                                 footer_text += f" {credit_user}"
                             else:
                                 footer_text = credit_user
-                        
+
                         # Add buy amount in USD with middle circle separator and "buy" at the end
                         if 'dollar_amount' in locals() and dollar_amount:
                             # Format the dollar amount - remove $ if present and any decimal part
@@ -388,19 +393,19 @@ class CieloGrabber(commands.Cog):
                             else:
                                 # If it's a number, convert to int to remove decimals
                                 formatted_amount = int(formatted_amount)
-                            
+
                             # Add commas for thousands separator
                             formatted_amount = f"${format(int(float(str(formatted_amount).replace(',', ''))), ',')}"
-                            
+
                             # Add to footer text with middle circle separator
                             footer_text += f" ⋅ {formatted_amount} buy"
-                        
+
                         if footer_text:
                             new_embed.set_footer(text=footer_text)
                     except Exception as e:
                         logging.error(f"Error setting footer: {e}", exc_info=True)
                         # Continue without footer if there's an error
-                    
+
                     # Store token data with raw market cap value
                     token_data = {
                         'name': pair.get('baseToken', {}).get('name', token_name),
@@ -416,10 +421,10 @@ class CieloGrabber(commands.Cog):
                         'original_guild_id': original_guild_id,
                         'info': pair.get('info', {})
                     }
-                    
+
                     try:
                         self.token_tracker.log_token(contract_address, token_data, 'cielo', credit_user)
-                        
+
                         # Also log to hour-specific tracker in DigestCog if available
                         if self.digest_cog:
                             # Make sure the digest cog gets all the necessary information
@@ -431,12 +436,12 @@ class CieloGrabber(commands.Cog):
                     except Exception as e:
                         logging.error(f"Error logging token to database: {e}", exc_info=True)
                         # Continue even if database logging fails
-                    
+
                     # Send messages with error handling
                     try:
                         # Send the main embed first - use the channel directly
                         await channel.send(embed=new_embed)
-                        
+
                         # Send the token address as a plain text message immediately after
                         await channel.send(f"`{contract_address}`")
                     except discord.HTTPException as e:
@@ -444,7 +449,7 @@ class CieloGrabber(commands.Cog):
                         # Try a simplified message if the original fails
                         try:
                             simplified_embed = discord.Embed(
-                                title="Buy Alert", 
+                                title="Buy Alert",
                                 description=f"Token: {token_name}\nAddress: `{contract_address}`",
                                 color=Colors.EMBED_BORDER
                             )
@@ -476,14 +481,14 @@ class CieloGrabber(commands.Cog):
                     logging.error(f"No 'pairs' field in Dexscreener response: {dex_data}")
                 elif not dex_data['pairs']:
                     logging.error(f"Empty pairs array in Dexscreener response: {dex_data}")
-                
+
                 # Create a completely fresh embed for the error case
                 new_embed = discord.Embed(color=Colors.EMBED_BORDER)
-                
+
                 # Extract token name and symbol from swap info
                 token_name = "Unknown Token"
                 token_symbol = ""
-                
+
                 # First try to get the full name from Dexscreener API
                 async with aiohttp.ClientSession() as session:
                     dex_data = await DexScreenerAPI.get_token_info(session, contract_address)
@@ -508,16 +513,16 @@ class CieloGrabber(commands.Cog):
 
                 # Create chart URL using the contract and chain
                 chart_url = f"https://dexscreener.com/{chain_info.lower()}/{contract_address}"
-                
+
                 # Set author with Buy Alert - keep default icon for error case
                 new_embed.set_author(name="Buy Alert", icon_url="https://cdn.discordapp.com/emojis/1323480997873848371.webp")
-                
+
                 # Create description parts
                 description_parts = []
-                
+
                 # Title line with token name and symbol
                 description_parts.append(f"### [{token_name} ({token_symbol})]({chart_url})")
-                
+
                 # Extract buy amount and token from swap info
                 if swap_info:
                     buy_match = re.search(r'Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)', swap_info)
@@ -526,10 +531,10 @@ class CieloGrabber(commands.Cog):
                         buy_token = buy_match.group(2)
                         dollar_amount = buy_match.group(3)
                         formatted_buy = format_buy_amount(dollar_amount)
-                        
+
                         # Add stats line with chain - changed "New token" to "New token, no data"
                         description_parts.append(f"New token, no data • {chain_info}")
-                        
+
                         # Add buy info line
                         if dexscreener_maker_link:
                             description_parts.append(f"{formatted_buy} [buy]({dexscreener_maker_link})")
@@ -538,10 +543,10 @@ class CieloGrabber(commands.Cog):
                 else:
                     # Fallback if no swap info - also changed here
                     description_parts.append(f"New token, no data • {chain_info}")
-                
+
                 # Set the description
                 new_embed.description = "\n".join(description_parts)
-                
+
                 # Set footer with credit user if available
                 if credit_user:
                     # Add buy amount emoji based on dollar amount if available
@@ -558,11 +563,11 @@ class CieloGrabber(commands.Cog):
 
                 # Send embed with available info - use the channel directly
                 await channel.send(embed=new_embed)
-                
+
                 # Send the token address separately
                 # Now with backticks around it to format as code
                 await channel.send(f"`{contract_address}`")
-                
+
         except Exception as e:
             logging.error(f"Error processing token {contract_address}: {e}", exc_info=True)
             try:
@@ -579,12 +584,12 @@ class CieloGrabber(commands.Cog):
             if mc_match:
                 mcap_str = mc_match.group(1)
                 logging.info(f"Found initial market cap in swap info: {mcap_str}")
-                
+
                 # Parse market cap with suffix handling
                 try:
                     clean_mcap = mcap_str.replace(',', '')
                     multiplier = 1
-                    
+
                     if 'M' in clean_mcap.upper():
                         multiplier = 1000000
                         clean_mcap = clean_mcap.upper().replace('M', '')
@@ -594,7 +599,7 @@ class CieloGrabber(commands.Cog):
                     elif 'B' in clean_mcap.upper():
                         multiplier = 1000000000
                         clean_mcap = clean_mcap.upper().replace('B', '')
-                    
+
                     initial_mcap = float(clean_mcap) * multiplier
                     initial_mcap_formatted = f"${mcap_str}"  # Keep original formatted string
                     logging.info(f"Parsed market cap value: {initial_mcap} from {mcap_str}")
@@ -611,17 +616,17 @@ class CieloGrabber(commands.Cog):
             # Parse swap info
             swap_pattern = r'(?:⭐️\s+)?Swapped\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*\s*\(\$([0-9,.]+)\)\s+for\s+\*\*([0-9,.]+)\*\*\s+\*\*\*\*([^*]+)\*\*\*\*'
             match = re.search(swap_pattern, swap_info)
-            
+
             if not match:
                 logging.warning(f"Could not parse swap info: {swap_info}")
                 return
-                
+
             from_amount, from_token, dollar_amount, to_amount, to_token = match.groups()
             dollar_amount = float(dollar_amount.replace(',', ''))
-            
+
             # Check if this is a first-time trade
             is_first_trade = '⭐️' in swap_info
-            
+
             # Create message link
             message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
 
@@ -635,7 +640,7 @@ class CieloGrabber(commands.Cog):
                         chain_info = field.value
                         logging.info(f"Extracted chain from embed field: {chain_info}")
                         break
-            
+
             # If not found in fields, try other methods
             if not chain_info:
                 # Try to extract from dexscreener_url
@@ -647,20 +652,20 @@ class CieloGrabber(commands.Cog):
                     # Default to solana if we can't determine chain (most Cielo alerts are Solana)
                     chain_info = "solana"
                     logging.info(f"Using default chain: {chain_info}")
-            
+
             # If it's a first trade, trigger the new coin alert (only if not paused)
             if is_first_trade and self.newcoin_cog and self.bot.feature_states.get('cielo_grabber_bot', True):
                 await self.newcoin_cog.process_new_coin(
                     token_address, message, user, swap_info, dexscreener_url, chain_info
                 )
-            
+
             # Check if it's a buy or sell based on token types
             from_is_major = from_token.upper() in self.token_tracker.major_tokens
             to_is_major = to_token.upper() in self.token_tracker.major_tokens
-            
+
             # Debug logging
             logging.info(f"Trade detection - from_token: {from_token} (is_major: {from_is_major}), to_token: {to_token} (is_major: {to_is_major})")
-            
+
             # Get token data from Dexscreener to extract social info
             async with aiohttp.ClientSession() as session:
                 dex_data = await DexScreenerAPI.get_token_info(session, token_address)
@@ -669,7 +674,7 @@ class CieloGrabber(commands.Cog):
                     # Extract social info - Enhanced version with better extraction for Twitter links
                     social_info = {}
                     logging.info(f"Extracting social info from DexScreener API response for {token_address}")
-                    
+
                     # Extract websites
                     websites = pair.get('info', {}).get('websites', [])
                     if websites and isinstance(websites, list):
@@ -678,11 +683,11 @@ class CieloGrabber(commands.Cog):
                     elif website := pair.get('info', {}).get('website'):
                         social_info['website'] = website
                         logging.info(f"Extracted legacy website: {website}")
-                    
+
                     # Extract social links with better handling for Twitter
                     socials = []
                     raw_socials = pair.get('info', {}).get('socials', [])
-                    
+
                     if raw_socials and isinstance(raw_socials, list):
                         # Process each social to ensure proper format
                         for social in raw_socials:
@@ -690,7 +695,7 @@ class CieloGrabber(commands.Cog):
                                 # Check if it's a Twitter link
                                 platform = social.get('platform', '').lower()
                                 social_type = social.get('type', '').lower()
-                                
+
                                 if 'twitter' in platform or 'twitter' in social_type or social.get('url', '').lower().startswith('https://twitter.com'):
                                     # Normalize the format to ensure compatibility
                                     normalized_social = {
@@ -703,21 +708,26 @@ class CieloGrabber(commands.Cog):
                                 else:
                                     # Keep other socials as they are
                                     socials.append(social)
-                    
+
                     # Only add socials if we found any
                     if socials:
                         social_info['socials'] = socials
                         logging.info(f"Extracted socials: {socials}")
-                    
+
                     # Legacy Twitter format fallback
                     if not any(s.get('platform') == 'twitter' or s.get('type') == 'twitter' for s in socials if isinstance(s, dict)):
                         if twitter := pair.get('info', {}).get('twitter'):
                             social_info['twitter'] = twitter
                             logging.info(f"Extracted legacy Twitter: {twitter}")
-                            
+
+                    # Add pair address for Axiom link
+                    if 'pairAddress' in pair:
+                        social_info['pair_address'] = pair['pairAddress']
+                        logging.info(f"Added pair address: {pair['pairAddress']}")
+
                     # Debug log the final social info
                     logging.info(f"Final social_info for {token_address}: {social_info}")
-            
+
             if self.digest_cog:
                 # Prepare token data for tracking
                 token_data = {
@@ -729,7 +739,7 @@ class CieloGrabber(commands.Cog):
                     'original_guild_id': message.guild.id if message.guild else None,
                     'social_info': social_info if 'social_info' in locals() and social_info else {}  # Add social info here
                 }
-                
+
                 if to_is_major:
                     # User is selling a token for a major token
                     token_data.update({
