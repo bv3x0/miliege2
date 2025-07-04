@@ -47,12 +47,17 @@ class DigestCog(commands.Cog):
         
     @property
     def current_hour_key(self):
-        """Get the current hour key and ensure the hour bucket exists"""
+        """Get the current 30-minute period key and ensure the period bucket exists"""
         ny_time = datetime.now(self.ny_tz)
-        key = ny_time.strftime("%Y-%m-%d-%H")
-        logging.info(f"Getting current hour key: {key}")
+        # Round down to the nearest 30-minute mark
+        if ny_time.minute >= 30:
+            ny_time = ny_time.replace(minute=30, second=0, microsecond=0)
+        else:
+            ny_time = ny_time.replace(minute=0, second=0, microsecond=0)
+        key = ny_time.strftime("%Y-%m-%d-%H-%M")
+        logging.info(f"Getting current period key: {key}")
         if key not in self.hour_tokens:
-            logging.info(f"Creating new hour bucket for {key}")
+            logging.info(f"Creating new period bucket for {key}")
             self.hour_tokens[key] = OrderedDict()
         return key
 
@@ -91,25 +96,32 @@ class DigestCog(commands.Cog):
             except Exception as e:
                 logging.error(f"Error calculating percent change: {e}")
 
-            # Check for sell-only tokens - ONLY CONSIDER TRADES FROM TOKENS IN THE CURRENT HOUR
+            # Check for sell-only tokens - ONLY CONSIDER TRADES FROM TOKENS IN THE CURRENT PERIOD
             total_buys = 0
             total_sells = 0
             
-            # For hourly digests, use the trade data from the previous hour key
-            # For manual digests, use the current hour key
+            # For 30-minute digests, use the trade data from the previous period key
+            # For manual digests, use the current period key
             now = datetime.now(self.ny_tz)
-            hour_key = (now - timedelta(hours=1)).strftime("%Y-%m-%d-%H") if is_hourly else current_hour_key
+            period_key = (now - timedelta(minutes=30)).strftime("%Y-%m-%d-%H-%M")
+            # Round down to the nearest 30-minute mark
+            if int(period_key.split('-')[-1]) >= 30:
+                period_key = period_key[:-2] + "30"
+            else:
+                period_key = period_key[:-2] + "00"
+            if not is_hourly:
+                period_key = current_hour_key
             
-            # Get trade data for the current contract in the specified hour
-            if hour_key in self.hourly_trades and contract in self.hourly_trades.get(hour_key, {}):
-                trade_data = self.hourly_trades[hour_key][contract]
+            # Get trade data for the current contract in the specified period
+            if period_key in self.hourly_trades and contract in self.hourly_trades.get(period_key, {}):
+                trade_data = self.hourly_trades[period_key][contract]
                 total_buys = sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())
                 total_sells = sum(user_data.get('sells', 0) for user_data in trade_data['users'].values())
                 
                 if total_sells > 0 and total_buys == 0:
                     status_score = 2  # ❌
             else:
-                logging.info(f"No trade data found for {contract} in hour {hour_key}")
+                logging.info(f"No trade data found for {contract} in period {period_key}")
 
             token_list.append({
                 'contract': contract,
@@ -239,20 +251,27 @@ class DigestCog(commands.Cog):
                 new_lines = [token_line, stats_line]
                 
                 # IMPORTANT FIX #3: Always prioritize displaying trade info when available
-                # And for manual digests, only consider current hour trades
+                # And for manual digests, only consider current period trades
                 display_trade_data = False
                 trade_data = None
                 
-                # For hourly digests, use the trade data from the previous hour key
-                # For manual digests, use the current hour key
+                # For 30-minute digests, use the trade data from the previous period key
+                # For manual digests, use the current period key
                 now = datetime.now(self.ny_tz)
-                hour_key = (now - timedelta(hours=1)).strftime("%Y-%m-%d-%H") if is_hourly else current_hour_key
+                period_key = (now - timedelta(minutes=30)).strftime("%Y-%m-%d-%H-%M")
+                # Round down to the nearest 30-minute mark
+                if int(period_key.split('-')[-1]) >= 30:
+                    period_key = period_key[:-2] + "30"
+                else:
+                    period_key = period_key[:-2] + "00"
+                if not is_hourly:
+                    period_key = current_hour_key
                 
-                # Get trade data for this token from the appropriate hour
-                if hour_key in self.hourly_trades and contract in self.hourly_trades.get(hour_key, {}):
-                    trade_data = self.hourly_trades[hour_key][contract]
+                # Get trade data for this token from the appropriate period
+                if period_key in self.hourly_trades and contract in self.hourly_trades.get(period_key, {}):
+                    trade_data = self.hourly_trades[period_key][contract]
                     display_trade_data = True
-                    logging.info(f"Found trade data for {name} in hour {hour_key}")
+                    logging.info(f"Found trade data for {name} in period {period_key}")
                 
                 if display_trade_data and trade_data:
                     has_trades = sum(user_data.get('buys', 0) > 0 or user_data.get('sells', 0) > 0 for user_data in trade_data['users'].values()) > 0
@@ -320,30 +339,35 @@ class DigestCog(commands.Cog):
         
         return embeds
 
-    @tasks.loop(hours=1)
+    @tasks.loop(minutes=30)
     async def hourly_digest(self):
-        """Automatically post digest every hour"""
+        """Automatically post digest every 30 minutes"""
         try:
             # Check if hourly digest is paused
             if not self.bot.feature_states.get('hourly_digest', True):
                 logging.debug("Hourly digest is paused, skipping digest")
                 return
                 
-            logging.info("Starting hourly digest task")
+            logging.info("Starting 30-minute digest task")
             now = datetime.now(self.ny_tz)
             logging.info(f"Current NY time: {now}")
-            
+
             channel = self.bot.get_channel(self.channel_id)
             if not channel:
                 logging.error(f"Could not find channel {self.channel_id}")
                 return
 
-            # Get the previous hour's key since we want to digest what just finished
-            previous_hour = (now - timedelta(hours=1)).strftime("%Y-%m-%d-%H")
-            logging.info(f"Processing digest for hour: {previous_hour}")
+            # Get the previous 30-minute period's key since we want to digest what just finished
+            previous_period = (now - timedelta(minutes=30)).strftime("%Y-%m-%d-%H-%M")
+            # Round down to the nearest 30-minute mark
+            if int(previous_period.split('-')[-1]) >= 30:
+                previous_period = previous_period[:-2] + "30"
+            else:
+                previous_period = previous_period[:-2] + "00"
+            logging.info(f"Processing digest for period: {previous_period}")
             
-            tokens_to_report = self.hour_tokens.get(previous_hour, OrderedDict())
-            logging.info(f"Found {len(tokens_to_report)} tokens to report for hour {previous_hour}")
+            tokens_to_report = self.hour_tokens.get(previous_period, OrderedDict())
+            logging.info(f"Found {len(tokens_to_report)} tokens to report for period {previous_period}")
             
             if tokens_to_report:
                 embeds = await self.create_digest_embed(tokens_to_report, is_hourly=True)
@@ -351,29 +375,36 @@ class DigestCog(commands.Cog):
                     for embed in embeds:
                         await channel.send(embed=embed)
                     # Clear data only after successful send
-                    self._clear_hour_data(previous_hour)
-                    logging.info(f"Successfully posted and cleared digest for hour {previous_hour}")
+                    self._clear_hour_data(previous_period)
+                    logging.info(f"Successfully posted and cleared digest for period {previous_period}")
                 else:
                     logging.warning(f"No embeds created for {len(tokens_to_report)} tokens")
             else:
-                logging.info(f"No tokens to report for hour {previous_hour}")
+                logging.info(f"No tokens to report for period {previous_period}")
 
         except Exception as e:
-            logging.error(f"Critical error in hourly digest: {e}", exc_info=True)
+            logging.error(f"Critical error in 30-minute digest: {e}", exc_info=True)
 
     @hourly_digest.before_loop
     async def before_hourly_digest(self):
-        """Wait until the start of the next hour before starting the digest loop"""
+        """Wait until the start of the next 30-minute period before starting the digest loop"""
         await self.bot.wait_until_ready()
-        logging.info("Waiting for bot to be ready before starting hourly digest")
+        logging.info("Waiting for bot to be ready before starting 30-minute digest")
         
         # Use NY timezone consistently
         now = datetime.now(self.ny_tz)
-        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-        wait_seconds = (next_hour - now).total_seconds()
+        
+        # Calculate the next 30-minute mark
+        current_minute = now.minute
+        if current_minute < 30:
+            next_period = now.replace(minute=30, second=0, microsecond=0)
+        else:
+            next_period = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        
+        wait_seconds = (next_period - now).total_seconds()
         
         logging.info(f"Current NY time: {now}")
-        logging.info(f"Next digest scheduled for NY time: {next_hour}")
+        logging.info(f"Next digest scheduled for NY time: {next_period}")
         logging.info(f"Waiting {wait_seconds} seconds until next digest")
         
         await asyncio.sleep(wait_seconds)
@@ -404,8 +435,8 @@ class DigestCog(commands.Cog):
             return None
 
     def process_new_token(self, contract, token_data):
-        """Process a new token and add it to both the global tracker and hour-specific tracker"""
-        current_hour = self.current_hour_key
+        """Process a new token and add it to both the global tracker and period-specific tracker"""
+        current_period = self.current_hour_key
         
         # Add logging to check social info
         logging.info(f"Processing token {token_data.get('name')} with social info: {token_data.get('social_info')}")
@@ -429,22 +460,22 @@ class DigestCog(commands.Cog):
         
         # Preserve social info if it exists
         if 'info' in token_data:
-            self.hour_tokens[current_hour][contract] = {
+            self.hour_tokens[current_period][contract] = {
                 **token_data,
                 'social_info': self.token_tracker.tokens.get(contract, {}).get('social_info', {})
             }
         else:
-            self.hour_tokens[current_hour][contract] = token_data
+            self.hour_tokens[current_period][contract] = token_data
         
-        # Track the trade data with per-user amounts - ORGANIZED BY HOUR
-        current_hour = self.current_hour_key
-        if current_hour not in self.hourly_trades:
-            self.hourly_trades[current_hour] = {}
+        # Track the trade data with per-user amounts - ORGANIZED BY PERIOD
+        current_period = self.current_hour_key
+        if current_period not in self.hourly_trades:
+            self.hourly_trades[current_period] = {}
         
-        if contract not in self.hourly_trades[current_hour]:
-            self.hourly_trades[current_hour][contract] = {'users': {}}
+        if contract not in self.hourly_trades[current_period]:
+            self.hourly_trades[current_period][contract] = {'users': {}}
         
-        trade_data = self.hourly_trades[current_hour][contract]
+        trade_data = self.hourly_trades[current_period][contract]
         
         # Update amounts and determine action
         action = None
@@ -576,17 +607,17 @@ class DigestCog(commands.Cog):
             logging.error(f"Error refreshing digest: {e}", exc_info=True)
             await ctx.send("❌ **Error:** Failed to refresh digest system.")
 
-    def _clear_hour_data(self, hour_key):
-        """Clear the token data for a specific hour after it has been processed"""
+    def _clear_hour_data(self, period_key):
+        """Clear the token data for a specific period after it has been processed"""
         # Clear tokens from hour_tokens
-        if hour_key in self.hour_tokens:
-            del self.hour_tokens[hour_key]
-            logging.info(f"Cleared token data for hour: {hour_key}")
+        if period_key in self.hour_tokens:
+            del self.hour_tokens[period_key]
+            logging.info(f"Cleared token data for period: {period_key}")
         
-        # Clear trades from hourly_trades (using the new hour-organized structure)
-        if hour_key in self.hourly_trades:
-            del self.hourly_trades[hour_key]
-            logging.info(f"Cleared trade data for hour: {hour_key}")
+        # Clear trades from hourly_trades (using the new period-organized structure)
+        if period_key in self.hourly_trades:
+            del self.hourly_trades[period_key]
+            logging.info(f"Cleared trade data for period: {period_key}")
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, 
                     dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False, 
@@ -605,7 +636,7 @@ class DigestCog(commands.Cog):
                 logging.warning(f"Invalid trade type: {trade_type}")
                 return
             
-            current_hour = self.current_hour_key
+            current_period = self.current_hour_key
             
             # Extract chain from message_embed if not explicitly provided
             if not chain and message_embed and 'fields' in message_embed:
@@ -632,7 +663,7 @@ class DigestCog(commands.Cog):
             chain = chain.lower() if chain else 'unknown'
             
             # Process new token or update existing token
-            if token_address not in self.hour_tokens.get(current_hour, {}):
+            if token_address not in self.hour_tokens.get(current_period, {}):
                 # Get social information from token tracker if available
                 social_info = {}
                 if token_data and 'social_info' in token_data:
@@ -641,7 +672,7 @@ class DigestCog(commands.Cog):
                     social_info = self.token_tracker.tokens[token_address]['social_info']
                 
                 # Create new token entry with all required fields and social info
-                self.hour_tokens[current_hour][token_address] = {
+                self.hour_tokens[current_period][token_address] = {
                     'name': token_name,
                     'chart_url': dexscreener_url,
                     'source': 'cielo',
@@ -655,12 +686,12 @@ class DigestCog(commands.Cog):
                 
                 # Add token_data if provided
                 if token_data:
-                    self.hour_tokens[current_hour][token_address].update(token_data)
+                    self.hour_tokens[current_period][token_address].update(token_data)
                 
                 logging.info(f"Created new token entry for {token_name} with chain={chain} and social_info={social_info}")
             else:
                 # Update existing token but preserve social info
-                token_entry = self.hour_tokens[current_hour][token_address]
+                token_entry = self.hour_tokens[current_period][token_address]
                 
                 # Check for social info in token_data
                 if token_data and 'social_info' in token_data and token_data['social_info']:
@@ -680,14 +711,14 @@ class DigestCog(commands.Cog):
                 if not token_entry.get('chart_url'):
                     token_entry['chart_url'] = dexscreener_url
             
-            # Update trade tracking - ORGANIZED BY HOUR
-            if current_hour not in self.hourly_trades:
-                self.hourly_trades[current_hour] = {}
+            # Update trade tracking - ORGANIZED BY PERIOD
+            if current_period not in self.hourly_trades:
+                self.hourly_trades[current_period] = {}
             
-            if token_address not in self.hourly_trades[current_hour]:
-                self.hourly_trades[current_hour][token_address] = {'users': {}}
+            if token_address not in self.hourly_trades[current_period]:
+                self.hourly_trades[current_period][token_address] = {'users': {}}
             
-            trade_data = self.hourly_trades[current_hour][token_address]
+            trade_data = self.hourly_trades[current_period][token_address]
             
             # Initialize or update user data
             if user not in trade_data['users']:
