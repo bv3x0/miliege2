@@ -168,11 +168,11 @@ class DigestCog(commands.Cog):
         # Create embeds for each category
         embeds = []
 
-        # 1. New Coins (use Cielo color)
+        # 1. New Deploys (tokens less than 1 hour old)
         if categories['new_coins']:
             embed = await self._create_category_embed(
                 categories['new_coins'],
-                "New Coins",
+                "New Deploys",
                 Colors.EMBED_BORDER,  # Cielo color
                 period_key,
                 dex_cache
@@ -192,11 +192,11 @@ class DigestCog(commands.Cog):
             if embed:
                 embeds.extend(embed)
 
-        # 3. Big Buys
+        # 3. Big Trades (trades over $10k)
         if categories['big_buys']:
             embed = await self._create_category_embed(
                 categories['big_buys'],
-                "Big Buys",
+                "Big Trades",
                 Colors.EMBED_BORDER,
                 period_key,
                 dex_cache
@@ -204,11 +204,11 @@ class DigestCog(commands.Cog):
             if embed:
                 embeds.extend(embed)
 
-        # 4. Others
+        # 4. Recent Activity (all other alerts)
         if categories['others']:
             embed = await self._create_category_embed(
                 categories['others'],
-                "Others",
+                "Recent Activity",
                 Colors.EMBED_BORDER,
                 period_key,
                 dex_cache
