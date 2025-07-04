@@ -88,17 +88,18 @@ class DigestCog(commands.Cog):
         if not tokens:
             return None
 
-        # For manual digests (!digest command), keep the original single embed behavior
-        if not is_hourly:
-            return await self._create_single_digest_embed(tokens, is_hourly)
+        # Both manual and hourly digests now use the same categorized format
+        return await self._create_categorized_digest_embeds(tokens, is_hourly)
 
-        # For hourly digests, create 4 separate embeds
-        return await self._create_categorized_digest_embeds(tokens)
-
-    async def _create_categorized_digest_embeds(self, tokens):
+    async def _create_categorized_digest_embeds(self, tokens, is_hourly=True):
         """Create 4 separate digest embeds for different categories"""
-        # Get the previous period key for trade data
-        period_key = self._get_period_key(30)
+        # Get the appropriate period key for trade data
+        if is_hourly:
+            # For hourly digests, use the previous 30-minute period
+            period_key = self._get_period_key(30)
+        else:
+            # For manual digests, use the current period
+            period_key = self.current_hour_key
 
         # Initialize categories
         categories = {
