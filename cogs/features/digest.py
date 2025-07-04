@@ -170,13 +170,20 @@ class DigestCog(commands.Cog):
                 if not original_message_link and token.get('message_id') and token.get('channel_id') and token.get('guild_id'):
                     message_link = f"https://discord.com/channels/{token['guild_id']}/{token['channel_id']}/{token['message_id']}"
 
-                # Fetch current market cap
+                # Fetch current market cap and age
                 dex_data = await DexScreenerAPI.get_token_info(session, contract)
                 current_mcap = 'N/A'
+                token_age = 'N/A'
                 if dex_data and dex_data.get('pairs'):
                     pair = dex_data['pairs'][0]
                     if 'fdv' in pair:
                         current_mcap = f"${format_large_number(float(pair['fdv']))}"
+                    # Get token age
+                    if 'pairCreatedAt' in pair:
+                        from cogs.utils import format_age
+                        token_age = format_age(pair['pairCreatedAt'])
+                        if not token_age:
+                            token_age = 'N/A'
 
                 # Format token information
                 # Compare market caps and add emoji based on 40% threshold
@@ -225,9 +232,6 @@ class DigestCog(commands.Cog):
                     if total_sells > 0 and total_buys == 0:
                         token_line += " ❌"
                 
-                # Remove any existing $ from initial_mcap if it exists
-                initial_mcap_clean = initial_mcap.replace('$', '') if initial_mcap else 'N/A'
-                
                 # IMPORTANT FIX #2: Always use chain from token data, never default to unknown
                 chain_display = chain.lower() if chain and chain != "Unknown" else "unknown"
                 
@@ -239,12 +243,12 @@ class DigestCog(commands.Cog):
                 
                 # Create the social string with proper formatting
                 if social_parts:
-                    social_str = f"{' ⋅ '.join(social_parts)} ⋅ "
+                    social_str = " ⋅ ".join(social_parts) + " ⋅ "
                 else:
                     social_str = ""
                 
-                # Format the stats line with social links
-                stats_line = f"{current_mcap} mc (was ${initial_mcap_clean}) ⋅ {social_str}{chain_display}"
+                # Format the stats line: $1.5m mc ⋅ 6h ⋅ web ⋅ 𝕏 ⋅ solana
+                stats_line = f"{current_mcap} mc ⋅ {token_age} ⋅ {social_str}{chain_display}"
                 logging.info(f"Stats line for {name}: {stats_line}")
                 
                 # Calculate the length of new lines to be added

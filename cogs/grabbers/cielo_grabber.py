@@ -52,11 +52,6 @@ class CieloGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
-            # Check if cielo grabber is paused
-            if not self.bot.feature_states.get('cielo_grabber_bot', True):
-                logging.debug("Cielo grabber is paused, skipping message processing")
-                return
-                
             if message.channel.id != self.input_channel_id:
                 return
             
@@ -91,7 +86,7 @@ class CieloGrabber(commands.Cog):
                     logging.info(f"Processing trade - User: {user}, Token: {token_address}")
                     logging.info(f"Swap info: {swap_info}")
                     
-                    # Process the trade
+                    # Always track the trade for digest, regardless of pause state
                     await self._track_trade(message, token_address, user, swap_info, dexscreener_url)
 
         except Exception as e:
@@ -653,8 +648,8 @@ class CieloGrabber(commands.Cog):
                     chain_info = "solana"
                     logging.info(f"Using default chain: {chain_info}")
             
-            # If it's a first trade, trigger the new coin alert
-            if is_first_trade and self.newcoin_cog:
+            # If it's a first trade, trigger the new coin alert (only if not paused)
+            if is_first_trade and self.newcoin_cog and self.bot.feature_states.get('cielo_grabber_bot', True):
                 await self.newcoin_cog.process_new_coin(
                     token_address, message, user, swap_info, dexscreener_url, chain_info
                 )
