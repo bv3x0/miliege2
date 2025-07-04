@@ -1,19 +1,16 @@
 import discord
 from discord.ext import commands, tasks
 import logging
-from collections import deque, OrderedDict
+from collections import OrderedDict
 import aiohttp
-from cogs.utils import safe_api_call, format_large_number, Colors # type: ignore
+from cogs.utils import format_large_number
 from datetime import datetime, timedelta
 import pytz
 import asyncio
 import re
-from cogs.utils.format import format_token_header, Colors  # Fix import path
-from cogs.utils import (
-    DexScreenerAPI,
-    UI
-)
-import json
+from cogs.utils.format import Colors
+from cogs.utils import DexScreenerAPI
+
 
 class DigestCog(commands.Cog):
     def __init__(self, bot, token_tracker, channel_id, monitor=None):
@@ -45,27 +42,356 @@ class DigestCog(commands.Cog):
     def cog_unload(self):
         self.hourly_digest.cancel()  # Clean up task when cog is unloaded
         
-    @property
-    def current_hour_key(self):
-        """Get the current 30-minute period key and ensure the period bucket exists"""
-        ny_time = datetime.now(self.ny_tz)
+    def _get_period_key(self, time_delta_minutes=0):
+        """Get a period key for a specific time offset
+        
+        Args:
+            time_delta_minutes: Minutes to subtract from current time (default 0)
+        
+        Returns:
+            Period key string in format YYYY-MM-DD-HH-MM
+        """
+        ny_time = datetime.now(self.ny_tz) - timedelta(minutes=time_delta_minutes)
         # Round down to the nearest 30-minute mark
         if ny_time.minute >= 30:
             ny_time = ny_time.replace(minute=30, second=0, microsecond=0)
         else:
             ny_time = ny_time.replace(minute=0, second=0, microsecond=0)
-        key = ny_time.strftime("%Y-%m-%d-%H-%M")
+        return ny_time.strftime("%Y-%m-%d-%H-%M")
+    
+    @property
+    def current_hour_key(self):
+        """Get the current 30-minute period key and ensure the period bucket exists"""
+        key = self._get_period_key()
         logging.info(f"Getting current period key: {key}")
         if key not in self.hour_tokens:
             logging.info(f"Creating new period bucket for {key}")
             self.hour_tokens[key] = OrderedDict()
         return key
 
+    def _get_token_age_hours(self, pair_created_at):
+        """Calculate token age in hours from pairCreatedAt timestamp"""
+        if not pair_created_at:
+            return None
+        try:
+            if isinstance(pair_created_at, (int, str)):
+                created_time = datetime.fromtimestamp(int(pair_created_at) / 1000)
+                age_delta = datetime.now() - created_time
+                return age_delta.total_seconds() / 3600  # Return age in hours
+        except Exception as e:
+            logging.error(f"Error calculating token age: {e}")
+            return None
+
+
     async def create_digest_embed(self, tokens, is_hourly=True):
         """Create the digest embed(s) - shared between auto and manual digests"""
         if not tokens:
             return None
 
+        # For manual digests (!digest command), keep the original single embed behavior
+        if not is_hourly:
+            return await self._create_single_digest_embed(tokens, is_hourly)
+        
+        # For hourly digests, create 4 separate embeds
+        return await self._create_categorized_digest_embeds(tokens)
+    
+    async def _create_categorized_digest_embeds(self, tokens):
+        """Create 4 separate digest embeds for different categories"""
+        # Get the previous period key for trade data
+        period_key = self._get_period_key(30)
+        
+        # Initialize categories
+        categories = {
+            'new_coins': OrderedDict(),
+            'three_plus_buyers': OrderedDict(),
+            'big_buys': OrderedDict(),
+            'others': OrderedDict()
+        }
+        
+        # Cache for DexScreener data to avoid duplicate API calls
+        dex_cache = {}
+        
+        # Fetch token ages and categorize
+        async with aiohttp.ClientSession() as session:
+            for contract, token in tokens.items():
+                # Get token age from DexScreener
+                token_age_hours = None
+                try:
+                    dex_data = await DexScreenerAPI.get_token_info(session, contract)
+                    if dex_data and dex_data.get('pairs'):
+                        pair = dex_data['pairs'][0]
+                        # Cache the data for later use
+                        dex_cache[contract] = dex_data
+                        if 'pairCreatedAt' in pair:
+                            token_age_hours = self._get_token_age_hours(pair['pairCreatedAt'])
+                except Exception as e:
+                    logging.error(f"Error fetching token age for {contract}: {e}")
+                
+                # Check trade data for this period
+                is_new_coin = token_age_hours is not None and token_age_hours < 1
+                is_three_plus_buyers = False
+                has_big_buy = False
+                
+                if period_key in self.hourly_trades and contract in self.hourly_trades[period_key]:
+                    trade_data = self.hourly_trades[period_key][contract]
+                    
+                    # Count unique buyers
+                    buyers = set()
+                    max_user_buy = 0
+                    
+                    for user, user_data in trade_data['users'].items():
+                        buy_amount = user_data.get('buys', 0)
+                        if buy_amount > 0:
+                            buyers.add(user)
+                            max_user_buy = max(max_user_buy, buy_amount)
+                    
+                    is_three_plus_buyers = len(buyers) >= 3
+                    has_big_buy = max_user_buy > 10000
+                
+                # Categorize token (can appear in multiple categories)
+                if is_new_coin:
+                    categories['new_coins'][contract] = token
+                if is_three_plus_buyers:
+                    categories['three_plus_buyers'][contract] = token
+                if has_big_buy:
+                    categories['big_buys'][contract] = token
+                
+                # If not in any special category, put in others
+                if not (is_new_coin or is_three_plus_buyers or has_big_buy):
+                    categories['others'][contract] = token
+        
+        # Create embeds for each category
+        embeds = []
+        
+        # 1. New Coins (use Cielo color)
+        if categories['new_coins']:
+            embed = await self._create_category_embed(
+                categories['new_coins'], 
+                "New Coins", 
+                Colors.EMBED_BORDER,  # Cielo color
+                period_key,
+                dex_cache
+            )
+            if embed:
+                embeds.extend(embed)
+        
+        # 2. 3+ Buyers
+        if categories['three_plus_buyers']:
+            embed = await self._create_category_embed(
+                categories['three_plus_buyers'], 
+                "3+ Buyers", 
+                Colors.EMBED_BORDER,
+                period_key,
+                dex_cache
+            )
+            if embed:
+                embeds.extend(embed)
+        
+        # 3. Big Buys
+        if categories['big_buys']:
+            embed = await self._create_category_embed(
+                categories['big_buys'], 
+                "Big Buys", 
+                Colors.EMBED_BORDER,
+                period_key,
+                dex_cache
+            )
+            if embed:
+                embeds.extend(embed)
+        
+        # 4. Others
+        if categories['others']:
+            embed = await self._create_category_embed(
+                categories['others'], 
+                "Others", 
+                Colors.EMBED_BORDER,
+                period_key,
+                dex_cache
+            )
+            if embed:
+                embeds.extend(embed)
+        
+        return embeds if embeds else None
+    
+    async def _create_category_embed(self, tokens, category_name, color, period_key, dex_cache=None):
+        """Create embed for a specific category of tokens"""
+        # Take last 10 tokens
+        recent_tokens = list(tokens.items())[-10:]
+        
+        # Create embeds with the sorted tokens
+        embeds = []
+        current_description_lines = []
+        
+        async with aiohttp.ClientSession() as session:
+            for contract, token in recent_tokens:
+                # Format token lines (reuse existing logic)
+                new_lines = await self._format_token_lines(contract, token, session, period_key, dex_cache)
+                
+                # Check if adding these lines would exceed Discord's limit
+                potential_description = "\n".join(current_description_lines + new_lines)
+                if len(potential_description) > 4000 and current_description_lines:
+                    # Create new embed with current lines
+                    embed = discord.Embed(color=color)
+                    embed.set_author(name=category_name)
+                    embed.description = "\n".join(current_description_lines)
+                    embeds.append(embed)
+                    
+                    # Start new collection of lines
+                    current_description_lines = new_lines
+                else:
+                    current_description_lines.extend(new_lines)
+        
+        # Create final embed with any remaining lines
+        if current_description_lines:
+            embed = discord.Embed(color=color)
+            embed.set_author(name=category_name)
+            embed.description = "\n".join(current_description_lines)
+            embeds.append(embed)
+        
+        return embeds
+    
+    async def _format_token_lines(self, contract, token, session, period_key, dex_cache=None):
+        """Format the display lines for a single token"""
+        name = token['name']
+        chain = token.get('chain', 'Unknown')
+        source = token.get('source', 'unknown')
+        user = token.get('user', 'unknown')
+        
+        # Add this before trying to construct the token_line
+        if 'chart_url' not in token or not token['chart_url']:
+            # Set a default chart URL if missing
+            token['chart_url'] = f"https://dexscreener.com/{chain.lower()}/{contract}"
+            logging.warning(f"Missing chart_url for {name}, creating default")
+        
+        # Then construct token_line
+        token_line = f"### [{name}]({token['chart_url']})"
+        
+        # Create Discord message link if we have the necessary info
+        message_link = None
+        original_message_link = None
+        
+        # Check for original message link first (Cielo message)
+        if (token.get('original_message_id') and token.get('original_channel_id') and 
+                token.get('original_guild_id')):
+            original_message_link = (f"https://discord.com/channels/"
+                                   f"{token['original_guild_id']}/"
+                                   f"{token['original_channel_id']}/"
+                                   f"{token['original_message_id']}")
+        
+        # Fall back to grabber message link if original not available
+        if not original_message_link and token.get('message_id') and token.get('channel_id') and token.get('guild_id'):
+            message_link = f"https://discord.com/channels/{token['guild_id']}/{token['channel_id']}/{token['message_id']}"
+        
+        # Fetch current market cap and age (use cache if available)
+        if dex_cache and contract in dex_cache:
+            dex_data = dex_cache[contract]
+        else:
+            dex_data = await DexScreenerAPI.get_token_info(session, contract)
+        
+        current_mcap = 'N/A'
+        token_age = 'N/A'
+        if dex_data and dex_data.get('pairs'):
+            pair = dex_data['pairs'][0]
+            if 'fdv' in pair:
+                current_mcap = f"${format_large_number(float(pair['fdv']))}"
+            # Get token age
+            if 'pairCreatedAt' in pair:
+                from cogs.utils import format_age
+                token_age = format_age(pair['pairCreatedAt'])
+                if not token_age:
+                    token_age = 'N/A'
+        
+        # Format token information
+        # Compare market caps and add emoji based on 40% threshold
+        try:
+            current_mcap_value = self.parse_market_cap(current_mcap)
+            initial_mcap_value = token.get('initial_market_cap')  # Already parsed when stored
+            
+            status_emoji = ""
+            if current_mcap_value and initial_mcap_value and initial_mcap_value > 0:
+                percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
+                logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
+                
+                if percent_change >= 40:
+                    status_emoji = " :up:"
+                elif percent_change <= -40:
+                    status_emoji = " 🪦"
+        except Exception as e:
+            logging.error(f"Error calculating percent change for {name}: {e}")
+            status_emoji = ""
+        
+        # Make sure we have valid values for display
+        if not source or source == "":
+            source = "unknown"
+        if not user or user == "":
+            user = "unknown"
+        if not chain or chain == "":
+            chain = "unknown"
+        
+        # Format the description lines
+        token_line += status_emoji
+        
+        # Add red X to tokens with only sells
+        if period_key in self.hourly_trades and contract in self.hourly_trades[period_key]:
+            trade_data = self.hourly_trades[period_key][contract]
+            total_buys = sum(user_data.get('buys', 0) for user_data in trade_data['users'].values())
+            total_sells = sum(user_data.get('sells', 0) for user_data in trade_data['users'].values())
+            if total_sells > 0 and total_buys == 0:
+                token_line += " ❌"
+        
+        # Always use chain from token data, never default to unknown
+        chain_display = chain.lower() if chain and chain != "Unknown" else "unknown"
+        
+        # Format social links
+        social_parts = self._format_social_links(token)
+        
+        # Create the social string with proper formatting
+        if social_parts:
+            social_str = " ⋅ ".join(social_parts) + " ⋅ "
+        else:
+            social_str = ""
+        
+        # Format the stats line: $1.5m mc ⋅ 6h ⋅ web ⋅ 𝕏 ⋅ solana
+        stats_line = f"{current_mcap} mc ⋅ {token_age} ⋅ {social_str}{chain_display}"
+        
+        new_lines = [token_line, stats_line]
+        
+        # Add trade info
+        display_trade_data = False
+        trade_data = None
+        
+        # Get trade data for this token from the appropriate period
+        if period_key in self.hourly_trades and contract in self.hourly_trades.get(period_key, {}):
+            trade_data = self.hourly_trades[period_key][contract]
+            display_trade_data = True
+        
+        if display_trade_data and trade_data:
+            has_trades = sum(user_data.get('buys', 0) > 0 or user_data.get('sells', 0) > 0 
+                           for user_data in trade_data['users'].values()) > 0
+            
+            if has_trades:
+                # First try the structured formatting
+                trade_info = self._format_trade_info(trade_data, False)
+                
+                if trade_info and trade_info.strip():
+                    new_lines.append(trade_info)
+                else:
+                    # Use source via user as fallback
+                    source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+                    new_lines.append(source_line)
+            else:
+                # No trade amounts, use source via user
+                source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+                new_lines.append(source_line)
+        else:
+            # We're not showing trade data for this token
+            source_line = f"{source} via [{user}]({original_message_link or message_link})" if (original_message_link or message_link) else f"{source} via {user}"
+            new_lines.append(source_line)
+        
+        return new_lines
+    
+    async def _create_single_digest_embed(self, tokens, is_hourly=True):
+        """Create the original single digest embed - for manual digests"""
         # Convert tokens to list and calculate sorting metrics
         token_list = []
         current_hour_key = self.current_hour_key
@@ -102,14 +428,9 @@ class DigestCog(commands.Cog):
             
             # For 30-minute digests, use the trade data from the previous period key
             # For manual digests, use the current period key
-            now = datetime.now(self.ny_tz)
-            period_key = (now - timedelta(minutes=30)).strftime("%Y-%m-%d-%H-%M")
-            # Round down to the nearest 30-minute mark
-            if int(period_key.split('-')[-1]) >= 30:
-                period_key = period_key[:-2] + "30"
+            if is_hourly:
+                period_key = self._get_period_key(30)
             else:
-                period_key = period_key[:-2] + "00"
-            if not is_hourly:
                 period_key = current_hour_key
             
             # Get trade data for the current contract in the specified period
@@ -259,17 +580,8 @@ class DigestCog(commands.Cog):
                 display_trade_data = False
                 trade_data = None
                 
-                # For 30-minute digests, use the trade data from the previous period key
-                # For manual digests, use the current period key
-                now = datetime.now(self.ny_tz)
-                period_key = (now - timedelta(minutes=30)).strftime("%Y-%m-%d-%H-%M")
-                # Round down to the nearest 30-minute mark
-                if int(period_key.split('-')[-1]) >= 30:
-                    period_key = period_key[:-2] + "30"
-                else:
-                    period_key = period_key[:-2] + "00"
-                if not is_hourly:
-                    period_key = current_hour_key
+                # This method is only called from category embeds for hourly digests
+                # so we don't need to check is_hourly here
                 
                 # Get trade data for this token from the appropriate period
                 if period_key in self.hourly_trades and contract in self.hourly_trades.get(period_key, {}):
@@ -278,7 +590,8 @@ class DigestCog(commands.Cog):
                     logging.info(f"Found trade data for {name} in period {period_key}")
                 
                 if display_trade_data and trade_data:
-                    has_trades = sum(user_data.get('buys', 0) > 0 or user_data.get('sells', 0) > 0 for user_data in trade_data['users'].values()) > 0
+                    has_trades = sum(user_data.get('buys', 0) > 0 or user_data.get('sells', 0) > 0 
+                           for user_data in trade_data['users'].values()) > 0
                     
                     if has_trades:
                         # First try the structured formatting
@@ -362,12 +675,7 @@ class DigestCog(commands.Cog):
                 return
 
             # Get the previous 30-minute period's key since we want to digest what just finished
-            previous_period = (now - timedelta(minutes=30)).strftime("%Y-%m-%d-%H-%M")
-            # Round down to the nearest 30-minute mark
-            if int(previous_period.split('-')[-1]) >= 30:
-                previous_period = previous_period[:-2] + "30"
-            else:
-                previous_period = previous_period[:-2] + "00"
+            previous_period = self._get_period_key(30)
             logging.info(f"Processing digest for period: {previous_period}")
             
             tokens_to_report = self.hour_tokens.get(previous_period, OrderedDict())
@@ -376,11 +684,12 @@ class DigestCog(commands.Cog):
             if tokens_to_report:
                 embeds = await self.create_digest_embed(tokens_to_report, is_hourly=True)
                 if embeds:
+                    # Send each embed as a separate message
                     for embed in embeds:
                         await channel.send(embed=embed)
                     # Clear data only after successful send
                     self._clear_hour_data(previous_period)
-                    logging.info(f"Successfully posted and cleared digest for period {previous_period}")
+                    logging.info(f"Successfully posted {len(embeds)} digest embeds and cleared data for period {previous_period}")
                 else:
                     logging.warning(f"No embeds created for {len(tokens_to_report)} tokens")
             else:
@@ -622,6 +931,49 @@ class DigestCog(commands.Cog):
         if period_key in self.hourly_trades:
             del self.hourly_trades[period_key]
             logging.info(f"Cleared trade data for period: {period_key}")
+        
+        # Also clean up old data (keep only last 4 hours / 8 periods)
+        self._cleanup_old_periods()
+    
+    def _cleanup_old_periods(self):
+        """Remove old period data to prevent memory growth"""
+        # Keep only the last 8 periods (4 hours worth)
+        max_periods_to_keep = 8
+        
+        # Get current time and calculate cutoff
+        now = datetime.now(self.ny_tz)
+        cutoff_time = now - timedelta(hours=4)
+        
+        # Clean hour_tokens
+        periods_to_remove = []
+        for period_key in self.hour_tokens.keys():
+            try:
+                # Parse the period key back to datetime
+                period_time = datetime.strptime(period_key, "%Y-%m-%d-%H-%M")
+                period_time = self.ny_tz.localize(period_time)
+                if period_time < cutoff_time:
+                    periods_to_remove.append(period_key)
+            except Exception as e:
+                logging.error(f"Error parsing period key {period_key}: {e}")
+        
+        for period_key in periods_to_remove:
+            del self.hour_tokens[period_key]
+            logging.debug(f"Cleaned up old token data for period: {period_key}")
+        
+        # Clean hourly_trades with same logic
+        periods_to_remove = []
+        for period_key in self.hourly_trades.keys():
+            try:
+                period_time = datetime.strptime(period_key, "%Y-%m-%d-%H-%M")
+                period_time = self.ny_tz.localize(period_time)
+                if period_time < cutoff_time:
+                    periods_to_remove.append(period_key)
+            except Exception as e:
+                logging.error(f"Error parsing period key {period_key}: {e}")
+        
+        for period_key in periods_to_remove:
+            del self.hourly_trades[period_key]
+            logging.debug(f"Cleaned up old trade data for period: {period_key}")
 
     def track_trade(self, token_address, token_name, user, amount, trade_type, message_link, 
                     dexscreener_url, swap_info=None, message_embed=None, is_first_trade=False, 
