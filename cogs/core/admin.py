@@ -9,12 +9,7 @@ import logging
 class AdminCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Initialize feature states
-        self.feature_states = {
-            'hourly_digest': True,
-            # 'hyperliquid_bot': True,  # Hyperliquid disabled
-            'cielo_grabber_bot': True
-        }
+        # Feature states are now managed by the main bot class
         
     # Hyperliquid commands disabled
     # @app_commands.command(name="list", description="List all tracked Hyperliquid wallets")
@@ -120,11 +115,11 @@ class AdminCommands(commands.Cog):
         app_commands.Choice(name="Cielo Grabber", value="cielo_grabber_bot")
     ])
     async def pause_feature(self, interaction: discord.Interaction, feature: str):
-        if feature not in self.feature_states:
+        if feature not in self.bot.feature_states:
             await interaction.response.send_message(f"Invalid feature", ephemeral=True)
             return
             
-        self.feature_states[feature] = False
+        self.bot.feature_states[feature] = False
         await interaction.response.send_message(f"✅ {feature} paused")
         
     @control_group.command(name="unpause", description="Resume a feature")
@@ -137,17 +132,17 @@ class AdminCommands(commands.Cog):
         app_commands.Choice(name="Cielo Grabber", value="cielo_grabber_bot")
     ])
     async def unpause_feature(self, interaction: discord.Interaction, feature: str):
-        if feature not in self.feature_states:
+        if feature not in self.bot.feature_states:
             await interaction.response.send_message(f"Invalid feature", ephemeral=True)
             return
             
-        self.feature_states[feature] = True
+        self.bot.feature_states[feature] = True
         await interaction.response.send_message(f"✅ {feature} resumed")
         
     @control_group.command(name="status", description="Show feature status")
     async def show_status(self, interaction: discord.Interaction):
         status_message = "**Bot Status:**\n"
-        for feature, is_active in self.feature_states.items():
+        for feature, is_active in self.bot.feature_states.items():
             status = "🟢 Active" if is_active else "🔴 Paused"
             status_message += f"{feature}: {status}\n"
             

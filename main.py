@@ -82,6 +82,12 @@ class DiscordBot(commands.Bot):
         # Pass the session
         self.token_tracker = TokenTracker(max_tokens=50, max_age_hours=24)
         self.session = None
+        
+        # Initialize feature states - accessible to all cogs
+        self.feature_states = {
+            'hourly_digest': True,
+            'cielo_grabber_bot': True
+        }
 
     async def on_message(self, message):
         if message.author.name == "Cielo":

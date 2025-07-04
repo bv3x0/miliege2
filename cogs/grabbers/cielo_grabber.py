@@ -52,6 +52,11 @@ class CieloGrabber(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         try:
+            # Check if cielo grabber is paused
+            if not self.bot.feature_states.get('cielo_grabber_bot', True):
+                logging.debug("Cielo grabber is paused, skipping message processing")
+                return
+                
             if message.channel.id != self.input_channel_id:
                 return
             

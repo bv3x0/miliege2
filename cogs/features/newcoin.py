@@ -36,6 +36,11 @@ class NewCoinCog(commands.Cog):
 
     async def process_new_coin(self, token_address, message, user, swap_info, dexscreener_url, chain):
         """Handle first-buy alerts with detailed token info"""
+        # Check if cielo grabber is paused
+        if not self.bot.feature_states.get('cielo_grabber_bot', True):
+            logging.debug("Cielo grabber is paused, skipping new coin alert")
+            return
+            
         max_retries = 3
         retry_delay = 1  # seconds
         

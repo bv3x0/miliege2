@@ -324,6 +324,11 @@ class DigestCog(commands.Cog):
     async def hourly_digest(self):
         """Automatically post digest every hour"""
         try:
+            # Check if hourly digest is paused
+            if not self.bot.feature_states.get('hourly_digest', True):
+                logging.debug("Hourly digest is paused, skipping digest")
+                return
+                
             logging.info("Starting hourly digest task")
             now = datetime.now(self.ny_tz)
             logging.info(f"Current NY time: {now}")
