@@ -185,11 +185,11 @@ class DigestCog(commands.Cog):
                         total_buys += user_data.get('buys', 0)
                         total_sells += user_data.get('sells', 0)
                 
-                # Categorize based on net activity (ties go to buys)
-                if total_sells > total_buys:
-                    categories['recent_sells'][contract] = token
-                else:
+                # Categorize based on net activity (ties go to sells)
+                if total_buys > total_sells:
                     categories['recent_buys'][contract] = token
+                else:
+                    categories['recent_sells'][contract] = token
 
         # Create embeds for each category
         embeds = []
@@ -230,11 +230,11 @@ class DigestCog(commands.Cog):
             if embed:
                 embeds.extend(embed)
 
-        # 4. Recent Activity: Buys (net buying activity)
+        # 4. General Buys (net buying activity)
         if categories['recent_buys']:
             embed = await self._create_category_embed(
                 categories['recent_buys'],
-                "Recent Activity: Buys",
+                "General Buys",
                 Colors.EMBED_BORDER,
                 period_key,
                 dex_cache
@@ -242,11 +242,11 @@ class DigestCog(commands.Cog):
             if embed:
                 embeds.extend(embed)
                 
-        # 5. Recent Activity: Sells (net selling activity)
+        # 5. General Sells (net selling activity)
         if categories['recent_sells']:
             embed = await self._create_category_embed(
                 categories['recent_sells'],
-                "Recent Activity: Sells",
+                "General Sells",
                 Colors.EMBED_BORDER,
                 period_key,
                 dex_cache
