@@ -5,6 +5,7 @@ from cogs.utils import (
     format_large_number,
     format_age as get_age_string,
     format_currency as format_buy_amount,
+    format_social_links,
     DexScreenerAPI
 )
 from cogs.utils.format import Colors
@@ -209,38 +210,11 @@ class NewCoinCog(commands.Cog):
 
     def _format_social_links(self, socials, chain, pair_address):
         """Format social media links for display"""
-        social_parts = []
-
-        # Add website if available
-        websites = socials.get('websites', [])
-        if isinstance(websites, list) and websites:
-            if isinstance(websites[0], dict) and 'url' in websites[0]:
-                social_parts.append(f"[web]({websites[0]['url']})")
-            else:
-                social_parts.append(f"[web]({websites[0]})")
-        elif websites := socials.get('website'):  # Legacy format
-            social_parts.append(f"[web]({websites})")
-
-        # Add X/Twitter
-        socials_list = socials.get('socials', [])
-        logging.info(f"Processing social links: {socials_list}")
-        if isinstance(socials_list, list):
-            for social in socials_list:
-                if isinstance(social, dict):
-                    platform = social.get('platform', '').lower()
-                    # Check for both 'twitter' and 'x' platform names
-                    if platform in ['twitter', 'x'] or 'x.com' in social.get('url', '').lower():
-                        logging.info(f"Found X/Twitter social: {social}")
-                        social_parts.append(f"[𝕏]({social['url']})")
-                        break
-        elif twitter := socials.get('twitter'):  # Legacy format
-            social_parts.append(f"[𝕏]({twitter})")
-
-        # Add Axiom link for Solana tokens
-        if chain and chain.lower() == 'solana' and pair_address:
-            social_parts.append(f"[axiom](https://axiom.trade/meme/{pair_address})")
-            logging.info(f"Added Axiom link for Solana token: {pair_address}")
-
+        # Add pair_address to socials dict for centralized function
+        if pair_address:
+            socials['pair_address'] = pair_address
+        
+        social_parts = format_social_links(socials, chain)
         return social_parts if social_parts else ["no socials"]
 
     async def _handle_no_data(self, channel, token_address, user, swap_info, chain, dexscreener_url):

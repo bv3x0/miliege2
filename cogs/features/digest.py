@@ -3,7 +3,7 @@ from discord.ext import commands, tasks
 import logging
 from collections import OrderedDict
 import aiohttp
-from cogs.utils import format_large_number
+from cogs.utils import format_large_number, format_social_links
 from datetime import datetime, timedelta
 import pytz
 import asyncio
@@ -128,11 +128,7 @@ class DigestCog(commands.Cog):
                         dex_cache[contract] = dex_data
                         if 'pairCreatedAt' in pair:
                             token_age_hours = self._get_token_age_hours(pair['pairCreatedAt'])
-                        # Store pair address for Axiom link
-                        if 'pairAddress' in pair and token.get('chain', '').lower() == 'solana':
-                            if 'social_info' not in token:
-                                token['social_info'] = {}
-                            token['social_info']['pair_address'] = pair['pairAddress']
+                        # Note: pair_address should already be in social_info from token tracker
                 except Exception as e:
                     logging.error(f"Error fetching token age for {contract}: {e}")
 
@@ -309,11 +305,7 @@ class DigestCog(commands.Cog):
                 token_age = format_age(pair['pairCreatedAt'])
                 if not token_age:
                     token_age = 'N/A'
-            # Store pair address for Axiom link
-            if 'pairAddress' in pair and token.get('chain', '').lower() == 'solana':
-                if 'social_info' not in token:
-                    token['social_info'] = {}
-                token['social_info']['pair_address'] = pair['pairAddress']
+            # Note: pair_address should already be in social_info from token tracker
 
         # Format token information
         # Compare market caps and add emoji based on 40% threshold
@@ -423,11 +415,7 @@ class DigestCog(commands.Cog):
                         pair = dex_data['pairs'][0]
                         if 'fdv' in pair:
                             current_mcap = f"${format_large_number(float(pair['fdv']))}"
-                        # Store pair address for Axiom link
-                        if 'pairAddress' in pair and token.get('chain', '').lower() == 'solana':
-                            if 'social_info' not in token:
-                                token['social_info'] = {}
-                            token['social_info']['pair_address'] = pair['pairAddress']
+                        # Note: pair_address should already be in social_info from token tracker
 
                 current_mcap_value = self.parse_market_cap(current_mcap)
                 initial_mcap_value = token.get('initial_market_cap')
@@ -524,11 +512,7 @@ class DigestCog(commands.Cog):
                         token_age = format_age(pair['pairCreatedAt'])
                         if not token_age:
                             token_age = 'N/A'
-                    # Store pair address for Axiom link
-                    if 'pairAddress' in pair and token.get('chain', '').lower() == 'solana':
-                        if 'social_info' not in token:
-                            token['social_info'] = {}
-                        token['social_info']['pair_address'] = pair['pairAddress']
+                    # Note: pair_address should already be in social_info from token tracker
 
                 # Format token information
                 # Compare market caps and add emoji based on 40% threshold
@@ -1172,50 +1156,6 @@ class DigestCog(commands.Cog):
 
     def _format_social_links(self, token_data):
         """Format social links for display in digest"""
-        social_parts = []
-
-        if 'social_info' in token_data:
-            info = token_data['social_info']
-            logging.info(f"Processing social info: {info}")
-
-            # Add website if available
-            websites = info.get('websites', [])
-            if isinstance(websites, list) and websites:
-                if isinstance(websites[0], dict) and 'url' in websites[0]:
-                    social_parts.append(f"[web]({websites[0]['url']})")
-                elif isinstance(websites[0], str):
-                    social_parts.append(f"[web]({websites[0]})")
-            elif websites := info.get('website'):  # Legacy format
-                social_parts.append(f"[web]({websites})")
-
-            # Add X/Twitter - check multiple potential formats
-            socials_list = info.get('socials', [])
-            if isinstance(socials_list, list):
-                for social in socials_list:
-                    # Handle different formats in the API response
-                    if isinstance(social, dict):
-                        # Check both 'platform' and 'type' fields for Twitter
-                        platform = social.get('platform', '').lower()
-                        typ = social.get('type', '').lower()
-
-                        if 'twitter' in platform or 'twitter' in typ:
-                            if 'url' in social:
-                                social_parts.append(f"[𝕏]({social['url']})")
-                                logging.info(f"Found Twitter link: {social['url']}")
-                                break
-
-            # Check legacy Twitter format as fallback
-            if not any('𝕏' in part for part in social_parts):
-                if twitter := info.get('twitter'):
-                    social_parts.append(f"[𝕏]({twitter})")
-                    logging.info(f"Found legacy Twitter link: {twitter}")
-
-            # Add Axiom link for Solana tokens
-            chain = token_data.get('chain', '').lower()
-            pair_address = info.get('pair_address')
-            if chain == 'solana' and pair_address:
-                social_parts.append(f"[axiom](https://axiom.trade/meme/{pair_address})")
-                logging.info(f"Added Axiom link for Solana token: {pair_address}")
-
-        logging.info(f"Final social parts: {social_parts}")
-        return social_parts  # Return empty list instead of ["no socials"]
+        social_info = token_data.get('social_info', {})
+        chain = token_data.get('chain', '')
+        return format_social_links(social_info, chain)

@@ -9,6 +9,7 @@ from .format import (
     format_currency,
     format_percent,
     format_age,
+    format_social_links,
     Colors,
     BotConstants,
     Messages
@@ -25,6 +26,7 @@ __all__ = [
     'format_currency',
     'format_percent',
     'format_age',
+    'format_social_links',
     'Colors',
     'BotConstants',
     'Messages',

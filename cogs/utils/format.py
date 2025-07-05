@@ -112,3 +112,86 @@ def format_token_header(name: str, url: str) -> str:
     """Format token name and URL as a Discord header with link"""
     # Use bold for field values since ### only works in embed description
     return f"**[{name}]({url})**"
+
+def format_social_links(social_info: dict, chain: str = None) -> list:
+    """
+    Centralized function to format social links including Axiom for Solana tokens
+    
+    Args:
+        social_info: Dictionary containing social information (websites, socials, pair_address, etc.)
+        chain: The blockchain chain (e.g., 'solana', 'ethereum')
+    
+    Returns:
+        List of formatted social links in Discord markdown format
+    """
+    social_parts = []
+    
+    if not social_info:
+        return social_parts
+    
+    # Process websites
+    if 'websites' in social_info and isinstance(social_info['websites'], list):
+        for website in social_info['websites']:
+            if isinstance(website, dict) and 'url' in website:
+                # Skip pump.fun links
+                if 'pump.fun' not in website['url']:
+                    social_parts.append(f"[web]({website['url']})")
+                    logging.debug(f"Added website: {website['url']}")
+                    break  # Only add first website
+    
+    # Process social links
+    if 'socials' in social_info and isinstance(social_info['socials'], list):
+        for social in social_info['socials']:
+            if isinstance(social, dict):
+                platform = social.get('platform', '').lower()
+                typ = social.get('type', '').lower()
+                url = social.get('url', '')
+                
+                if url:
+                    if 'twitter' in platform or 'twitter' in typ:
+                        social_parts.append(f"[𝕏]({url})")
+                        logging.debug(f"Added Twitter: {url}")
+                        break  # Only add first Twitter link
+    
+    # Check for Telegram
+    telegram_added = False
+    if 'socials' in social_info and isinstance(social_info['socials'], list):
+        for social in social_info['socials']:
+            if isinstance(social, dict):
+                platform = social.get('platform', '').lower()
+                typ = social.get('type', '').lower()
+                url = social.get('url', '')
+                
+                if url and ('telegram' in platform or 'telegram' in typ):
+                    social_parts.append(f"[tg]({url})")
+                    logging.debug(f"Added Telegram: {url}")
+                    telegram_added = True
+                    break
+    
+    # If no Twitter found, check for Discord
+    if not any('𝕏' in part for part in social_parts) and not telegram_added:
+        if 'socials' in social_info and isinstance(social_info['socials'], list):
+            for social in social_info['socials']:
+                if isinstance(social, dict):
+                    platform = social.get('platform', '').lower()
+                    url = social.get('url', '')
+                    
+                    if url and 'discord' in platform:
+                        social_parts.append(f"[dc]({url})")
+                        logging.debug(f"Added Discord: {url}")
+                        break
+    
+    # Legacy format fallback
+    if not any('𝕏' in part for part in social_parts):
+        if twitter := social_info.get('twitter'):
+            social_parts.append(f"[𝕏]({twitter})")
+            logging.debug(f"Added legacy Twitter: {twitter}")
+    
+    # Add Axiom link for Solana tokens (always last)
+    if chain and chain.lower() == 'solana':
+        pair_address = social_info.get('pair_address')
+        if pair_address:
+            social_parts.append(f"[axiom](https://axiom.trade/meme/{pair_address})")
+            logging.debug(f"Added Axiom link for Solana token: {pair_address}")
+    
+    return social_parts

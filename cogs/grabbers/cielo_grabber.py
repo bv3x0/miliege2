@@ -7,6 +7,7 @@ from cogs.utils import (
     format_large_number,
     format_age as get_age_string,
     format_currency as format_buy_amount,
+    format_social_links,
     safe_api_call,
     DexScreenerAPI,
     UI
@@ -184,56 +185,14 @@ class CieloGrabber(commands.Cog):
                     pair_created_at = pair.get('pairCreatedAt')
                     age_string = get_age_string(pair_created_at)
 
-                    # Extract social links from the new format in Dexscreener API
-                    social_parts = []
+                    # Extract social links using centralized function
+                    social_info = pair.get('info', {})
+                    # Ensure pair_address is in social_info for Axiom link
+                    if 'pairAddress' in pair:
+                        social_info['pair_address'] = pair['pairAddress']
+                    
+                    social_parts = format_social_links(social_info, chain)
 
-                    try:
-                        # Check for websites in the new format first
-                        websites = pair.get('info', {}).get('websites', [])
-                        if websites and isinstance(websites, list):
-                            for website in websites:
-                                if isinstance(website, dict) and 'url' in website:
-                                    social_parts.append(f"[web]({website['url']})")
-                                    break  # Just get the first website
-                                elif isinstance(website, str):
-                                    social_parts.append(f"[web]({website})")
-                                    break
-
-                        # Then check for socials in the new format
-                        socials_new = pair.get('info', {}).get('socials', [])
-                        if socials_new and isinstance(socials_new, list):
-                            for social in socials_new:
-                                if isinstance(social, dict) and 'type' in social and 'url' in social:
-                                    if social['type'] == 'twitter':
-                                        social_parts.append(f"[𝕏]({social['url']})")
-                                    elif social['type'] == 'telegram':
-                                        social_parts.append(f"[tg]({social['url']})")
-                                    elif social['type'] == 'discord' and not any('𝕏' in p for p in social_parts):
-                                        # Only add Discord if we don't have Twitter already
-                                        social_parts.append(f"[dc]({social['url']})")
-
-                        # Legacy social extraction as fallback
-                        if not social_parts:
-                            # Try to extract from the old format
-                            socials_old = pair.get('info', {})
-                            website_link = socials_old.get('website', '')
-                            twitter_link = socials_old.get('twitter', '')
-                            telegram_link = socials_old.get('telegram', '')
-
-                            if website_link:
-                                social_parts.append(f"[web]({website_link})")
-                            if twitter_link:
-                                social_parts.append(f"[𝕏]({twitter_link})")
-                            if telegram_link:
-                                social_parts.append(f"[tg]({telegram_link})")
-                    except Exception as e:
-                        logging.error(f"Error extracting social links: {e}", exc_info=True)
-                        # Continue with empty social_parts if there's an error
-
-                    # Add Axiom link for Solana tokens
-                    if chain and chain.lower() == 'solana' and 'pairAddress' in pair:
-                        social_parts.append(f"[axiom](https://axiom.trade/meme/{pair['pairAddress']})")
-                        logging.info(f"Added Axiom link for Solana token: {pair['pairAddress']}")
 
                     # Extract the token used for buying (SOL, ETH, etc.)
                     buy_token = "Unknown"
