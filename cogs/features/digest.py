@@ -106,7 +106,8 @@ class DigestCog(commands.Cog):
             'new_coins': OrderedDict(),
             'three_plus_buyers': OrderedDict(),
             'big_buys': OrderedDict(),
-            'others': OrderedDict()
+            'recent_buys': OrderedDict(),
+            'recent_sells': OrderedDict()
         }
 
         # Cache for DexScreener data to avoid duplicate API calls
@@ -172,9 +173,23 @@ class DigestCog(commands.Cog):
             if has_big_buy:
                 categories['big_buys'][contract] = token
 
-            # If not in any special category, put in others
+            # If not in any special category, categorize by net trading activity
             if not (is_new_coin or is_three_plus_buyers or has_big_buy):
-                categories['others'][contract] = token
+                # Calculate net trading for this token in the period
+                total_buys = 0
+                total_sells = 0
+                
+                if period_key in self.hourly_trades and contract in self.hourly_trades[period_key]:
+                    trade_data = self.hourly_trades[period_key][contract]
+                    for user, user_data in trade_data['users'].items():
+                        total_buys += user_data.get('buys', 0)
+                        total_sells += user_data.get('sells', 0)
+                
+                # Categorize based on net activity (ties go to buys)
+                if total_sells > total_buys:
+                    categories['recent_sells'][contract] = token
+                else:
+                    categories['recent_buys'][contract] = token
 
         # Create embeds for each category
         embeds = []
@@ -215,11 +230,23 @@ class DigestCog(commands.Cog):
             if embed:
                 embeds.extend(embed)
 
-        # 4. Recent Activity (all other alerts)
-        if categories['others']:
+        # 4. Recent Activity: Buys (net buying activity)
+        if categories['recent_buys']:
             embed = await self._create_category_embed(
-                categories['others'],
-                "Recent Activity",
+                categories['recent_buys'],
+                "Recent Activity: Buys",
+                Colors.EMBED_BORDER,
+                period_key,
+                dex_cache
+            )
+            if embed:
+                embeds.extend(embed)
+                
+        # 5. Recent Activity: Sells (net selling activity)
+        if categories['recent_sells']:
+            embed = await self._create_category_embed(
+                categories['recent_sells'],
+                "Recent Activity: Sells",
                 Colors.EMBED_BORDER,
                 period_key,
                 dex_cache
