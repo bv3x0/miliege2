@@ -220,15 +220,48 @@ class DigestCog(commands.Cog):
 
     async def _create_category_embed(self, tokens, category_name, color, period_key, dex_cache=None):
         """Create embed for a specific category of tokens"""
-        # Take last 10 tokens
-        recent_tokens = list(tokens.items())[-10:]
-
+        # First, fetch market cap data for all tokens
+        token_list = []
+        
+        async with aiohttp.ClientSession() as session:
+            for contract, token in tokens.items():
+                # Fetch current market cap (use cache if available)
+                if dex_cache and contract in dex_cache:
+                    dex_data = dex_cache[contract]
+                else:
+                    dex_data = await DexScreenerAPI.get_token_info(session, contract)
+                    if dex_cache is not None:
+                        dex_cache[contract] = dex_data
+                
+                # Extract market cap value for sorting
+                mcap_value = 0
+                if dex_data and dex_data.get('pairs'):
+                    pair = dex_data['pairs'][0]
+                    if 'fdv' in pair:
+                        try:
+                            mcap_value = float(pair['fdv'])
+                        except (ValueError, TypeError):
+                            mcap_value = 0
+                
+                token_list.append({
+                    'contract': contract,
+                    'token': token,
+                    'mcap_value': mcap_value
+                })
+        
+        # Sort by market cap (descending) and take first 10
+        token_list.sort(key=lambda x: x['mcap_value'], reverse=True)
+        sorted_tokens = token_list[:10]  # Take top 10 by market cap
+        
         # Create embeds with the sorted tokens
         embeds = []
         current_description_lines = []
 
         async with aiohttp.ClientSession() as session:
-            for contract, token in recent_tokens:
+            for token_data in sorted_tokens:
+                contract = token_data['contract']
+                token = token_data['token']
+                
                 # Format token lines (reuse existing logic)
                 new_lines = await self._format_token_lines(contract, token, session, period_key, dex_cache)
 
