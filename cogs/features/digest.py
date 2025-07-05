@@ -254,9 +254,9 @@ class DigestCog(commands.Cog):
                 'mcap_value': mcap_value
             })
         
-        # Sort by market cap (descending) and take first 10
+        # Sort by market cap (descending) - show all tokens
         token_list.sort(key=lambda x: x['mcap_value'], reverse=True)
-        sorted_tokens = token_list[:10]  # Take top 10 by market cap
+        sorted_tokens = token_list  # Show all tokens sorted by market cap
         
         # Create embeds with the sorted tokens
         embeds = []
