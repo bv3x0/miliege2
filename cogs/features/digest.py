@@ -173,7 +173,7 @@ class DigestCog(commands.Cog):
             embed = await self._create_category_embed(
                 categories['new_coins'],
                 "New Deploys",
-                Colors.EMBED_BORDER,  # Cielo color
+                0xDBD935,  # New coin color
                 period_key,
                 dex_cache
             )
@@ -185,7 +185,7 @@ class DigestCog(commands.Cog):
             embed = await self._create_category_embed(
                 categories['three_plus_buyers'],
                 "3+ Buyers",
-                Colors.EMBED_BORDER,
+                0x7F35DB,  # 3+ buyers color
                 period_key,
                 dex_cache
             )
@@ -197,7 +197,7 @@ class DigestCog(commands.Cog):
             embed = await self._create_category_embed(
                 categories['big_buys'],
                 "Big Trades",
-                Colors.EMBED_BORDER,
+                0x9DDB35,  # Big buys color
                 period_key,
                 dex_cache
             )
