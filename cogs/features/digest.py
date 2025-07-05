@@ -111,59 +111,70 @@ class DigestCog(commands.Cog):
 
         # Cache for DexScreener data to avoid duplicate API calls
         dex_cache = {}
-
-        # Fetch token ages and categorize
+        
+        # First pass: Fetch all DexScreener data once and cache it
         async with aiohttp.ClientSession() as session:
             for contract, token in tokens.items():
                 # Skip non-Cielo tokens
                 if token.get('source', '').lower() != 'cielo':
                     continue
-                # Get token age from DexScreener
-                token_age_hours = None
-                try:
-                    dex_data = await DexScreenerAPI.get_token_info(session, contract)
-                    if dex_data and dex_data.get('pairs'):
-                        pair = dex_data['pairs'][0]
-                        # Cache the data for later use
-                        dex_cache[contract] = dex_data
-                        if 'pairCreatedAt' in pair:
-                            token_age_hours = self._get_token_age_hours(pair['pairCreatedAt'])
-                        # Note: pair_address should already be in social_info from token tracker
-                except Exception as e:
-                    logging.error(f"Error fetching token age for {contract}: {e}")
+                    
+                # Get token data from DexScreener only if not already cached
+                if contract not in dex_cache:
+                    try:
+                        dex_data = await DexScreenerAPI.get_token_info(session, contract)
+                        if dex_data:
+                            dex_cache[contract] = dex_data
+                    except Exception as e:
+                        logging.error(f"Error fetching DexScreener data for {contract}: {e}")
+                        dex_cache[contract] = None
 
-                # Check trade data for this period
-                is_new_coin = token_age_hours is not None and token_age_hours < 1
-                is_three_plus_buyers = False
-                has_big_buy = False
+        # Second pass: Categorize tokens using cached data
+        for contract, token in tokens.items():
+            # Skip non-Cielo tokens
+            if token.get('source', '').lower() != 'cielo':
+                continue
+                
+            # Get token age from cached DexScreener data
+            token_age_hours = None
+            dex_data = dex_cache.get(contract)
+            if dex_data and dex_data.get('pairs'):
+                pair = dex_data['pairs'][0]
+                if 'pairCreatedAt' in pair:
+                    token_age_hours = self._get_token_age_hours(pair['pairCreatedAt'])
 
-                if period_key in self.hourly_trades and contract in self.hourly_trades[period_key]:
-                    trade_data = self.hourly_trades[period_key][contract]
+            # Check trade data for this period
+            is_new_coin = token_age_hours is not None and token_age_hours < 1
+            is_three_plus_buyers = False
+            has_big_buy = False
 
-                    # Count unique buyers
-                    buyers = set()
-                    max_user_buy = 0
+            if period_key in self.hourly_trades and contract in self.hourly_trades[period_key]:
+                trade_data = self.hourly_trades[period_key][contract]
 
-                    for user, user_data in trade_data['users'].items():
-                        buy_amount = user_data.get('buys', 0)
-                        if buy_amount > 0:
-                            buyers.add(user)
-                            max_user_buy = max(max_user_buy, buy_amount)
+                # Count unique buyers
+                buyers = set()
+                max_user_buy = 0
 
-                    is_three_plus_buyers = len(buyers) >= 3
-                    has_big_buy = max_user_buy > 10000
+                for user, user_data in trade_data['users'].items():
+                    buy_amount = user_data.get('buys', 0)
+                    if buy_amount > 0:
+                        buyers.add(user)
+                        max_user_buy = max(max_user_buy, buy_amount)
 
-                # Categorize token (can appear in multiple categories)
-                if is_new_coin:
-                    categories['new_coins'][contract] = token
-                if is_three_plus_buyers:
-                    categories['three_plus_buyers'][contract] = token
-                if has_big_buy:
-                    categories['big_buys'][contract] = token
+                is_three_plus_buyers = len(buyers) >= 3
+                has_big_buy = max_user_buy > 10000
 
-                # If not in any special category, put in others
-                if not (is_new_coin or is_three_plus_buyers or has_big_buy):
-                    categories['others'][contract] = token
+            # Categorize token (can appear in multiple categories)
+            if is_new_coin:
+                categories['new_coins'][contract] = token
+            if is_three_plus_buyers:
+                categories['three_plus_buyers'][contract] = token
+            if has_big_buy:
+                categories['big_buys'][contract] = token
+
+            # If not in any special category, put in others
+            if not (is_new_coin or is_three_plus_buyers or has_big_buy):
+                categories['others'][contract] = token
 
         # Create embeds for each category
         embeds = []
@@ -220,34 +231,28 @@ class DigestCog(commands.Cog):
 
     async def _create_category_embed(self, tokens, category_name, color, period_key, dex_cache=None):
         """Create embed for a specific category of tokens"""
-        # First, fetch market cap data for all tokens
+        # Extract market cap data from cache for sorting
         token_list = []
         
-        async with aiohttp.ClientSession() as session:
-            for contract, token in tokens.items():
-                # Fetch current market cap (use cache if available)
-                if dex_cache and contract in dex_cache:
-                    dex_data = dex_cache[contract]
-                else:
-                    dex_data = await DexScreenerAPI.get_token_info(session, contract)
-                    if dex_cache is not None:
-                        dex_cache[contract] = dex_data
-                
-                # Extract market cap value for sorting
-                mcap_value = 0
-                if dex_data and dex_data.get('pairs'):
-                    pair = dex_data['pairs'][0]
-                    if 'fdv' in pair:
-                        try:
-                            mcap_value = float(pair['fdv'])
-                        except (ValueError, TypeError):
-                            mcap_value = 0
-                
-                token_list.append({
-                    'contract': contract,
-                    'token': token,
-                    'mcap_value': mcap_value
-                })
+        for contract, token in tokens.items():
+            # Use cached data - no API call needed
+            dex_data = dex_cache.get(contract) if dex_cache else None
+            
+            # Extract market cap value for sorting
+            mcap_value = 0
+            if dex_data and dex_data.get('pairs'):
+                pair = dex_data['pairs'][0]
+                if 'fdv' in pair:
+                    try:
+                        mcap_value = float(pair['fdv'])
+                    except (ValueError, TypeError):
+                        mcap_value = 0
+            
+            token_list.append({
+                'contract': contract,
+                'token': token,
+                'mcap_value': mcap_value
+            })
         
         # Sort by market cap (descending) and take first 10
         token_list.sort(key=lambda x: x['mcap_value'], reverse=True)
