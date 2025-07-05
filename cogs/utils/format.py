@@ -195,3 +195,72 @@ def format_social_links(social_info: dict, chain: str = None) -> list:
             logging.debug(f"Added Axiom link for Solana token: {pair_address}")
     
     return social_parts
+
+def parse_market_cap(mcap_str: Union[str, float, int]) -> Union[float, None]:
+    """
+    Parse market cap string to float value
+    
+    Args:
+        mcap_str: Market cap as string (e.g., "$1.5M", "2.3B"), float, or int
+    
+    Returns:
+        Float value or None if parsing fails
+    """
+    try:
+        # Handle None or 'N/A'
+        if not mcap_str or mcap_str == 'N/A':
+            return None
+        
+        # If already a number, return it
+        if isinstance(mcap_str, (int, float)):
+            return float(mcap_str)
+
+        # Remove $ and any commas
+        clean_mcap = str(mcap_str).replace('$', '').replace(',', '')
+
+        # Handle K/M/B suffixes
+        multiplier = 1
+        if 'K' in clean_mcap.upper():
+            multiplier = 1_000
+            clean_mcap = clean_mcap.upper().replace('K', '')
+        elif 'M' in clean_mcap.upper():
+            multiplier = 1_000_000
+            clean_mcap = clean_mcap.upper().replace('M', '')
+        elif 'B' in clean_mcap.upper():
+            multiplier = 1_000_000_000
+            clean_mcap = clean_mcap.upper().replace('B', '')
+
+        return float(clean_mcap) * multiplier
+    except (ValueError, TypeError):
+        return None
+
+def calculate_mcap_status_emoji(current_mcap: Union[str, float], initial_mcap: Union[float, None]) -> tuple[str, Union[float, None]]:
+    """
+    Calculate market cap percentage change and return appropriate status emoji
+    
+    Args:
+        current_mcap: Current market cap (string with format like "$1.5M" or float)
+        initial_mcap: Initial market cap as float (already parsed)
+    
+    Returns:
+        Tuple of (status_emoji, percent_change)
+        - status_emoji: " :up:" for +40%, " 🪦" for -40%, or ""
+        - percent_change: The calculated percentage or None if unable to calculate
+    """
+    try:
+        current_mcap_value = parse_market_cap(current_mcap)
+        
+        if current_mcap_value and initial_mcap and initial_mcap > 0:
+            percent_change = ((current_mcap_value - initial_mcap) / initial_mcap) * 100
+            
+            if percent_change >= 40:
+                return " :up:", percent_change
+            elif percent_change <= -40:
+                return " 🪦", percent_change
+            else:
+                return "", percent_change
+        
+        return "", None
+    except Exception as e:
+        logging.error(f"Error calculating market cap change: {e}")
+        return "", None

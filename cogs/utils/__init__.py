@@ -10,6 +10,8 @@ from .format import (
     format_percent,
     format_age,
     format_social_links,
+    parse_market_cap,
+    calculate_mcap_status_emoji,
     Colors,
     BotConstants,
     Messages
@@ -27,6 +29,8 @@ __all__ = [
     'format_percent',
     'format_age',
     'format_social_links',
+    'parse_market_cap',
+    'calculate_mcap_status_emoji',
     'Colors',
     'BotConstants',
     'Messages',

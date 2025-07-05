@@ -3,7 +3,7 @@ from discord.ext import commands, tasks
 import logging
 from collections import OrderedDict
 import aiohttp
-from cogs.utils import format_large_number, format_social_links
+from cogs.utils import format_large_number, format_social_links, parse_market_cap, calculate_mcap_status_emoji
 from datetime import datetime, timedelta
 import pytz
 import asyncio
@@ -309,22 +309,11 @@ class DigestCog(commands.Cog):
 
         # Format token information
         # Compare market caps and add emoji based on 40% threshold
-        try:
-            current_mcap_value = self.parse_market_cap(current_mcap)
-            initial_mcap_value = token.get('initial_market_cap')  # Already parsed when stored
-
-            status_emoji = ""
-            if current_mcap_value and initial_mcap_value and initial_mcap_value > 0:
-                percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
-                logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
-
-                if percent_change >= 40:
-                    status_emoji = " :up:"
-                elif percent_change <= -40:
-                    status_emoji = " 🪦"
-        except Exception as e:
-            logging.error(f"Error calculating percent change for {name}: {e}")
-            status_emoji = ""
+        initial_mcap_value = token.get('initial_market_cap')  # Already parsed when stored
+        status_emoji, percent_change = calculate_mcap_status_emoji(current_mcap, initial_mcap_value)
+        
+        if percent_change is not None:
+            logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap})")
 
         # Make sure we have valid values for display
         if not source or source == "":
@@ -417,15 +406,14 @@ class DigestCog(commands.Cog):
                             current_mcap = f"${format_large_number(float(pair['fdv']))}"
                         # Note: pair_address should already be in social_info from token tracker
 
-                current_mcap_value = self.parse_market_cap(current_mcap)
                 initial_mcap_value = token.get('initial_market_cap')
-
-                if current_mcap_value and initial_mcap_value and initial_mcap_value > 0:
-                    percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
-                    if percent_change >= 40:
-                        status_score = 4  # :up:
-                    elif percent_change <= -40:
-                        status_score = 1  # 🪦
+                status_emoji, percent_change = calculate_mcap_status_emoji(current_mcap, initial_mcap_value)
+                
+                # Convert emoji to status score
+                if status_emoji == " :up:":
+                    status_score = 4
+                elif status_emoji == " 🪦":
+                    status_score = 1
             except Exception as e:
                 logging.error(f"Error calculating percent change: {e}")
 
@@ -516,22 +504,11 @@ class DigestCog(commands.Cog):
 
                 # Format token information
                 # Compare market caps and add emoji based on 40% threshold
-                try:
-                    current_mcap_value = self.parse_market_cap(current_mcap)
-                    initial_mcap_value = token.get('initial_market_cap')  # Already parsed when stored
-
-                    status_emoji = ""
-                    if current_mcap_value and initial_mcap_value and initial_mcap_value > 0:
-                        percent_change = ((current_mcap_value - initial_mcap_value) / initial_mcap_value) * 100
-                        logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap_value})")
-
-                        if percent_change >= 40:
-                            status_emoji = " :up:"
-                        elif percent_change <= -40:
-                            status_emoji = " 🪦"
-                except Exception as e:
-                    logging.error(f"Error calculating percent change for {name}: {e}")
-                    status_emoji = ""
+                initial_mcap_value = token.get('initial_market_cap')  # Already parsed when stored
+                status_emoji, percent_change = calculate_mcap_status_emoji(current_mcap, initial_mcap_value)
+                
+                if percent_change is not None:
+                    logging.info(f"Token {name} mcap change: {percent_change}% (from {initial_mcap_value} to {current_mcap})")
 
                 # Make sure we have valid values for display
                 if not source or source == "":
@@ -730,30 +707,6 @@ class DigestCog(commands.Cog):
 
         await asyncio.sleep(wait_seconds)
 
-    def parse_market_cap(self, mcap_str):
-        """Parse market cap string to float value"""
-        try:
-            if not mcap_str or mcap_str == 'N/A':
-                return None
-
-            # Remove $ and any commas
-            clean_mcap = mcap_str.replace('$', '').replace(',', '')
-
-            # Handle K/M/B suffixes
-            multiplier = 1
-            if 'K' in clean_mcap.upper():
-                multiplier = 1000
-                clean_mcap = clean_mcap.upper().replace('K', '')
-            elif 'M' in clean_mcap.upper():
-                multiplier = 1000000
-                clean_mcap = clean_mcap.upper().replace('M', '')
-            elif 'B' in clean_mcap.upper():
-                multiplier = 1000000000
-                clean_mcap = clean_mcap.upper().replace('B', '')
-
-            return float(clean_mcap) * multiplier
-        except (ValueError, TypeError):
-            return None
 
     def process_new_token(self, contract, token_data):
         """Process a new token and add it to both the global tracker and period-specific tracker"""
@@ -771,7 +724,7 @@ class DigestCog(commands.Cog):
                     mc_match = re.search(r'MC:\s*\$([0-9,.]+[KMB]?)', first_field)
                     if mc_match:
                         mcap_str = mc_match.group(1)
-                        mcap_value = self.parse_market_cap(mcap_str)
+                        mcap_value = parse_market_cap(mcap_str)
                         if mcap_value is not None:
                             token_data['initial_market_cap'] = mcap_value
                             token_data['initial_market_cap_formatted'] = f"${mcap_str}"
