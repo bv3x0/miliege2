@@ -234,7 +234,7 @@ class DigestCog(commands.Cog):
         if categories['recent_buys']:
             embed = await self._create_category_embed(
                 categories['recent_buys'],
-                "General Buys",
+                "Regular Buys",
                 Colors.EMBED_BORDER,
                 period_key,
                 dex_cache
@@ -246,7 +246,7 @@ class DigestCog(commands.Cog):
         if categories['recent_sells']:
             embed = await self._create_category_embed(
                 categories['recent_sells'],
-                "General Sells",
+                "Sells",
                 Colors.EMBED_BORDER,
                 period_key,
                 dex_cache
