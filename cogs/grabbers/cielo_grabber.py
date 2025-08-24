@@ -18,7 +18,7 @@ import aiohttp
 
 class CieloGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None,
-                 summary_cog=None, newcoin_cog=None, input_channel_id=None):
+                 summary_cog=None, newcoin_cog=None, input_channel_id=None, output_channel_id=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
@@ -41,6 +41,18 @@ class CieloGrabber(commands.Cog):
         else:
             self.input_channel_id = input_channel_id
             logging.info(f"Initialized CieloGrabber with input channel ID: {self.input_channel_id}")
+
+        # Initialize output channel ID
+        if output_channel_id and isinstance(output_channel_id, str):
+            try:
+                self.output_channel_id = int(output_channel_id)
+                logging.info(f"Initialized CieloGrabber with output channel ID: {self.output_channel_id}")
+            except ValueError:
+                logging.error(f"Invalid output channel ID: {output_channel_id}")
+                self.output_channel_id = None
+        else:
+            self.output_channel_id = output_channel_id
+            logging.info(f"Initialized CieloGrabber with output channel ID: {self.output_channel_id}")
 
         # Verify token_tracker has major_tokens
         if not hasattr(token_tracker, 'major_tokens'):

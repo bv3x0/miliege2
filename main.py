@@ -118,6 +118,7 @@ class DiscordBot(commands.Bot):
         config_path = "config.json"
         cielo_input_channel_id = None
         cielo_output_channel_id = None
+        hourly_digest_channel_id = None
 
         if os.path.exists(config_path):
             try:
@@ -131,7 +132,11 @@ class DiscordBot(commands.Bot):
                 
                 if "OUTPUT_CHANNEL_ID" in config:
                     cielo_output_channel_id = config["OUTPUT_CHANNEL_ID"]
-                    logging.info(f"Loaded output channel from config: {cielo_output_channel_id}")
+                    logging.info(f"Loaded Cielo output channel from config: {cielo_output_channel_id}")
+                
+                if "HOURLY_DIGEST_CHANNEL_ID" in config:
+                    hourly_digest_channel_id = config["HOURLY_DIGEST_CHANNEL_ID"]
+                    logging.info(f"Loaded hourly digest channel from config: {hourly_digest_channel_id}")
             except Exception as e:
                 logging.error(f"Error loading config: {e}")
 
@@ -142,11 +147,15 @@ class DiscordBot(commands.Bot):
 
         if cielo_output_channel_id is None and hasattr(settings, 'DAILY_DIGEST_CHANNEL_ID'):
             cielo_output_channel_id = daily_digest_channel_id
-            logging.info(f"Using output channel from env: {cielo_output_channel_id}")
+            logging.info(f"Using Cielo output channel from env: {cielo_output_channel_id}")
+
+        if hourly_digest_channel_id is None:
+            hourly_digest_channel_id = daily_digest_channel_id
+            logging.info(f"Using hourly digest channel from env: {hourly_digest_channel_id}")
 
         # Initialize cogs in order
         # 1. Core features that don't depend on other cogs
-        digest_cog = DigestCog(self, self.token_tracker, daily_digest_channel_id, self.monitor)
+        digest_cog = DigestCog(self, self.token_tracker, hourly_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
         
         # 2. New coin alerts feature
@@ -162,7 +171,8 @@ class DiscordBot(commands.Bot):
             self.session, 
             digest_cog=digest_cog,
             newcoin_cog=newcoin_cog,
-            input_channel_id=cielo_input_channel_id
+            input_channel_id=cielo_input_channel_id,
+            output_channel_id=cielo_output_channel_id
         ))
         
         await self.add_cog(RickGrabber(
@@ -182,7 +192,7 @@ class DiscordBot(commands.Bot):
         # 5. Optional features
         # DexScreener trending pairs functionality
         from cogs.grabbers.dex_listener import DexListener
-        await self.add_cog(DexListener(self, daily_digest_channel_id))
+        await self.add_cog(DexListener(self, hourly_digest_channel_id))
         logger.info("DexScreener trending pairs listener added")
         
         # Hyperliquid functionality disabled
@@ -209,11 +219,21 @@ class DiscordBot(commands.Bot):
     async def on_ready(self):
         logger.info(f'Bot started as {self.user}')
         
-        channel = self.get_channel(daily_digest_channel_id)
-        if channel:
-            await channel.send("<:awesome:1321865532307275877>")
+        # Get the digest cog to find the current channel
+        digest_cog = self.get_cog("DigestCog")
+        if digest_cog and digest_cog.channel_id:
+            channel = self.get_channel(digest_cog.channel_id)
+            if channel:
+                await channel.send("<:awesome:1321865532307275877>")
+            else:
+                logger.error(f"Could not find channel with ID {digest_cog.channel_id}")
         else:
-            logger.error(f"Could not find channel with ID {daily_digest_channel_id}")
+            # Fallback to environment variable if no config set
+            channel = self.get_channel(daily_digest_channel_id)
+            if channel:
+                await channel.send("<:awesome:1321865532307275877>")
+            else:
+                logger.error(f"Could not find channel with ID {daily_digest_channel_id}")
 
     async def on_error(self, event_method, *args, **kwargs):
         logger.exception(f"Error in {event_method}")

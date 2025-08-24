@@ -218,10 +218,50 @@ class AdminCommands(commands.Cog):
         else:
             await interaction.response.send_message("❌ CieloGrabber cog not found")
 
+    @app_commands.command(name="digest", description="Set which channel to post hourly digest to")
+    @app_commands.default_permissions(administrator=True)
+    async def digest(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Set which channel to post hourly digest to"""
+        # Update the channel in memory
+        digest_cog = self.bot.get_cog("DigestCog")
+        if digest_cog:
+            digest_cog.channel_id = channel.id
+            
+            # Save to persistent storage
+            config_path = "config.json"
+            config = {}
+            
+            # Load existing config if it exists
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r") as f:
+                        config = json.load(f)
+                except Exception as e:
+                    await interaction.response.send_message(f"⚠️ Warning: Could not load existing config: {e}")
+            
+            # Update config
+            config["HOURLY_DIGEST_CHANNEL_ID"] = channel.id
+            
+            # Save config
+            try:
+                with open(config_path, "w") as f:
+                    json.dump(config, f, indent=4)
+                
+                await interaction.response.send_message(f"✅ Now posting hourly digest to {channel.mention}")
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Error saving config: {e}")
+        else:
+            await interaction.response.send_message("❌ DigestCog not found")
+
     @app_commands.command(name="channels", description="Show current channel configuration")
     async def channels(self, interaction: discord.Interaction):
         """Show current channel configuration"""
         cielo_grabber = self.bot.get_cog("CieloGrabber")
+        digest_cog = self.bot.get_cog("DigestCog")
+        
+        embed = discord.Embed(title="Channel Configuration", color=0x5b594f)
+        
+        # Cielo grabber channels
         if cielo_grabber:
             input_channel = None
             output_channel = None
@@ -232,37 +272,53 @@ class AdminCommands(commands.Cog):
             if cielo_grabber.output_channel_id:
                 output_channel = self.bot.get_channel(cielo_grabber.output_channel_id)
             
-            embed = discord.Embed(title="Channel Configuration", color=0x5b594f)
-            
             if input_channel:
                 embed.add_field(
-                    name="Watching",
+                    name="Cielo - Watching",
                     value=f"{input_channel.mention}",
                     inline=False
                 )
             else:
                 embed.add_field(
-                    name="Watching",
+                    name="Cielo - Watching",
                     value="No channel set (use `/watch` to set)",
                     inline=False
                 )
             
             if output_channel:
                 embed.add_field(
-                    name="Posting to",
+                    name="Cielo - Posting to",
                     value=f"{output_channel.mention}",
                     inline=False
                 )
             else:
                 embed.add_field(
-                    name="Posting to",
+                    name="Cielo - Posting to",
                     value="No channel set (use `/post` to set)",
                     inline=False
                 )
+        
+        # Hourly digest channel
+        if digest_cog:
+            digest_channel = None
             
-            await interaction.response.send_message(embed=embed)
-        else:
-            await interaction.response.send_message("❌ CieloGrabber cog not found")
+            if digest_cog.channel_id:
+                digest_channel = self.bot.get_channel(digest_cog.channel_id)
+            
+            if digest_channel:
+                embed.add_field(
+                    name="Hourly Digest - Posting to",
+                    value=f"{digest_channel.mention}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="Hourly Digest - Posting to",
+                    value="No channel set (use `/digest` to set)",
+                    inline=False
+                )
+        
+        await interaction.response.send_message(embed=embed)
 
     @commands.command()
     @commands.is_owner()
