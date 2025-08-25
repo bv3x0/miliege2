@@ -253,11 +253,47 @@ class AdminCommands(commands.Cog):
         else:
             await interaction.response.send_message("❌ DigestCog not found")
 
+    @app_commands.command(name="newcoin", description="Set which channel to post new coin alerts to")
+    @app_commands.default_permissions(administrator=True)
+    async def newcoin(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Set which channel to post new coin alerts to"""
+        # Update the channel in memory
+        newcoin_cog = self.bot.get_cog("NewCoinCog")
+        if newcoin_cog:
+            newcoin_cog.output_channel_id = channel.id
+            
+            # Save to persistent storage
+            config_path = "config.json"
+            config = {}
+            
+            # Load existing config if it exists
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r") as f:
+                        config = json.load(f)
+                except Exception as e:
+                    await interaction.response.send_message(f"⚠️ Warning: Could not load existing config: {e}")
+            
+            # Update config
+            config["NEWCOIN_ALERT_CHANNEL_ID"] = channel.id
+            
+            # Save config
+            try:
+                with open(config_path, "w") as f:
+                    json.dump(config, f, indent=4)
+                
+                await interaction.response.send_message(f"✅ Now posting new coin alerts to {channel.mention}")
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Error saving config: {e}")
+        else:
+            await interaction.response.send_message("❌ NewCoinCog not found")
+
     @app_commands.command(name="channels", description="Show current channel configuration")
     async def channels(self, interaction: discord.Interaction):
         """Show current channel configuration"""
         cielo_grabber = self.bot.get_cog("CieloGrabber")
         digest_cog = self.bot.get_cog("DigestCog")
+        newcoin_cog = self.bot.get_cog("NewCoinCog")
         
         embed = discord.Embed(title="Channel Configuration", color=0x5b594f)
         
@@ -315,6 +351,26 @@ class AdminCommands(commands.Cog):
                 embed.add_field(
                     name="Hourly Digest - Posting to",
                     value="No channel set (use `/digest` to set)",
+                    inline=False
+                )
+        
+        # New coin alert channel
+        if newcoin_cog:
+            newcoin_channel = None
+            
+            if newcoin_cog.output_channel_id:
+                newcoin_channel = self.bot.get_channel(newcoin_cog.output_channel_id)
+            
+            if newcoin_channel:
+                embed.add_field(
+                    name="New Coin Alerts - Posting to",
+                    value=f"{newcoin_channel.mention}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="New Coin Alerts - Posting to",
+                    value="No channel set (use `/newcoin` to set)",
                     inline=False
                 )
         

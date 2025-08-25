@@ -119,6 +119,7 @@ class DiscordBot(commands.Bot):
         cielo_input_channel_id = None
         cielo_output_channel_id = None
         hourly_digest_channel_id = None
+        newcoin_alert_channel_id = None
 
         if os.path.exists(config_path):
             try:
@@ -137,6 +138,10 @@ class DiscordBot(commands.Bot):
                 if "HOURLY_DIGEST_CHANNEL_ID" in config:
                     hourly_digest_channel_id = config["HOURLY_DIGEST_CHANNEL_ID"]
                     logging.info(f"Loaded hourly digest channel from config: {hourly_digest_channel_id}")
+                
+                if "NEWCOIN_ALERT_CHANNEL_ID" in config:
+                    newcoin_alert_channel_id = config["NEWCOIN_ALERT_CHANNEL_ID"]
+                    logging.info(f"Loaded new coin alert channel from config: {newcoin_alert_channel_id}")
             except Exception as e:
                 logging.error(f"Error loading config: {e}")
 
@@ -153,14 +158,18 @@ class DiscordBot(commands.Bot):
             hourly_digest_channel_id = daily_digest_channel_id
             logging.info(f"Using hourly digest channel from env: {hourly_digest_channel_id}")
 
+        if newcoin_alert_channel_id is None:
+            newcoin_alert_channel_id = daily_digest_channel_id
+            logging.info(f"Using new coin alert channel from env: {daily_digest_channel_id}")
+
         # Initialize cogs in order
         # 1. Core features that don't depend on other cogs
         digest_cog = DigestCog(self, self.token_tracker, hourly_digest_channel_id, self.monitor)
         await self.add_cog(digest_cog)
         
         # 2. New coin alerts feature
-        newcoin_cog = NewCoinCog(self, self.session, cielo_output_channel_id)
-        logging.info(f"Initialized NewCoinCog with output channel ID: {cielo_output_channel_id}")
+        newcoin_cog = NewCoinCog(self, self.session, newcoin_alert_channel_id)
+        logging.info(f"Initialized NewCoinCog with output channel ID: {newcoin_alert_channel_id}")
         await self.add_cog(newcoin_cog)
         
         # 3. Data collectors that depend on feature cogs
