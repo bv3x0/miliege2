@@ -625,10 +625,18 @@ class CieloGrabber(commands.Cog):
                     logging.info(f"Using default chain: {chain_info}")
 
             # If it's a first trade, trigger the new coin alert (only if not paused)
-            if is_first_trade and self.newcoin_cog and self.bot.feature_states.get('cielo_grabber_bot', True):
+            logging.info(f"Checking new coin alert conditions:")
+            logging.info(f"- is_first_trade: {is_first_trade}")
+            logging.info(f"- self.newcoin_cog exists: {self.newcoin_cog is not None}")
+            logging.info(f"- cielo_grabber_bot feature state: {self.bot.feature_states.get('cielo_grabber_bot', True)}")
+            
+            if is_first_trade and self.newcoin_cog:
+                logging.info(f"Triggering new coin alert for {token_address}")
                 await self.newcoin_cog.process_new_coin(
                     token_address, message, user, swap_info, dexscreener_url, chain_info
                 )
+            else:
+                logging.info(f"New coin alert NOT triggered. Conditions not met.")
 
             # Check if it's a buy or sell based on token types
             from_is_major = from_token.upper() in self.token_tracker.major_tokens

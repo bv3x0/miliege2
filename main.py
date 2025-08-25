@@ -86,7 +86,7 @@ class DiscordBot(commands.Bot):
         # Initialize feature states - accessible to all cogs
         self.feature_states = {
             'hourly_digest': True,
-            'cielo_grabber_bot': False  # Paused by default
+            'cielo_grabber_bot': True  # Enabled by default for new coin alerts
         }
 
     async def on_message(self, message):
