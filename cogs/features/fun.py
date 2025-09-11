@@ -4,6 +4,7 @@ import logging
 import random
 import os
 import json
+import asyncio
 from cogs.utils import (
     UI,
     safe_api_call,
@@ -81,6 +82,19 @@ class FunCommands(commands.Cog):
         except Exception as e:
             logging.error(f"Error in goon command: {e}")
             await ctx.send("❌ Failed to post goon image")
+
+    @commands.command()
+    async def flickergoon(self, ctx):
+        """Post a random goon image/video and delete it after 1 second"""
+        try:
+            random_goon = random.choice(self.goon_options)
+            message = await ctx.send(random_goon)
+            # Delete the message after 1 second
+            await asyncio.sleep(1)
+            await message.delete()
+        except Exception as e:
+            logging.error(f"Error in flickergoon command: {e}")
+            await ctx.send("❌ Failed to post flickergoon image")
 
     @commands.command()
     async def shotcaller(self, ctx):

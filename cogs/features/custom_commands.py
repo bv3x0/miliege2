@@ -30,7 +30,7 @@ class CustomCommands(commands.Cog):
             'add_monitored_wallet', 'remove_monitored_wallet', 'list_monitored_wallets',
             'wallet_status', 'test_wallet', 'save', 'delete', 'listcommands',
             'track', 'untrack', 'tracked', 'health', 'bot_stats', 'uptime',
-            'goon', 'shotcaller', 'zone', 'bet', 'wagmi', 'ngmi'
+            'goon', 'flickergoon', 'shotcaller', 'zone', 'bet', 'wagmi', 'ngmi'
         }
     
     def _load_custom_commands(self) -> Dict[str, str]:
