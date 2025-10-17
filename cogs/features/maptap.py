@@ -110,7 +110,7 @@ class MapTapLeaderboard(commands.Cog):
         """Format leaderboard as Discord embed"""
         if not leaderboard or not leaderboard['scores']:
             embed = discord.Embed(
-                title="🗺️ MapTap Leaderboard",
+                title="MapTap Leaderboard",
                 description="No scores recorded today!",
                 color=0x3498db,
                 url="https://maptap.gg/"
@@ -120,7 +120,7 @@ class MapTapLeaderboard(commands.Cog):
         date_obj = datetime.strptime(leaderboard['date'], "%Y-%m-%d")
         date_str = date_obj.strftime("%B %d, %Y")
         
-        title = f"🗺️ MapTap Leaderboard - {date_str}"
+        title = f"MapTap Leaderboard - {date_str}"
         if is_final:
             title += " (Final)"
         
@@ -139,9 +139,6 @@ class MapTapLeaderboard(commands.Cog):
             leaderboard_text.append(f"{i}. **{user_name}**: {data['score']}{fire_emoji}")
         
         embed.description = "\n".join(leaderboard_text)
-        
-        # Add footer with total players
-        embed.set_footer(text=f"Total players: {leaderboard['total_players']} • Play at MapTap.gg")
         
         return embed
     
