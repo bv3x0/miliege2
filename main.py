@@ -20,6 +20,7 @@ from cogs.utils.config import settings
 import json
 from cogs.features.newcoin import NewCoinCog
 from cogs.features.custom_commands import CustomCommands
+from cogs.features.maptap import MapTapLeaderboard
 # from cogs.grabbers.hl_grabber import HyperliquidWalletGrabber  # Disabled
 
 # Create logs directory if it doesn't exist
@@ -197,6 +198,7 @@ class DiscordBot(commands.Bot):
         await self.add_cog(FunCommands(self))
         await self.add_cog(AdminCommands(self))
         await self.add_cog(CustomCommands(self))
+        await self.add_cog(MapTapLeaderboard(self))
         
         # 5. Optional features
         # DexScreener trending pairs functionality
@@ -392,6 +394,14 @@ class DiscordBot(commands.Bot):
                 "`/listcommands` - List all custom commands (shown privately)"
             ]
             embed.add_field(name="Custom Commands (Slash Commands)", value="\n".join(custom_commands), inline=False)
+            
+            # MapTap commands
+            maptap_commands = [
+                "`!map` - Display current day's MapTap leaderboard",
+                "`/pause_map` - Pause MapTap monitoring (mods only)",
+                "`/unpause_map` - Resume MapTap monitoring (mods only)"
+            ]
+            embed.add_field(name="MapTap Commands", value="\n".join(maptap_commands), inline=False)
             
             await ctx.send(embed=embed)
 
