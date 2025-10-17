@@ -106,25 +106,44 @@ class MapTapLeaderboard(commands.Cog):
             'total_players': len(sorted_scores)
         }
     
-    def _format_leaderboard(self, leaderboard: Dict, is_final: bool = False) -> str:
-        """Format leaderboard for display"""
+    def _format_leaderboard(self, leaderboard: Dict, is_final: bool = False, newest_user: str = None) -> discord.Embed:
+        """Format leaderboard as Discord embed"""
         if not leaderboard or not leaderboard['scores']:
-            return "No scores recorded today!"
+            embed = discord.Embed(
+                title="🗺️ MapTap Leaderboard",
+                description="No scores recorded today!",
+                color=0x3498db,
+                url="https://maptap.gg/"
+            )
+            return embed
         
         date_obj = datetime.strptime(leaderboard['date'], "%Y-%m-%d")
         date_str = date_obj.strftime("%B %d, %Y")
         
-        title = f"MapTap Leaderboard - {date_str}"
+        title = f"🗺️ MapTap Leaderboard - {date_str}"
         if is_final:
             title += " (Final)"
         
-        result = [f"**{title}**"]
-        result.append("")
+        # Create embed with clickable MapTap link
+        embed = discord.Embed(
+            title=title,
+            color=0x3498db,
+            url="https://maptap.gg/"
+        )
         
+        # Build leaderboard description
+        leaderboard_text = []
         for i, (user_name, data) in enumerate(leaderboard['scores'], 1):
-            result.append(f"{i}. **{user_name}**: {data['score']}")
+            # Add fire emoji for the newest addition
+            fire_emoji = " 🔥" if user_name == newest_user else ""
+            leaderboard_text.append(f"{i}. **{user_name}**: {data['score']}{fire_emoji}")
         
-        return "\n".join(result)
+        embed.description = "\n".join(leaderboard_text)
+        
+        # Add footer with total players
+        embed.set_footer(text=f"Total players: {leaderboard['total_players']} • Play at MapTap.gg")
+        
+        return embed
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -148,9 +167,9 @@ class MapTapLeaderboard(commands.Cog):
         # Update leaderboard
         leaderboard = self._update_leaderboard(user_name, score)
         
-        # Post updated leaderboard
-        formatted_leaderboard = self._format_leaderboard(leaderboard)
-        await message.channel.send(formatted_leaderboard)
+        # Post updated leaderboard with newest user highlighted
+        embed = self._format_leaderboard(leaderboard, newest_user=user_name)
+        await message.channel.send(embed=embed)
     
     @tasks.loop(time=datetime.strptime("23:59", "%H:%M").time())
     async def daily_reset_task(self):
@@ -165,8 +184,8 @@ class MapTapLeaderboard(commands.Cog):
                     for channel in guild.text_channels:
                         if channel.permissions_for(guild.me).send_messages:
                             try:
-                                final_leaderboard = self._format_leaderboard(leaderboard, is_final=True)
-                                await channel.send(final_leaderboard)
+                                embed = self._format_leaderboard(leaderboard, is_final=True)
+                                await channel.send(embed=embed)
                                 break  # Only send to one channel per guild
                             except Exception as e:
                                 logger.error(f"Error posting final leaderboard to {channel.name}: {e}")
@@ -190,8 +209,8 @@ class MapTapLeaderboard(commands.Cog):
         today = self._get_today_key()
         leaderboard = self._get_sorted_leaderboard(today)
         
-        formatted_leaderboard = self._format_leaderboard(leaderboard)
-        await ctx.send(formatted_leaderboard)
+        embed = self._format_leaderboard(leaderboard)
+        await ctx.send(embed=embed)
     
     @app_commands.command(name="pause_map", description="Pause MapTap leaderboard monitoring")
     @app_commands.default_permissions(manage_messages=True)
