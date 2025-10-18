@@ -20,7 +20,7 @@ class MapTapLeaderboard(commands.Cog):
         # File for storing daily scores
         self.scores_file = os.path.join(self.data_dir, 'maptap_scores.json')
         
-        # Load existing scores
+        # Load existing scores and yesterday's top 3
         self.daily_scores = self._load_scores()
         
         # Bot state
@@ -140,7 +140,59 @@ class MapTapLeaderboard(commands.Cog):
         
         embed.description = "\n".join(leaderboard_text)
         
+        # Add yesterday's top 3 footer if data exists
+        yesterday_footer = self._get_yesterday_footer()
+        if yesterday_footer:
+            embed.set_footer(text=yesterday_footer)
+        
         return embed
+    
+    def _get_yesterday_key(self) -> str:
+        """Get yesterday's date as a string key"""
+        yesterday = datetime.now() - timedelta(days=1)
+        return yesterday.strftime("%Y-%m-%d")
+    
+    def _get_yesterday_footer(self) -> Optional[str]:
+        """Get yesterday's top 3 for footer display"""
+        yesterday_key = self._get_yesterday_key()
+        
+        # Check if we have yesterday's top 3 stored
+        if 'yesterday_top3' in self.daily_scores and yesterday_key in self.daily_scores['yesterday_top3']:
+            top3 = self.daily_scores['yesterday_top3'][yesterday_key]
+            if top3:
+                # Format as "Yesterday: 1. username, 2. username, 3. username"
+                names = []
+                for i, user_name in enumerate(top3, 1):
+                    names.append(f"{i}. {user_name}")
+                return f"Yesterday: {', '.join(names)}"
+        
+        return None
+    
+    def _capture_yesterday_top3(self, today_key: str):
+        """Capture yesterday's top 3 at daily reset"""
+        yesterday_key = self._get_yesterday_key()
+        
+        # Get yesterday's leaderboard
+        if yesterday_key in self.daily_scores:
+            yesterday_scores = self.daily_scores[yesterday_key]
+            if yesterday_scores:
+                # Sort by score (descending) and take top 3
+                sorted_scores = sorted(
+                    yesterday_scores.items(),
+                    key=lambda x: (-x[1]['score'], x[1]['timestamp'])
+                )
+                
+                # Store top 3 usernames
+                top3_names = [user_name for user_name, _ in sorted_scores[:3]]
+                
+                # Initialize yesterday_top3 structure if needed
+                if 'yesterday_top3' not in self.daily_scores:
+                    self.daily_scores['yesterday_top3'] = {}
+                
+                self.daily_scores['yesterday_top3'][yesterday_key] = top3_names
+                self._save_scores()
+                
+                logger.info(f"Captured yesterday's top 3 for {yesterday_key}: {top3_names}")
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -188,6 +240,9 @@ class MapTapLeaderboard(commands.Cog):
                                 logger.error(f"Error posting final leaderboard to {channel.name}: {e}")
                 
                 logger.info(f"Posted final MapTap leaderboard for {today}")
+            
+            # Capture yesterday's top 3 for tomorrow's footer
+            self._capture_yesterday_top3(today)
             
             # Clear today's scores (they'll be cleared anyway when we start fresh tomorrow)
             # We keep them in the file for historical reference
