@@ -7,6 +7,7 @@ import os
 import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,13 @@ class MapTapLeaderboard(commands.Cog):
         # Load existing scores and yesterday's top 3
         self.daily_scores = self._load_scores()
         
+        # Set up Eastern Timezone (same as digest system)
+        self.ny_tz = pytz.timezone('America/New_York')
+        
         # Bot state
         self.is_paused = False
         
-        # Start the daily reset task
+        # Start the daily reset task (check every minute for 11:59 PM EST)
         self.daily_reset_task.start()
         
         # Pattern to match "Final score: XXX" where XXX is a 3-digit number
@@ -54,8 +58,8 @@ class MapTapLeaderboard(commands.Cog):
             logger.error(f"Error saving MapTap scores: {e}")
     
     def _get_today_key(self) -> str:
-        """Get today's date as a string key"""
-        return datetime.now().strftime("%Y-%m-%d")
+        """Get today's date as a string key (Eastern Time)"""
+        return datetime.now(self.ny_tz).strftime("%Y-%m-%d")
     
     def _is_today(self, date_key: str) -> bool:
         """Check if the date key is today"""
@@ -81,7 +85,7 @@ class MapTapLeaderboard(commands.Cog):
         # Store the score (latest score for the day overwrites previous)
         self.daily_scores[today][user_name] = {
             'score': score,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now(self.ny_tz).isoformat()
         }
         
         self._save_scores()
@@ -148,8 +152,8 @@ class MapTapLeaderboard(commands.Cog):
         return embed
     
     def _get_yesterday_key(self) -> str:
-        """Get yesterday's date as a string key"""
-        yesterday = datetime.now() - timedelta(days=1)
+        """Get yesterday's date as a string key (Eastern Time)"""
+        yesterday = datetime.now(self.ny_tz) - timedelta(days=1)
         return yesterday.strftime("%Y-%m-%d")
     
     def _get_yesterday_footer(self) -> Optional[str]:
@@ -220,10 +224,17 @@ class MapTapLeaderboard(commands.Cog):
         embed = self._format_leaderboard(leaderboard, newest_user=user_name)
         await message.channel.send(embed=embed)
     
-    @tasks.loop(time=datetime.strptime("23:59", "%H:%M").time())
+    @tasks.loop(minutes=1)
     async def daily_reset_task(self):
-        """Daily task to post final leaderboard and reset"""
+        """Daily task to post final leaderboard and reset at 11:59 PM EST"""
         try:
+            # Check if it's 11:59 PM Eastern Time
+            now_est = datetime.now(self.ny_tz)
+            if now_est.hour != 23 or now_est.minute != 59:
+                return
+            
+            logger.info(f"MapTap daily reset triggered at {now_est}")
+            
             today = self._get_today_key()
             leaderboard = self._get_sorted_leaderboard(today)
             
