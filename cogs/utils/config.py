@@ -18,7 +18,12 @@ class Settings(BaseSettings):
     
     # Channel Settings
     CIELO_OUTPUT_CHANNEL_ID: Optional[int] = None  # New field for Cielo output channel
-    
+
+    # RSS Settings
+    RSS_CHANNEL_ID: Optional[int] = None
+    RSS_FEED_URL: str = "https://clone.fyi/rss.xml"
+    RSS_CHECK_INTERVAL: int = 300
+
     class Config:
         env_file = ".env"
 
