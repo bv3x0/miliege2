@@ -121,8 +121,6 @@ class DiscordBot(commands.Bot):
         hourly_digest_channel_id = None
         newcoin_alert_channel_id = None
         rss_channel_id = None
-        rss_feed_url = os.getenv("RSS_FEED_URL", "https://clone.fyi/rss.xml")
-        rss_check_interval = int(os.getenv("RSS_CHECK_INTERVAL", "300"))
 
         if os.path.exists(config_path):
             try:
@@ -211,17 +209,10 @@ class DiscordBot(commands.Bot):
         await self.add_cog(DexListener(self, hourly_digest_channel_id))
         logger.info("DexScreener trending pairs listener added")
 
-        # RSS feed monitor (only if channel is configured)
-        if rss_channel_id:
-            await self.add_cog(RSSMonitor(
-                self,
-                channel_id=rss_channel_id,
-                feed_url=rss_feed_url,
-                check_interval=rss_check_interval
-            ))
-            logger.info(f"RSS monitor added - Channel: {rss_channel_id}, Feed: {rss_feed_url}")
-        else:
-            logger.info("RSS monitor not loaded - no RSS_CHANNEL_ID configured")
+        # RSS feed monitor (always loaded, manages its own feeds via /rss commands)
+        # Pass rss_channel_id for migration from old single-feed format
+        await self.add_cog(RSSMonitor(self, default_channel_id=rss_channel_id))
+        logger.info("RSS monitor added")
 
         logger.info("All cogs loaded successfully")
 
