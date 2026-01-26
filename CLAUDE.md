@@ -45,7 +45,7 @@ Cielo Alert Message → CieloGrabber → TokenTracker (cache) → DigestCog (agg
 ### Configuration
 - **Priority**: config.json > environment variables > defaults
 - **Required env vars**: `DISCORD_BOT_TOKEN`, `DAILY_DIGEST_CHANNEL_ID`
-- **Channel IDs in config.json**: CIELO_INPUT_CHANNEL_ID, OUTPUT_CHANNEL_ID, HOURLY_DIGEST_CHANNEL_ID, NEWCOIN_ALERT_CHANNEL_ID
+- **Channel config**: Managed via `/config watch|post|digest|newcoin|show` commands, stored in `config.json`
 - **RSS feeds**: Managed via `/rss add|remove|list` commands, stored in `data/rss_feeds.json`
 
 ### Adding New Features

@@ -109,12 +109,12 @@ See `.env.example` for all available options. Required variables:
 
 ### Runtime Configuration
 
-Channel settings can be configured via slash commands:
-- `/watch <channel>` - Set Cielo monitoring channel
-- `/post <channel>` - Set Cielo output channel
-- `/digest <channel>` - Set hourly digest channel
-- `/newcoin <channel>` - Set new coin alert channel
-- `/channels` - View current configuration
+Channel settings can be configured via `/config` commands:
+- `/config watch <channel>` - Set Cielo monitoring channel
+- `/config post <channel>` - Set Cielo output channel
+- `/config digest <channel>` - Set hourly digest channel
+- `/config newcoin <channel>` - Set new coin alert channel
+- `/config show` - View current configuration (includes RSS feeds)
 
 These settings persist in `config.json`.
 
@@ -136,15 +136,20 @@ These settings persist in `config.json`.
 
 | Command | Description |
 |---------|-------------|
+| `/config watch` | Set Cielo monitoring channel |
+| `/config post` | Set Cielo output channel |
+| `/config digest` | Set hourly digest channel |
+| `/config newcoin` | Set new coin alert channel |
+| `/config show` | Show all channel configuration |
 | `/control pause` | Pause a feature |
 | `/control unpause` | Resume a feature |
 | `/control status` | Show feature status |
-| `/save` | Create custom command |
-| `/delete` | Delete custom command |
-| `/listcommands` | List custom commands |
 | `/rss add` | Add an RSS feed to monitor |
 | `/rss remove` | Remove an RSS feed |
 | `/rss list` | List all configured RSS feeds |
+| `/save` | Create custom command |
+| `/delete` | Delete custom command |
+| `/listcommands` | List custom commands |
 
 ## Customization
 
