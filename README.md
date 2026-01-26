@@ -8,6 +8,7 @@ A Discord bot for monitoring cryptocurrency tokens via Cielo alerts and DexScree
 - **Hourly Digest**: Aggregates token activity into 30-minute period summaries
 - **New Coin Alerts**: Notifies when a token is bought for the first time
 - **DexScreener Trending**: Fetches trending pairs from Solana, Ethereum, and Base
+- **RSS Monitor**: Posts new items from RSS feeds (default: clone.fyi)
 - **MapTap Leaderboard**: Tracks daily MapTap game scores
 - **Custom Commands**: Create server-specific commands via slash commands
 - **Fun Commands**: Various entertainment commands (`!goon`, `!zone`, `!bet`, etc.)
@@ -106,6 +107,11 @@ See `.env.example` for all available options. Required variables:
 - `DISCORD_BOT_TOKEN` - Your Discord bot token
 - `DAILY_DIGEST_CHANNEL_ID` - Default channel for bot output
 
+Optional RSS variables:
+- `RSS_CHANNEL_ID` - Channel for RSS feed posts
+- `RSS_FEED_URL` - Feed URL (default: https://clone.fyi/rss.xml)
+- `RSS_CHECK_INTERVAL` - Check interval in seconds (default: 300)
+
 ### Runtime Configuration
 
 Channel settings can be configured via slash commands:
@@ -179,7 +185,8 @@ miliege2/
 │   │   └── custom_commands.py
 │   ├── grabbers/          # Data collectors
 │   │   ├── cielo_grabber.py
-│   │   └── dex_listener.py
+│   │   ├── dex_listener.py
+│   │   └── rss_monitor.py
 │   └── utils/             # Utilities
 │       ├── api.py         # API helpers
 │       ├── config.py      # Settings

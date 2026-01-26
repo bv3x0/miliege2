@@ -27,7 +27,7 @@ Discord bot built with discord.py for monitoring cryptocurrency tokens via Cielo
 Cogs are loaded in dependency order:
 1. **Core Features**: DigestCog (foundation for token aggregation)
 2. **Feature Services**: NewCoinCog (first-buy alerts, depends on DigestCog)
-3. **Data Collectors**: CieloGrabber, DexListener - feed data into feature cogs
+3. **Data Collectors**: CieloGrabber, DexListener, RSSMonitor - feed data into feature cogs
 4. **Utility Cogs**: HealthMonitor, AdminCommands, CustomCommands, FunCommands, MapTapLeaderboard
 
 ### Data Flow
@@ -46,6 +46,7 @@ Cielo Alert Message → CieloGrabber → TokenTracker (cache) → DigestCog (agg
 - **Priority**: config.json > environment variables > defaults
 - **Required env vars**: `DISCORD_BOT_TOKEN`, `DAILY_DIGEST_CHANNEL_ID`
 - **Channel IDs in config.json**: CIELO_INPUT_CHANNEL_ID, OUTPUT_CHANNEL_ID, HOURLY_DIGEST_CHANNEL_ID, NEWCOIN_ALERT_CHANNEL_ID
+- **RSS config (env only)**: RSS_CHANNEL_ID, RSS_FEED_URL, RSS_CHECK_INTERVAL
 
 ### Adding New Features
 - New grabbers: Create in `cogs/grabbers/`, follow CieloGrabber pattern, add to setup_hook
