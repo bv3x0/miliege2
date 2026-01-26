@@ -56,3 +56,6 @@ data/
 
 # Claude Code
 .claude/
+
+# Personal server guide
+SERVER_GUIDE.txt

@@ -20,6 +20,7 @@ import json
 from cogs.features.newcoin import NewCoinCog
 from cogs.features.custom_commands import CustomCommands
 from cogs.features.maptap import MapTapLeaderboard
+from cogs.grabbers.rss_monitor import RSSMonitor
 
 # Create logs directory if it doesn't exist
 if not os.path.exists('logs'):
@@ -119,6 +120,9 @@ class DiscordBot(commands.Bot):
         cielo_output_channel_id = None
         hourly_digest_channel_id = None
         newcoin_alert_channel_id = None
+        rss_channel_id = None
+        rss_feed_url = os.getenv("RSS_FEED_URL", "https://clone.fyi/rss.xml")
+        rss_check_interval = int(os.getenv("RSS_CHECK_INTERVAL", "300"))
 
         if os.path.exists(config_path):
             try:
@@ -141,6 +145,10 @@ class DiscordBot(commands.Bot):
                 if "NEWCOIN_ALERT_CHANNEL_ID" in config:
                     newcoin_alert_channel_id = config["NEWCOIN_ALERT_CHANNEL_ID"]
                     logging.info(f"Loaded new coin alert channel from config: {newcoin_alert_channel_id}")
+
+                if "RSS_CHANNEL_ID" in config:
+                    rss_channel_id = config["RSS_CHANNEL_ID"]
+                    logging.info(f"Loaded RSS channel from config: {rss_channel_id}")
             except Exception as e:
                 logging.error(f"Error loading config: {e}")
 
@@ -160,6 +168,13 @@ class DiscordBot(commands.Bot):
         if newcoin_alert_channel_id is None:
             newcoin_alert_channel_id = daily_digest_channel_id
             logging.info(f"Using new coin alert channel from env: {daily_digest_channel_id}")
+
+        # RSS channel - fall back to env var
+        if rss_channel_id is None:
+            rss_channel_id = os.getenv("RSS_CHANNEL_ID")
+            if rss_channel_id:
+                rss_channel_id = int(rss_channel_id)
+                logging.info(f"Using RSS channel from env: {rss_channel_id}")
 
         # Initialize cogs in order
         # 1. Core features that don't depend on other cogs
@@ -195,6 +210,18 @@ class DiscordBot(commands.Bot):
         from cogs.grabbers.dex_listener import DexListener
         await self.add_cog(DexListener(self, hourly_digest_channel_id))
         logger.info("DexScreener trending pairs listener added")
+
+        # RSS feed monitor (only if channel is configured)
+        if rss_channel_id:
+            await self.add_cog(RSSMonitor(
+                self,
+                channel_id=rss_channel_id,
+                feed_url=rss_feed_url,
+                check_interval=rss_check_interval
+            ))
+            logger.info(f"RSS monitor added - Channel: {rss_channel_id}, Feed: {rss_feed_url}")
+        else:
+            logger.info("RSS monitor not loaded - no RSS_CHANNEL_ID configured")
 
         logger.info("All cogs loaded successfully")
 
