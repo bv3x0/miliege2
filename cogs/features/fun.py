@@ -185,14 +185,3 @@ class FunCommands(commands.Cog):
         except Exception as e:
             logging.error(f"Error in bet command: {e}")
             await ctx.send("❌ Failed to post bet message")
-
-    # Add more fun commands here
-    @commands.command()
-    async def wagmi(self, ctx):
-        """Respond with WAGMI emoji"""
-        await ctx.send("<:wagmi:YOUR_EMOJI_ID>")
-
-    @commands.command()
-    async def ngmi(self, ctx):
-        """Respond with NGMI emoji"""
-        await ctx.send("<:ngmi:YOUR_EMOJI_ID>")
