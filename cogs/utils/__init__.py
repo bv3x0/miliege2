@@ -16,7 +16,7 @@ from .format import (
     BotConstants,
     Messages
 )
-from .api import safe_api_call, DexScreenerAPI, HyperliquidAPI
+from .api import safe_api_call, DexScreenerAPI
 
 __all__ = [
     # Configuration
@@ -38,5 +38,4 @@ __all__ = [
     # API utilities
     'safe_api_call',
     'DexScreenerAPI',
-    'HyperliquidAPI',
 ]

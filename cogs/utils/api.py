@@ -1,23 +1,21 @@
 import aiohttp
 import logging
 from typing import Optional
-from hyperliquid.info import Info
-from hyperliquid.utils import constants
 from .config import settings
 
 async def safe_api_call(
-    session: aiohttp.ClientSession, 
-    url: str, 
+    session: aiohttp.ClientSession,
+    url: str,
     timeout: int = settings.DEFAULT_API_TIMEOUT
 ) -> Optional[dict]:
     """
     Safely make an API call with error handling and timeout.
-    
+
     Args:
         session: aiohttp ClientSession to use for the request
         url: The URL to call
         timeout: Timeout in seconds
-        
+
     Returns:
         The JSON response if successful, None if failed
     """
@@ -34,44 +32,9 @@ async def safe_api_call(
 class DexScreenerAPI:
     """Wrapper for DexScreener API calls"""
     BASE_URL = "https://api.dexscreener.com/latest/dex"
-    
+
     @staticmethod
     async def get_token_info(session: aiohttp.ClientSession, contract: str) -> Optional[dict]:
         """Get token information from DexScreener"""
         url = f"{DexScreenerAPI.BASE_URL}/tokens/{contract}"
         return await safe_api_call(session, url)
-
-class HyperliquidAPI:
-    """Wrapper for Hyperliquid API calls using official SDK"""
-    def __init__(self):
-        self.info = Info(constants.MAINNET_API_URL, skip_ws=True)  # Use MAINNET_API_URL or TESTNET_API_URL as needed
-    
-    @staticmethod
-    async def get_asset_info(session: aiohttp.ClientSession) -> Optional[dict]:
-        """Get asset information from Hyperliquid"""
-        try:
-            info = Info(constants.MAINNET_API_URL, skip_ws=True)
-            return info.meta()
-        except Exception as e:
-            logging.error(f"Error getting asset info: {e}")
-            return None
-
-    @staticmethod
-    async def get_user_fills(session: aiohttp.ClientSession, address: str) -> Optional[dict]:
-        """Get user trade fills from Hyperliquid"""
-        try:
-            info = Info(constants.MAINNET_API_URL, skip_ws=True)
-            return info.user_fills(address)
-        except Exception as e:
-            logging.error(f"Error getting user fills for {address}: {e}")
-            return None
-
-    @staticmethod
-    async def get_user_state(session: aiohttp.ClientSession, address: str) -> Optional[dict]:
-        """Get user state (positions) from Hyperliquid"""
-        try:
-            info = Info(constants.MAINNET_API_URL, skip_ws=True)
-            return info.user_state(address)
-        except Exception as e:
-            logging.error(f"Error getting user state for {address}: {e}")
-            return None
