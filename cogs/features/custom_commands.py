@@ -107,10 +107,10 @@ class CustomCommands(commands.Cog):
                 self.goon_urls.append(content)
                 self._save_goon_urls()
                 
-                # Update the goon command in fun.py
+                # Update the goon command in fun.py at runtime
                 fun_cog = self.bot.get_cog('FunCommands')
-                if fun_cog and hasattr(fun_cog, 'goon_options'):
-                    fun_cog.goon_options.append(content)
+                if fun_cog and hasattr(fun_cog, 'goon_urls'):
+                    fun_cog.goon_urls.append(content)
                 
                 await interaction.response.send_message(f"✅ Added new URL to !goon command")
                 logger.info(f"User {interaction.user} added URL to goon command")
