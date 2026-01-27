@@ -258,6 +258,77 @@ class RSSMonitor(commands.Cog):
         )
         logging.info(f"Removed RSS feed: {feed['name']}")
 
+    @rss_group.command(name="edit", description="Edit an RSS feed's channel or interval")
+    @app_commands.describe(
+        name="Name of the feed to edit",
+        channel="New channel to post items to",
+        interval="New check interval in seconds"
+    )
+    @app_commands.default_permissions(manage_messages=True)
+    async def edit_feed(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        channel: Optional[discord.TextChannel] = None,
+        interval: Optional[int] = None
+    ):
+        """Edit an existing RSS feed's settings."""
+        feed = self._get_feed_by_name(name)
+        if not feed:
+            feed_names = [f["name"] for f in self.data.get("feeds", [])]
+            if feed_names:
+                await interaction.response.send_message(
+                    f"Feed `{name}` not found. Available feeds: {', '.join(feed_names)}",
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    "No feeds configured.",
+                    ephemeral=True
+                )
+            return
+
+        if channel is None and interval is None:
+            await interaction.response.send_message(
+                "Please specify at least one setting to change (channel or interval).",
+                ephemeral=True
+            )
+            return
+
+        changes = []
+
+        if channel is not None:
+            old_channel = self.bot.get_channel(feed["channel_id"])
+            feed["channel_id"] = channel.id
+            changes.append(f"Channel: {old_channel.mention if old_channel else 'unknown'} → {channel.mention}")
+
+        if interval is not None:
+            old_interval = feed["check_interval"]
+            feed["check_interval"] = max(60, interval)
+            changes.append(f"Interval: {old_interval}s → {feed['check_interval']}s")
+
+        self._save_feeds()
+
+        await interaction.response.send_message(
+            f"Updated feed `{feed['name']}`:\n" + "\n".join(changes),
+            ephemeral=True
+        )
+        logging.info(f"Edited RSS feed {feed['name']}: {', '.join(changes)}")
+
+    @edit_feed.autocomplete('name')
+    async def edit_feed_name_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> List[app_commands.Choice[str]]:
+        """Autocomplete for feed names in edit command."""
+        feeds = self.data.get("feeds", [])
+        return [
+            app_commands.Choice(name=feed["name"], value=feed["name"])
+            for feed in feeds
+            if current.lower() in feed["name"].lower()
+        ][:25]
+
     @rss_group.command(name="list", description="List all RSS feeds")
     async def list_feeds(self, interaction: discord.Interaction):
         """List all configured RSS feeds."""
