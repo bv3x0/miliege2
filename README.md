@@ -165,9 +165,15 @@ Files to check: `main.py`, `cogs/utils/config.py`, `cogs/utils/format.py`, `cogs
 
 ### Fun Command Media
 
-The `!goon` command uses hardcoded Discord CDN URLs that may expire. To customize:
-1. Add your own URLs to `data/goon_urls.json` (create the file as a JSON array)
-2. Or modify the `goon_options` list in `cogs/features/fun.py`
+The `!goon` command serves media from two sources:
+1. **Local files** in `data/goon_media/` - preferred, won't expire
+2. **Embed URLs** in `data/goon_urls.json` - for fxtwitter/tenor links that work as embeds
+
+To add new media:
+- Use `/save !goon <url>` to add embed URLs (fxtwitter, tenor, etc.)
+- Or manually add files to `data/goon_media/`
+
+Periodically archive URLs to local files using `scripts/download_goon_media.py` (see `server_guide.txt` for steps).
 
 ## Project Structure
 
