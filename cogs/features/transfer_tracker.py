@@ -1,6 +1,6 @@
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 import logging
 import json
 import os
@@ -13,7 +13,7 @@ import pytz
 
 
 class TransferTracker(commands.Cog):
-    """Tracks transfers to/from unknown wallets and generates daily CSV reports."""
+    """Tracks transfers to/from unknown wallets and generates CSV reports on demand."""
 
     def __init__(self, bot, output_channel_id: Optional[int] = None):
         self.bot = bot
@@ -21,7 +21,10 @@ class TransferTracker(commands.Cog):
         self.ny_tz = pytz.timezone('America/New_York')
         self.data_dir = "data"
         self.data_file = os.path.join(self.data_dir, "unknown_transfers.json")
-        self.retention_days = 30
+
+        # Safety caps to prevent unbounded growth
+        self.retention_days = 90  # Max age of records
+        self.max_records = 5000   # Max number of records
 
         # Ensure data directory exists
         os.makedirs(self.data_dir, exist_ok=True)
@@ -29,13 +32,10 @@ class TransferTracker(commands.Cog):
         # Load existing data
         self.data = self._load_data()
 
-        # Start daily CSV task
-        self.daily_csv.start()
+        # Run cleanup on startup
+        self._cleanup_old_data()
 
-        logging.info(f"TransferTracker initialized with output channel: {output_channel_id}")
-
-    def cog_unload(self):
-        self.daily_csv.cancel()
+        logging.info(f"TransferTracker initialized with {len(self.data.get('transfers', []))} stored transfers")
 
     def _load_data(self) -> dict:
         """Load transfers from JSON file."""
@@ -47,8 +47,8 @@ class TransferTracker(commands.Cog):
                 return data
             except Exception as e:
                 logging.error(f"Error loading transfers file: {e}")
-                return {"transfers": [], "last_csv_date": None}
-        return {"transfers": [], "last_csv_date": None}
+                return {"transfers": []}
+        return {"transfers": []}
 
     def _save_data(self):
         """Save transfers to JSON file."""
@@ -59,18 +59,23 @@ class TransferTracker(commands.Cog):
             logging.error(f"Error saving transfers: {e}")
 
     def _cleanup_old_data(self):
-        """Remove transfers older than retention period."""
-        cutoff_date = (datetime.now(self.ny_tz) - timedelta(days=self.retention_days)).strftime("%Y-%m-%d")
+        """Remove transfers older than retention period or exceeding max records."""
         original_count = len(self.data.get("transfers", []))
 
+        # Remove old records (by date)
+        cutoff_date = (datetime.now(self.ny_tz) - timedelta(days=self.retention_days)).strftime("%Y-%m-%d")
         self.data["transfers"] = [
             t for t in self.data.get("transfers", [])
             if t.get("date", "") >= cutoff_date
         ]
 
+        # Trim to max records (keep newest)
+        if len(self.data["transfers"]) > self.max_records:
+            self.data["transfers"] = self.data["transfers"][-self.max_records:]
+
         removed = original_count - len(self.data["transfers"])
         if removed > 0:
-            logging.info(f"Cleaned up {removed} transfers older than {self.retention_days} days")
+            logging.info(f"Cleaned up {removed} transfers (retention: {self.retention_days} days, max: {self.max_records})")
             self._save_data()
 
     def process_transfer(self, known_wallet: str, embed_data: dict):
@@ -147,6 +152,10 @@ class TransferTracker(commands.Cog):
             self.data["transfers"].append(transfer)
             self._save_data()
 
+            # Run cleanup periodically (every 100 transfers)
+            if len(self.data["transfers"]) % 100 == 0:
+                self._cleanup_old_data()
+
             logging.info(f"Tracked unknown wallet transfer: {known_wallet} {'received from' if direction == 'in' else 'sent to'} {counterparty_name} (${dollar_amount})")
 
         except Exception as e:
@@ -185,122 +194,37 @@ class TransferTracker(commands.Cog):
         output.seek(0)
         return output
 
-    def _get_transfers_for_date(self, date_str: str) -> list:
-        """Get all transfers for a specific date."""
-        return [t for t in self.data.get("transfers", []) if t.get("date") == date_str]
+    def _clear_transfers(self):
+        """Clear all stored transfers."""
+        count = len(self.data.get("transfers", []))
+        self.data["transfers"] = []
+        self._save_data()
+        logging.info(f"Cleared {count} transfers from storage")
+        return count
 
-    @tasks.loop(hours=24)
-    async def daily_csv(self):
-        """Send daily CSV report at 6:00 AM NY time."""
-        try:
-            if not self.output_channel_id:
-                logging.warning("No output channel configured for TransferTracker")
-                return
-
-            channel = self.bot.get_channel(self.output_channel_id)
-            if not channel:
-                logging.error(f"Could not find channel {self.output_channel_id}")
-                return
-
-            # Get yesterday's date
-            yesterday = (datetime.now(self.ny_tz) - timedelta(days=1)).strftime("%Y-%m-%d")
-            transfers = self._get_transfers_for_date(yesterday)
-
-            if not transfers:
-                logging.info(f"No unknown wallet transfers for {yesterday}")
-                return
-
-            # Generate CSV
-            csv_buffer = self._generate_csv(transfers)
-
-            # Count unique known wallets
-            wallet_count = len(set(t.get('known_wallet', '') for t in transfers))
-
-            # Format date for display
-            display_date = datetime.strptime(yesterday, "%Y-%m-%d").strftime("%B %d, %Y")
-
-            # Create embed
-            embed = discord.Embed(color=0x5b594f)
-            embed.set_author(name="Unknown Wallet Transfers")
-            embed.description = f"### Daily Report\n{len(transfers)} transfers from {wallet_count} tracked wallets\nDate: {display_date}"
-
-            # Send with CSV attachment
-            csv_bytes = io.BytesIO(csv_buffer.getvalue().encode('utf-8'))
-            file = discord.File(csv_bytes, filename=f"unknown_transfers_{yesterday}.csv")
-
-            await channel.send(embed=embed, file=file)
-
-            # Update last CSV date
-            self.data["last_csv_date"] = yesterday
-            self._save_data()
-
-            logging.info(f"Sent daily transfers CSV for {yesterday}: {len(transfers)} transfers")
-
-            # Cleanup old data
-            self._cleanup_old_data()
-
-        except Exception as e:
-            logging.error(f"Error in daily CSV task: {e}", exc_info=True)
-
-    @daily_csv.before_loop
-    async def before_daily_csv(self):
-        """Wait until 6:00 AM NY time before starting the loop."""
-        await self.bot.wait_until_ready()
-
-        now = datetime.now(self.ny_tz)
-        target = now.replace(hour=6, minute=0, second=0, microsecond=0)
-
-        # If it's already past 6 AM, schedule for tomorrow
-        if now >= target:
-            target += timedelta(days=1)
-
-        wait_seconds = (target - now).total_seconds()
-        logging.info(f"TransferTracker: Daily CSV scheduled for {target.strftime('%Y-%m-%d %H:%M')} NY time (waiting {wait_seconds/3600:.1f} hours)")
-
-        await discord.utils.sleep_until(target.replace(tzinfo=None))
-
-    @app_commands.command(name="transfers", description="Generate unknown wallet transfers CSV")
+    @app_commands.command(name="transfers", description="Get unknown wallet transfers CSV")
     @app_commands.describe(
-        date="Optional: specific date (YYYY-MM-DD) or 'all' for full history, 'today' for today"
+        mode="'peek' to view without clearing, 'all' to get and clear data"
     )
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="peek - view without clearing", value="peek"),
+        app_commands.Choice(name="all - get and clear data", value="all"),
+    ])
     @app_commands.default_permissions(manage_messages=True)
-    async def transfers_csv(self, interaction: discord.Interaction, date: Optional[str] = None):
-        """Manually generate and send the transfers CSV."""
+    async def transfers_csv(self, interaction: discord.Interaction, mode: str = "peek"):
+        """Get unknown wallet transfers CSV.
+
+        - peek: View current data without clearing (default)
+        - all: Get all data and clear storage for next batch
+        """
         await interaction.response.defer(ephemeral=True)
 
         try:
-            if date == 'all':
-                transfers = self.data.get("transfers", [])
-                date_label = "all time"
-                filename = "unknown_transfers_all.csv"
-            elif date == 'today':
-                today = datetime.now(self.ny_tz).strftime("%Y-%m-%d")
-                transfers = self._get_transfers_for_date(today)
-                date_label = today
-                filename = f"unknown_transfers_{today}.csv"
-            elif date:
-                # Validate date format
-                try:
-                    datetime.strptime(date, "%Y-%m-%d")
-                except ValueError:
-                    await interaction.followup.send(
-                        "Invalid date format. Use YYYY-MM-DD, 'today', or 'all'.",
-                        ephemeral=True
-                    )
-                    return
-                transfers = self._get_transfers_for_date(date)
-                date_label = date
-                filename = f"unknown_transfers_{date}.csv"
-            else:
-                # Default: yesterday
-                yesterday = (datetime.now(self.ny_tz) - timedelta(days=1)).strftime("%Y-%m-%d")
-                transfers = self._get_transfers_for_date(yesterday)
-                date_label = yesterday
-                filename = f"unknown_transfers_{yesterday}.csv"
+            transfers = self.data.get("transfers", [])
 
             if not transfers:
                 await interaction.followup.send(
-                    f"No unknown wallet transfers found for {date_label}.",
+                    "No unknown wallet transfers stored.",
                     ephemeral=True
                 )
                 return
@@ -309,22 +233,71 @@ class TransferTracker(commands.Cog):
             csv_buffer = self._generate_csv(transfers)
             wallet_count = len(set(t.get('known_wallet', '') for t in transfers))
 
+            # Date range for display
+            dates = sorted(set(t.get('date', '') for t in transfers))
+            if len(dates) == 1:
+                date_range = dates[0]
+            else:
+                date_range = f"{dates[0]} to {dates[-1]}"
+
             # Create embed
             embed = discord.Embed(color=0x5b594f)
             embed.set_author(name="Unknown Wallet Transfers")
-            embed.description = f"### Manual Report\n{len(transfers)} transfers from {wallet_count} tracked wallets\nDate: {date_label}"
 
-            # Send to channel (not ephemeral so others can see)
+            if mode == "all":
+                embed.description = f"### Export (Clearing Data)\n{len(transfers)} transfers from {wallet_count} tracked wallets\nDate range: {date_range}"
+            else:
+                embed.description = f"### Preview (Data Retained)\n{len(transfers)} transfers from {wallet_count} tracked wallets\nDate range: {date_range}"
+
+            # Send to channel
             channel = interaction.channel
+            timestamp = datetime.now(self.ny_tz).strftime("%Y%m%d_%H%M%S")
+            filename = f"unknown_transfers_{timestamp}.csv"
             csv_bytes = io.BytesIO(csv_buffer.getvalue().encode('utf-8'))
             file = discord.File(csv_bytes, filename=filename)
 
             await channel.send(embed=embed, file=file)
-            await interaction.followup.send(f"CSV generated with {len(transfers)} transfers.", ephemeral=True)
+
+            # Clear data if mode is 'all'
+            if mode == "all":
+                self._clear_transfers()
+                await interaction.followup.send(
+                    f"CSV generated with {len(transfers)} transfers. Data cleared.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"CSV generated with {len(transfers)} transfers. Data retained (use 'all' to clear).",
+                    ephemeral=True
+                )
 
         except Exception as e:
-            logging.error(f"Error generating manual CSV: {e}", exc_info=True)
+            logging.error(f"Error generating CSV: {e}", exc_info=True)
             await interaction.followup.send(
                 "Error generating CSV. Check logs for details.",
+                ephemeral=True
+            )
+
+    @app_commands.command(name="transfers_count", description="Check how many unknown wallet transfers are stored")
+    @app_commands.default_permissions(manage_messages=True)
+    async def transfers_count(self, interaction: discord.Interaction):
+        """Quick check of stored transfer count without generating CSV."""
+        transfers = self.data.get("transfers", [])
+        count = len(transfers)
+
+        if count == 0:
+            await interaction.response.send_message(
+                "No unknown wallet transfers stored.",
+                ephemeral=True
+            )
+        else:
+            wallet_count = len(set(t.get('known_wallet', '') for t in transfers))
+            dates = sorted(set(t.get('date', '') for t in transfers))
+            date_range = f"{dates[0]} to {dates[-1]}" if len(dates) > 1 else dates[0]
+
+            await interaction.response.send_message(
+                f"**{count}** transfers from **{wallet_count}** wallets stored\n"
+                f"Date range: {date_range}\n"
+                f"Use `/transfers peek` to preview or `/transfers all` to export and clear.",
                 ephemeral=True
             )
