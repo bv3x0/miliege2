@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Deployment
+- **Production server**: DigitalOcean (remote)
+- **Workflow**: Edit locally → commit & push → pull on server → restart bot
+- **Logs**: Check server logs via `journalctl` or `logs/bot.log`
+
 ## Commands
 - Run bot: `python main.py`
 - Install dependencies: `pip install -r requirements.txt`

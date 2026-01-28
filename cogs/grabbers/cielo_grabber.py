@@ -84,6 +84,11 @@ class CieloGrabber(commands.Cog):
                 # Get the swap info from the first field's value
                 swap_info = embed.fields[0].value
 
+                # Log transfer messages for analysis (TEMPORARY - remove after analysis)
+                if 'Received' in swap_info or 'Transferred' in swap_info:
+                    logging.info(f"TRANSFER DETECTED - User: {user}")
+                    logging.info(f"TRANSFER Raw embed: {embed.to_dict()}")
+
                 # Get the token address from the second field
                 token_address = None
                 for field in embed.fields:
