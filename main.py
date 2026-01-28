@@ -398,7 +398,42 @@ class DiscordBot(commands.Bot):
                 "`/unpause_map` - Resume MapTap monitoring (mods only)"
             ]
             embed.add_field(name="MapTap Commands", value="\n".join(maptap_commands), inline=False)
-            
+
+            # Config commands
+            config_commands = [
+                "`/config watch` - Set Cielo monitoring channel",
+                "`/config post` - Set Cielo output channel",
+                "`/config digest` - Set hourly digest channel",
+                "`/config newcoin` - Set new coin alert channel",
+                "`/config show` - Show current configuration"
+            ]
+            embed.add_field(name="Config (Slash Commands)", value="\n".join(config_commands), inline=False)
+
+            # Control commands
+            control_commands = [
+                "`/control pause` - Pause a feature",
+                "`/control unpause` - Resume a feature",
+                "`/control status` - Show feature status"
+            ]
+            embed.add_field(name="Control (Slash Commands)", value="\n".join(control_commands), inline=False)
+
+            # RSS commands
+            rss_commands = [
+                "`/rss add` - Add an RSS feed to monitor",
+                "`/rss remove` - Remove an RSS feed",
+                "`/rss edit` - Edit feed channel or interval",
+                "`/rss list` - List all configured feeds"
+            ]
+            embed.add_field(name="RSS (Slash Commands)", value="\n".join(rss_commands), inline=False)
+
+            # Transfer tracker commands
+            transfer_commands = [
+                "`/transfers peek` - Preview transfers (data retained)",
+                "`/transfers export` - Export CSV and clear data",
+                "`/transfers_count` - Quick count of stored transfers"
+            ]
+            embed.add_field(name="Transfer Tracker (Slash Commands)", value="\n".join(transfer_commands), inline=False)
+
             await ctx.send(embed=embed)
 
     async def close(self):
