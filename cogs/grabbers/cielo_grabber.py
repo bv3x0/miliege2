@@ -18,7 +18,8 @@ import aiohttp
 
 class CieloGrabber(commands.Cog):
     def __init__(self, bot, token_tracker, monitor, session, digest_cog=None,
-                 summary_cog=None, newcoin_cog=None, input_channel_id=None, output_channel_id=None):
+                 summary_cog=None, newcoin_cog=None, transfer_tracker=None,
+                 input_channel_id=None, output_channel_id=None):
         self.bot = bot
         self.token_tracker = token_tracker
         self.monitor = monitor
@@ -26,6 +27,7 @@ class CieloGrabber(commands.Cog):
         self.digest_cog = digest_cog
         self.summary_cog = summary_cog
         self.newcoin_cog = newcoin_cog
+        self.transfer_tracker = transfer_tracker
 
         # Add at start of __init__
         logging.info(f"Initializing CieloGrabber with summary_cog: {summary_cog is not None}")
@@ -84,10 +86,11 @@ class CieloGrabber(commands.Cog):
                 # Get the swap info from the first field's value
                 swap_info = embed.fields[0].value
 
-                # Log transfer messages for analysis (TEMPORARY - remove after analysis)
+                # Route transfer messages to TransferTracker
                 if 'Received' in swap_info or 'Transferred' in swap_info:
-                    logging.info(f"TRANSFER DETECTED - User: {user}")
-                    logging.info(f"TRANSFER Raw embed: {embed.to_dict()}")
+                    if self.transfer_tracker:
+                        self.transfer_tracker.process_transfer(user, embed.to_dict())
+                    return  # Don't process transfers as swaps
 
                 # Get the token address from the second field
                 token_address = None

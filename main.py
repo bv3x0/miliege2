@@ -20,6 +20,7 @@ import json
 from cogs.features.newcoin import NewCoinCog
 from cogs.features.custom_commands import CustomCommands
 from cogs.features.maptap import MapTapLeaderboard
+from cogs.features.transfer_tracker import TransferTracker
 from cogs.grabbers.rss_monitor import RSSMonitor
 
 # Create logs directory if it doesn't exist
@@ -183,7 +184,12 @@ class DiscordBot(commands.Bot):
         newcoin_cog = NewCoinCog(self, self.session, newcoin_alert_channel_id)
         logging.info(f"Initialized NewCoinCog with output channel ID: {newcoin_alert_channel_id}")
         await self.add_cog(newcoin_cog)
-        
+
+        # 2b. Transfer tracker for unknown wallets
+        transfer_tracker = TransferTracker(self, hourly_digest_channel_id)
+        await self.add_cog(transfer_tracker)
+        logger.info("Transfer tracker for unknown wallets added")
+
         # 3. Data collectors that depend on feature cogs
         await self.add_cog(CieloGrabber(
             self,
@@ -192,6 +198,7 @@ class DiscordBot(commands.Bot):
             self.session,
             digest_cog=digest_cog,
             newcoin_cog=newcoin_cog,
+            transfer_tracker=transfer_tracker,
             input_channel_id=cielo_input_channel_id,
             output_channel_id=cielo_output_channel_id
         ))
