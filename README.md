@@ -7,6 +7,7 @@ A Discord bot for monitoring cryptocurrency tokens via Cielo alerts and DexScree
 - **Cielo Integration**: Monitors Cielo bot messages for token buy/sell alerts
 - **Hourly Digest**: Aggregates token activity into 30-minute period summaries
 - **New Coin Alerts**: Notifies when a token is bought for the first time
+- **Unknown Wallet Tracker**: Tracks transfers to/from unknown wallets for CSV export
 - **DexScreener Trending**: Fetches trending pairs from Solana, Ethereum, and Base
 - **RSS Monitor**: Monitor multiple RSS feeds via `/rss` commands
 - **MapTap Leaderboard**: Tracks daily MapTap game scores
@@ -18,36 +19,44 @@ A Discord bot for monitoring cryptocurrency tokens via Cielo alerts and DexScree
 ### Cielo Alert Processing Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         DISCORD SERVER                                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌──────────────┐      ┌──────────────┐      ┌──────────────────────┐  │
-│  │ Cielo Bot    │      │ #watch       │      │ Miliege Bot          │  │
-│  │ (external)   │─────▶│ channel      │─────▶│ (CieloGrabber)       │  │
-│  │              │      │              │      │                      │  │
-│  └──────────────┘      └──────────────┘      └──────────┬───────────┘  │
-│                                                          │              │
-│                                              ┌───────────┴───────────┐  │
-│                                              ▼                       ▼  │
-│                                 ┌────────────────────┐  ┌────────────┐  │
-│                                 │ Token Tracker      │  │ Is this a  │  │
-│                                 │ (24hr cache)       │  │ first buy? │  │
-│                                 └─────────┬──────────┘  └─────┬──────┘  │
-│                                           │                   │         │
-│                                           ▼                   ▼ YES     │
-│                                 ┌────────────────────┐  ┌────────────┐  │
-│                                 │ DigestCog          │  │ #newcoin   │  │
-│                                 │ (30-min buckets)   │  │ channel    │  │
-│                                 └─────────┬──────────┘  │ (instant)  │  │
-│                                           │             └────────────┘  │
-│                                           ▼ every hour                  │
-│                                 ┌────────────────────┐                  │
-│                                 │ #digest channel    │                  │
-│                                 │ (hourly summary)   │                  │
-│                                 └────────────────────┘                  │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                              DISCORD SERVER                                    │
+├───────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  ┌──────────────┐      ┌──────────────┐      ┌──────────────────────┐        │
+│  │ Cielo Bot    │      │ #watch       │      │ Miliege Bot          │        │
+│  │ (external)   │─────▶│ channel      │─────▶│ (CieloGrabber)       │        │
+│  │              │      │              │      │                      │        │
+│  └──────────────┘      └──────────────┘      └──────────┬───────────┘        │
+│                                                          │                    │
+│                              ┌───────────────────────────┼───────────────┐    │
+│                              │                           │               │    │
+│                              ▼                           ▼               ▼    │
+│                 ┌────────────────────┐      ┌────────────────┐  ┌──────────┐ │
+│                 │ Is this a SWAP?    │      │ Is this a      │  │ Is this  │ │
+│                 │                    │      │ TRANSFER?      │  │ first    │ │
+│                 └─────────┬──────────┘      └───────┬────────┘  │ buy?     │ │
+│                           │ YES                     │ YES       └────┬─────┘ │
+│                           ▼                         ▼                │ YES   │
+│                 ┌────────────────────┐      ┌────────────────┐       ▼       │
+│                 │ Token Tracker      │      │ Unknown wallet?│  ┌──────────┐ │
+│                 │ (24hr cache)       │      │ (has ... in    │  │ #newcoin │ │
+│                 └─────────┬──────────┘      │  address)      │  │ channel  │ │
+│                           │                 └───────┬────────┘  │ (instant)│ │
+│                           ▼                         │ YES       └──────────┘ │
+│                 ┌────────────────────┐              ▼                        │
+│                 │ DigestCog          │      ┌────────────────┐               │
+│                 │ (30-min buckets)   │      │ TransferTracker│               │
+│                 └─────────┬──────────┘      │ (JSON storage) │               │
+│                           │                 └───────┬────────┘               │
+│                           ▼ every hour              │                        │
+│                 ┌────────────────────┐              ▼ on /transfers export   │
+│                 │ #digest channel    │      ┌────────────────┐               │
+│                 │ (hourly summary)   │      │ CSV download   │               │
+│                 └────────────────────┘      │ (clears data)  │               │
+│                                             └────────────────┘               │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Step-by-Step Flow
@@ -147,6 +156,9 @@ These settings persist in `config.json`.
 | `/rss add` | Add an RSS feed to monitor |
 | `/rss remove` | Remove an RSS feed |
 | `/rss list` | List all configured RSS feeds |
+| `/transfers peek` | Preview unknown wallet transfers (data retained) |
+| `/transfers export` | Export transfers to CSV and clear data |
+| `/transfers_count` | Quick count of stored transfers |
 | `/save` | Create custom command |
 | `/delete` | Delete custom command |
 | `/listcommands` | List custom commands |
@@ -189,6 +201,7 @@ miliege2/
 │   ├── features/          # Feature cogs
 │   │   ├── digest.py      # Hourly digest
 │   │   ├── newcoin.py     # New coin alerts
+│   │   ├── transfer_tracker.py  # Unknown wallet tracking
 │   │   ├── maptap.py      # MapTap leaderboard
 │   │   ├── fun.py         # Fun commands
 │   │   └── custom_commands.py
