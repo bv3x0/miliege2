@@ -8,7 +8,6 @@ A Discord bot for monitoring cryptocurrency tokens via Cielo alerts and DexScree
 - **Hourly Digest**: Aggregates token activity into 30-minute period summaries
 - **New Coin Alerts**: Notifies when a token is bought for the first time
 - **Unknown Wallet Tracker**: Tracks transfers to/from unknown wallets for CSV export
-- **DexScreener Trending**: Fetches trending pairs from Solana, Ethereum, and Base
 - **RSS Monitor**: Monitor multiple RSS feeds via `/rss` commands
 - **MapTap Leaderboard**: Tracks daily MapTap game scores
 - **Custom Commands**: Create server-specific commands via slash commands
@@ -135,7 +134,6 @@ These settings persist in `config.json`.
 |---------|-------------|
 | `!help` | Show all commands |
 | `!status` | Bot status and uptime |
-| `!trending` | DexScreener trending pairs |
 | `!map` | MapTap leaderboard |
 | `!goon` | Random image from collection |
 | `!zone` | Trading mindset reminder |
@@ -207,7 +205,6 @@ miliege2/
 │   │   └── custom_commands.py
 │   ├── grabbers/          # Data collectors
 │   │   ├── cielo_grabber.py
-│   │   ├── dex_listener.py
 │   │   └── rss_monitor.py
 │   └── utils/             # Utilities
 │       ├── api.py         # API helpers

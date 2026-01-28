@@ -32,7 +32,7 @@ Discord bot built with discord.py for monitoring cryptocurrency tokens via Cielo
 Cogs are loaded in dependency order:
 1. **Core Features**: DigestCog (foundation for token aggregation)
 2. **Feature Services**: NewCoinCog (first-buy alerts, depends on DigestCog)
-3. **Data Collectors**: CieloGrabber, DexListener, RSSMonitor - feed data into feature cogs
+3. **Data Collectors**: CieloGrabber, RSSMonitor - feed data into feature cogs
 4. **Utility Cogs**: HealthMonitor, AdminCommands, CustomCommands, FunCommands, MapTapLeaderboard
 
 ### Data Flow

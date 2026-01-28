@@ -211,11 +211,6 @@ class DiscordBot(commands.Bot):
         await self.add_cog(MapTapLeaderboard(self))
         
         # 5. Optional features
-        # DexScreener trending pairs functionality
-        from cogs.grabbers.dex_listener import DexListener
-        await self.add_cog(DexListener(self, hourly_digest_channel_id))
-        logger.info("DexScreener trending pairs listener added")
-
         # RSS feed monitor (always loaded, manages its own feeds via /rss commands)
         # Pass rss_channel_id for migration from old single-feed format
         await self.add_cog(RSSMonitor(self, default_channel_id=rss_channel_id))
@@ -376,13 +371,6 @@ class DiscordBot(commands.Bot):
                 
                 embed.add_field(name=cog_name, value=command_text, inline=False)
 
-            # DexScreener trending commands
-            dexscreener_commands = [
-                "`!trending` - Show top 15 trending pairs from Solana, Ethereum, and Base",
-                "`!trending_status` - Check status of DexScreener connection"
-            ]
-            embed.add_field(name="DexScreener Commands", value="\n".join(dexscreener_commands), inline=False)
-            
             # Custom commands
             custom_commands = [
                 "`/save` - Save a custom command or add URL to !goon (mods only)",

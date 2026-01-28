@@ -26,7 +26,7 @@ class CustomCommands(commands.Cog):
         
         # Protected commands that cannot be overwritten
         self.protected_commands = {
-            'help', 'digest', 'digest_status', 'trending', 'trending_status',
+            'help', 'digest', 'digest_status',
             'add_monitored_wallet', 'remove_monitored_wallet', 'list_monitored_wallets',
             'wallet_status', 'test_wallet', 'save', 'delete', 'listcommands',
             'track', 'untrack', 'tracked', 'health', 'bot_stats', 'uptime',
