@@ -204,18 +204,18 @@ class TransferTracker(commands.Cog):
 
     @app_commands.command(name="transfers", description="Get unknown wallet transfers CSV")
     @app_commands.describe(
-        mode="'peek' to view without clearing, 'all' to get and clear data"
+        mode="'peek' to view without clearing, 'export' to get and clear data"
     )
     @app_commands.choices(mode=[
         app_commands.Choice(name="peek - view without clearing", value="peek"),
-        app_commands.Choice(name="all - get and clear data", value="all"),
+        app_commands.Choice(name="export - get and clear data", value="export"),
     ])
     @app_commands.default_permissions(manage_messages=True)
     async def transfers_csv(self, interaction: discord.Interaction, mode: str = "peek"):
         """Get unknown wallet transfers CSV.
 
         - peek: View current data without clearing (default)
-        - all: Get all data and clear storage for next batch
+        - export: Get all data and clear storage for next batch
         """
         await interaction.response.defer(ephemeral=True)
 
@@ -244,7 +244,7 @@ class TransferTracker(commands.Cog):
             embed = discord.Embed(color=0x5b594f)
             embed.set_author(name="Unknown Wallet Transfers")
 
-            if mode == "all":
+            if mode == "export":
                 embed.description = f"### Export (Clearing Data)\n{len(transfers)} transfers from {wallet_count} tracked wallets\nDate range: {date_range}"
             else:
                 embed.description = f"### Preview (Data Retained)\n{len(transfers)} transfers from {wallet_count} tracked wallets\nDate range: {date_range}"
@@ -258,8 +258,8 @@ class TransferTracker(commands.Cog):
 
             await channel.send(embed=embed, file=file)
 
-            # Clear data if mode is 'all'
-            if mode == "all":
+            # Clear data if mode is 'export'
+            if mode == "export":
                 self._clear_transfers()
                 await interaction.followup.send(
                     f"CSV generated with {len(transfers)} transfers. Data cleared.",
@@ -267,7 +267,7 @@ class TransferTracker(commands.Cog):
                 )
             else:
                 await interaction.followup.send(
-                    f"CSV generated with {len(transfers)} transfers. Data retained (use 'all' to clear).",
+                    f"CSV generated with {len(transfers)} transfers. Data retained (use 'export' to clear).",
                     ephemeral=True
                 )
 
@@ -298,6 +298,6 @@ class TransferTracker(commands.Cog):
             await interaction.response.send_message(
                 f"**{count}** transfers from **{wallet_count}** wallets stored\n"
                 f"Date range: {date_range}\n"
-                f"Use `/transfers peek` to preview or `/transfers all` to export and clear.",
+                f"Use `/transfers peek` to preview or `/transfers export` to export and clear.",
                 ephemeral=True
             )
